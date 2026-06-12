@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+  users     User[]
+  agents    Agent[]
+
+  @@map("tenants")
+}
+
+model Agent {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  name     String
+  region   String
+  status   String @default("active")
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  users    User[]
+
+  @@index([tenantId])
+  @@map("agents")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  role         String
+  agentId      String?  @map("agent_id")
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  phone        String?
+  wxOpenid     String?  @unique @map("wx_openid")
+  displayName  String   @map("display_name")
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  agent        Agent?   @relation(fields: [agentId], references: [id])
+
+  @@index([tenantId])
+  @@index([agentId])
+  @@map("users")
+}
+
+model Field {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  ownerId     String   @map("owner_id")
+  name        String
+  area        Float
+  iotDeviceId String?  @map("iot_device_id")
+  // PostGIS geography(Point,4326);Prisma 不原生支持,迁移后用原生 SQL 补列与索引
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@map("fields")
+}
+
+model Batch {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  ownerId         String   @map("owner_id")
+  fieldId         String   @map("field_id")
+  batchNo         String   @map("batch_no")
+  cropName        String   @map("crop_name")
+  plantDate       DateTime @map("plant_date")
+  expectedHarvest DateTime @map("expected_harvest")
+  status          String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@map("batches")
+}
+
+model FarmRecord {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  batchId    String   @map("batch_id")
+  fieldId    String   @map("field_id")
+  operatorId String   @map("operator_id")
+  action     String
+  detail     Json?
+  images     Json?
+  location   String?
+  recordedAt DateTime @map("recorded_at")
+  source     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([batchId])
+  @@map("farm_records")
+}
+
+model TraceCode {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  batchId   String   @map("batch_id")
+  code      String   @unique
+  scanCount Int      @default(0) @map("scan_count")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("trace_codes")
+}
+
+model TraceEvent {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  batchId    String   @map("batch_id")
+  type       String
+  title      String
+  actor      String
+  location   String
+  occurredAt DateTime @map("occurred_at")
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([batchId])
+  @@map("trace_events")
+}
