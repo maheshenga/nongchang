@@ -14,6 +14,9 @@ export class AuthService {
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('账号或密码错误');
 
+    const roles = Object.values(Role) as string[];
+    if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
+
     const authUser: AuthUser = {
       userId: user.id, tenantId: user.tenantId, role: user.role as Role,
       agentId: user.agentId ?? null,

@@ -7,14 +7,17 @@ export class ScopeService {
    *  安全关键:角色要求的归属 id 缺失时 fail-closed 抛错,绝不退化为整租户可见。 */
   ownedWhere(user: AuthUser): Record<string, string> {
     const where: Record<string, string> = { tenantId: user.tenantId };
+    if (user.role === Role.SYSTEM_ADMIN) return where;
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId,拒绝越权范围查询');
       where.agentId = user.agentId;
+      return where;
     }
     if (user.role === Role.MERCHANT) {
       if (!user.ownerId) throw new ForbiddenException('merchant 缺少 ownerId,拒绝越权范围查询');
       where.ownerId = user.ownerId;
+      return where;
     }
-    return where;
+    throw new ForbiddenException('未知角色,拒绝范围查询');
   }
 }

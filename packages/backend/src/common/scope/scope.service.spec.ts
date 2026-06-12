@@ -21,4 +21,7 @@ describe('ScopeService.ownedWhere', () => {
   it('merchant 缺失 ownerId 时拒绝(不退化为整租户可见)', () => {
     expect(() => svc.ownedWhere(ctx({ role: Role.MERCHANT, ownerId: null }))).toThrow();
   });
+  it('未知角色拒绝(不退化为整租户可见)', () => {
+    expect(() => svc.ownedWhere(ctx({ role: 'superuser' as any, agentId: null, ownerId: null }))).toThrow();
+  });
 });

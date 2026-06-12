@@ -10,6 +10,8 @@ const makeService = (user: any) => {
   return new AuthService(prisma, jwt);
 };
 
+beforeEach(() => { process.env.JWT_SECRET = 'test'; process.env.JWT_REFRESH_SECRET = 'test'; });
+
 describe('AuthService.login', () => {
   it('密码正确时返回 token 对', async () => {
     const hash = await bcrypt.hash('password123', 10);
@@ -26,5 +28,25 @@ describe('AuthService.login', () => {
   it('用户不存在时抛 Unauthorized', async () => {
     const svc = makeService(null);
     await expect(svc.login({ username: 'none', password: 'password123' })).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('AuthService.refresh', () => {
+  it('有效 refresh token 重新签发 token 对', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const prisma = { user: { findUnique: vi.fn() } } as any;
+    const svc = new AuthService(prisma, jwt);
+    const rt = await jwt.signAsync(
+      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
+      { secret: 'test', expiresIn: '7d' },
+    );
+    const res = await svc.refresh(rt);
+    expect(res.accessToken).toBeTypeOf('string');
+    expect(res.refreshToken).toBeTypeOf('string');
+  });
+  it('无效 refresh token 抛 Unauthorized', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const svc = new AuthService({ user: { findUnique: vi.fn() } } as any, jwt);
+    await expect(svc.refresh('garbage.token.value')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
