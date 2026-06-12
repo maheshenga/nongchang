@@ -52,14 +52,18 @@ model User {
 }
 
 model Field {
-  id          String   @id @default(uuid())
-  tenantId    String   @map("tenant_id")
-  ownerId     String   @map("owner_id")
+  id          String                                 @id @default(uuid())
+  tenantId    String                                 @map("tenant_id")
+  ownerId     String                                 @map("owner_id")
   name        String
   area        Float
-  iotDeviceId String?  @map("iot_device_id")
-  // PostGIS geography(Point,4326);Prisma 不原生支持,迁移后用原生 SQL 补列与索引
-  createdAt   DateTime @default(now()) @map("created_at")
+  iotDeviceId String?                                @map("iot_device_id")
+  // PostGIS 地理列:Prisma 以 Unsupported 类型识别(消除列漂移)。
+  // GIST 索引 fields_location_gist 由 field_geography 原生 SQL 迁移创建,
+  // 无法在 schema 中用 @@index 表达,故 `migrate dev` 会提示一个无害的
+  // DROP INDEX —— 切勿接受;生产/CI 统一用 `prisma migrate deploy`(不会提示)。
+  location    Unsupported("geography(Point, 4326)")?
+  createdAt   DateTime                               @default(now()) @map("created_at")
 
   @@index([tenantId])
   @@index([ownerId])
