@@ -15,4 +15,10 @@ describe('ScopeService.ownedWhere', () => {
   it('merchant 按 tenantId + ownerId 过滤', () => {
     expect(svc.ownedWhere(ctx({ role: Role.MERCHANT, ownerId: 'm1' }))).toEqual({ tenantId: 't1', ownerId: 'm1' });
   });
+  it('agent_admin 缺失 agentId 时拒绝(不退化为整租户可见)', () => {
+    expect(() => svc.ownedWhere(ctx({ role: Role.AGENT_ADMIN, agentId: null }))).toThrow();
+  });
+  it('merchant 缺失 ownerId 时拒绝(不退化为整租户可见)', () => {
+    expect(() => svc.ownedWhere(ctx({ role: Role.MERCHANT, ownerId: null }))).toThrow();
+  });
 });
