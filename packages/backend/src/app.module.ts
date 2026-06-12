@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ClsModule } from 'nestjs-cls';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { AgentModule } from './modules/agent/agent.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -16,8 +17,9 @@ import { RolesGuard } from './common/guards/roles.guard';
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
     PrismaModule,
     AuthModule,
-    // Feature modules (UserModule, AgentModule, FieldModule, BatchModule,
-    // FarmRecordModule, TraceModule) will be added in later tasks (9-11).
+    AgentModule,
+    // Remaining feature modules (UserModule, FieldModule, BatchModule,
+    // FarmRecordModule, TraceModule) will be added in later tasks (10-11).
   ],
   providers: [
     ScopeService,
