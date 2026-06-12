@@ -1,0 +1,51 @@
+# 本地开发数据库环境:PostgreSQL + PostGIS + pgAdmin 管理工具
+# 用法:
+#   启动: docker compose -f docker-compose.dev.yml up -d
+#   停止: docker compose -f docker-compose.dev.yml down
+#   清库: docker compose -f docker-compose.dev.yml down -v
+#
+# 连接串(供 packages/backend/.env 的 DATABASE_URL):
+#   postgresql://nongchang:nongchang@localhost:5432/nongchang?schema=public
+#
+# pgAdmin 管理界面: http://localhost:5050
+#   登录邮箱: admin@admin.com   密码: admin
+#   首次进入后“Add New Server” → Host 填 db、端口 5432、用户 nongchang、密码 nongchang
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: nongchang-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nongchang
+      POSTGRES_PASSWORD: nongchang
+      POSTGRES_DB: nongchang
+    ports:
+      - "5432:5432"
+    volumes:
+      - nongchang_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nongchang -d nongchang"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: nongchang-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - nongchang_pgadmin:/var/lib/pgadmin
+
+volumes:
+  nongchang_pgdata:
+  nongchang_pgadmin:
