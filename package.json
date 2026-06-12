@@ -4,7 +4,9 @@
   "scripts": {
     "build:shared": "pnpm --filter @nongchang/shared build",
     "build:backend": "pnpm --filter @nongchang/backend build",
+    "build": "pnpm build:shared && pnpm build:backend",
     "test": "pnpm --filter @nongchang/backend test"
   },
+  "engines": { "node": ">=20" },
   "devDependencies": { "typescript": "~5.8.2" }
 }
