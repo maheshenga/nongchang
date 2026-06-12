@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ScopeService } from './scope.service';
 import { Role } from '@nongchang/shared';
 
@@ -23,5 +23,17 @@ describe('ScopeService.ownedWhere', () => {
   });
   it('未知角色拒绝(不退化为整租户可见)', () => {
     expect(() => svc.ownedWhere(ctx({ role: 'superuser' as any, agentId: null, ownerId: null }))).toThrow();
+  });
+});
+
+describe('ScopeService.merchantIdsForAgent', () => {
+  it('查询某 agent 下所有 merchant 的 id', async () => {
+    const prisma = { user: { findMany: vi.fn().mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]) } } as any;
+    const s = new ScopeService();
+    const ids = await s.merchantIdsForAgent(prisma, 't1', 'a1');
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', role: 'merchant', agentId: 'a1' }, select: { id: true },
+    });
+    expect(ids).toEqual(['m1', 'm2']);
   });
 });

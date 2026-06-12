@@ -20,4 +20,22 @@ export class ScopeService {
     }
     throw new ForbiddenException('未知角色,拒绝范围查询');
   }
+
+  async merchantIdsForAgent(prisma: any, tenantId: string, agentId: string): Promise<string[]> {
+    const rows = await prisma.user.findMany({
+      where: { tenantId, role: 'merchant', agentId }, select: { id: true },
+    });
+    return rows.map((r: { id: string }) => r.id);
+  }
+
+  /** 业务表(带 ownerId)的范围 where。agent_admin 按旗下 merchant ids 过滤。 */
+  async ownedScopeWhere(prisma: any, user: AuthUser): Promise<Record<string, unknown>> {
+    const where: Record<string, unknown> = { tenantId: user.tenantId };
+    if (user.role === Role.MERCHANT && user.ownerId) where.ownerId = user.ownerId;
+    if (user.role === Role.AGENT_ADMIN && user.agentId) {
+      const ids = await this.merchantIdsForAgent(prisma, user.tenantId, user.agentId);
+      where.ownerId = { in: ids };
+    }
+    return where;
+  }
 }
