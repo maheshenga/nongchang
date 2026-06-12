@@ -37,3 +37,26 @@ describe('ScopeService.merchantIdsForAgent', () => {
     expect(ids).toEqual(['m1', 'm2']);
   });
 });
+
+describe('ScopeService.ownedScopeWhere 失败关闭', () => {
+  it('merchant 缺少 ownerId 时抛错(不退化为整租户可见)', async () => {
+    const prisma = { user: { findMany: vi.fn() } } as any;
+    const s = new ScopeService();
+    await expect(
+      s.ownedScopeWhere(prisma, ctx({ role: Role.MERCHANT, agentId: null, ownerId: null })),
+    ).rejects.toThrow();
+  });
+  it('agent_admin 缺少 agentId 时抛错(不退化为整租户可见)', async () => {
+    const prisma = { user: { findMany: vi.fn() } } as any;
+    const s = new ScopeService();
+    await expect(
+      s.ownedScopeWhere(prisma, ctx({ role: Role.AGENT_ADMIN, agentId: null, ownerId: null })),
+    ).rejects.toThrow();
+  });
+  it('system_admin 仍只按 tenantId 过滤(允许整租户)', async () => {
+    const prisma = { user: { findMany: vi.fn() } } as any;
+    const s = new ScopeService();
+    const where = await s.ownedScopeWhere(prisma, ctx({ role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null }));
+    expect(where).toEqual({ tenantId: 't1' });
+  });
+});
