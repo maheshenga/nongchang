@@ -1,0 +1,10 @@
+{
+  "name": "AgriTrace SaaS",
+  "description": "农业溯源SaaS系统，包含数据大屏、一物一码生成、手机端溯源录入、分销管理及后台权限配置。",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

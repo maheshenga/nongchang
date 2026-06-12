@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@layer components {
+  .shadow-sm.bg-white.rounded-xl.border {
+    transition: all 300ms ease;
+  }
+  .shadow-sm.bg-white.rounded-xl.border:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-0.125rem);
+  }
+}
