@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ScanLine, AlertTriangle, Box, Clock, CheckCircle2, X } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import DemoBadge from './DemoBadge';
 
 const MOCK_DATA = Array.from({ length: 24 }).map((_, i) => ({
   time: `${i}:00`,
@@ -61,6 +62,7 @@ export default function RfidMonitor() {
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
           <ScanLine className="w-5 h-5 text-indigo-500" />
           RFID/NFC 实时入库监控
+          <DemoBadge />
         </h3>
         <span className="text-xs font-medium text-slate-500 flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
           <Clock className="w-3 h-3" /> 近24小时扫码量: <span className="text-indigo-600 font-bold">{totalScans}</span>

@@ -1,6 +1,7 @@
 import { Truck, MapPin, AlertTriangle, CheckCircle2, Clock, Search, Zap, Leaf, PackageSearch, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import DemoBadge from './DemoBadge';
 
 const MOCK_ROUTES = [
   {
@@ -124,6 +125,7 @@ export default function LogisticsTracker() {
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
             <Truck className="w-6 h-6 text-indigo-600" />
             芍药智能物流与农资追踪面板
+            <DemoBadge />
           </h2>
           <p className="text-xs text-slate-500 mt-1">集成包裹物流追踪、车队运力优化与农资出入库自动关联</p>
         </div>

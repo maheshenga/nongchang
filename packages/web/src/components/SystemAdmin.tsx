@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { useApi } from '../hooks/useApi';
 import { listAgents, createAgent, type Agent as ApiAgent } from '../api/agents';
 import type { CreateAgentDto } from '@nongchang/shared';
+import DemoBadge from './DemoBadge';
 
 function toUiAgent(a: ApiAgent): Agent {
   return {
@@ -132,10 +133,13 @@ export default function SystemAdmin() {
           <div className="flex justify-between items-start mb-6 relative z-10">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <Activity className="w-5 h-5 text-emerald-400" /> 
+                <Activity className="w-5 h-5 text-emerald-400" />
                 全网节点运行监控
               </h2>
               <p className="text-sm text-slate-400 mt-1">主核心服务组 24 小时性能基准</p>
+              <div className="mt-2">
+                <DemoBadge note="服务器监控" />
+              </div>
             </div>
             <div className="flex items-center gap-3">
                <span className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full border border-emerald-500/30">

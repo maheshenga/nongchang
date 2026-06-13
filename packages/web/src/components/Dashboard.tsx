@@ -11,6 +11,7 @@ import HeatmapD3 from './HeatmapD3';
 import D3GeoMap from './D3GeoMap';
 import AntiFakeMonitor from './AntiFakeMonitor';
 import RfidMonitor from './RfidMonitor';
+import DemoBadge from './DemoBadge';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -326,7 +327,7 @@ export default function Dashboard() {
          </div>
       )}
       <div className="flex justify-between items-center text-sm px-2">
-        <h2 className="font-bold text-slate-800">可拖拽自定义监控看板</h2>
+        <h2 className="font-bold text-slate-800 flex items-center gap-2">可拖拽自定义监控看板 <DemoBadge /></h2>
         <div className="flex items-center gap-3">
           <span className="text-slate-500">所有卡片均可拖拽排序改变布局</span>
           <button 

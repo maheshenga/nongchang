@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
+import DemoBadge from './DemoBadge';
 
 export default function HeatmapD3() {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -153,6 +154,9 @@ export default function HeatmapD3() {
 
   return (
     <div className="w-full h-full relative cursor-crosshair overflow-hidden rounded-xl bg-slate-50 border border-slate-100 shadow-inner">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
+        <DemoBadge />
+      </div>
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 bg-white/90 p-3 rounded-lg shadow-sm border border-slate-200 backdrop-blur-sm">
          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
             <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span> 农产品基地

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertOctagon, MapPin, ShieldAlert, Monitor, Activity, Database, CheckCircle } from 'lucide-react';
+import DemoBadge from './DemoBadge';
 
 const MOCK_SCANS = [
   { id: '1', qrCode: 'ORC-8901-A42', time: '10:42:15', loc: '北京朝阳', ip: '114.240.2.**', status: 'normal' },
@@ -71,6 +72,7 @@ export default function AntiFakeMonitor() {
              <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-red-500" />
                 溯源防伪监控看板
+                <DemoBadge />
              </h3>
              <button 
                onClick={() => setIsLive(!isLive)}
