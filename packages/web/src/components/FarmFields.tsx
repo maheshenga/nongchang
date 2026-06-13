@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Map, MapPin, Search, Plus, Navigation, Layers, CheckCircle2, ChevronRight, Maximize2 } from 'lucide-react';
+import { Map, MapPin, Search, Plus, Layers, ChevronRight, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApi } from '../hooks/useApi';
 import { listFields, createField, type Field } from '../api/fields';
