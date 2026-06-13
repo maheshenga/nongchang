@@ -24,12 +24,22 @@ export {
   publicTraceEventSchema,
   publicTraceBatchSchema,
   publicTraceResponseSchema,
+  frozenTraceResponseSchema,
 } from './dto/public-trace.dto';
 export type {
   PublicTraceEvent,
   PublicTraceBatch,
   PublicTraceResponse,
+  FrozenTraceResponse,
+  PublicTraceResult,
 } from './dto/public-trace.dto';
+
+export {
+  traceScanItemSchema,
+  antiFakeAlertSchema,
+  freezeResponseSchema,
+} from './dto/anti-fake.dto';
+export type { TraceScanItem, AntiFakeAlert, FreezeResponse } from './dto/anti-fake.dto';
 
 export { uploadResponseSchema } from './dto/upload.dto';
 export type { UploadResponse } from './dto/upload.dto';

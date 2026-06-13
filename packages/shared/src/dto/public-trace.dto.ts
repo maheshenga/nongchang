@@ -29,8 +29,17 @@ export type PublicTraceBatch = z.infer<typeof publicTraceBatchSchema>;
 
 export const publicTraceResponseSchema = z.object({
   code: z.string(),
+  frozen: z.literal(false),
   scanCount: z.number(),
   batch: publicTraceBatchSchema,
   events: z.array(publicTraceEventSchema),
 });
 export type PublicTraceResponse = z.infer<typeof publicTraceResponseSchema>;
+
+export const frozenTraceResponseSchema = z.object({
+  code: z.string(),
+  frozen: z.literal(true),
+});
+export type FrozenTraceResponse = z.infer<typeof frozenTraceResponseSchema>;
+
+export type PublicTraceResult = PublicTraceResponse | FrozenTraceResponse;
