@@ -2,6 +2,8 @@ import { Truck, MapPin, AlertTriangle, CheckCircle2, Clock, Search, Zap, Leaf, P
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import DemoBadge from './DemoBadge';
+import { useApi } from '../hooks/useApi';
+import { listSupplies, createSupply, issueSupply, deleteSupply } from '../api/supply';
 
 const MOCK_ROUTES = [
   {
@@ -40,12 +42,6 @@ const MOCK_ROUTES = [
   }
 ];
 
-const MOCK_SUPPLIES = [
-  { id: 'SP-2026-001', name: '芍药专用缓释肥复合肥', unit: '包(50kg)', total: 500, used: 320, alert: false },
-  { id: 'SP-2026-002', name: '土壤杀菌剂(多菌灵)', unit: '箱', total: 50, used: 48, alert: true },
-  { id: 'SP-2026-003', name: '植物营养液(微量元素)', unit: '桶(20L)', total: 100, used: 20, alert: false },
-];
-
 export default function LogisticsTracker() {
   const [routes, setRoutes] = useState(MOCK_ROUTES);
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,7 +51,7 @@ export default function LogisticsTracker() {
   const [optimized, setOptimized] = useState(false);
   const [showInboundModal, setShowInboundModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
-  const [suppliesData, setSuppliesData] = useState(MOCK_SUPPLIES);
+  const { data: supplies, loading: suppliesLoading, error: suppliesError, reload: reloadSupplies } = useApi(listSupplies);
 
   // Issue/registration form states
   const [issuePayload, setIssuePayload] = useState({ supplyId: '', amount: 0, targetBatch: '' });
@@ -80,36 +76,31 @@ export default function LogisticsTracker() {
     showToast(`物流单 ${activeRoute.id} 状态已更新，商品已安全签收入库`);
   };
 
-  const handleIssueSubmit = () => {
-    if(!issuePayload.supplyId || issuePayload.amount <= 0) return showToast('请输入完整信息');
-    const target = suppliesData.find(s => s.id === issuePayload.supplyId);
-    if(target && issuePayload.amount > (target.total - target.used)) {
-      return showToast('超量预警！您下达的领用配额超过了可用库存，操作被熔断。');
+  const handleIssueSubmit = async () => {
+    if (!issuePayload.supplyId || issuePayload.amount <= 0) return showToast('请输入完整信息');
+    if (!issuePayload.targetBatch) return showToast('请填写关联批次号');
+    try {
+      await issueSupply(issuePayload.supplyId, { batchId: issuePayload.targetBatch, amount: issuePayload.amount });
+      setShowOutboundModal(false);
+      setIssuePayload({ supplyId: '', amount: 0, targetBatch: '' });
+      showToast('领用单下发成功');
+      await reloadSupplies();
+    } catch (e: any) {
+      showToast(e?.message || '领用失败(可能超量熔断)');
     }
-    setSuppliesData(suppliesData.map(s => {
-      if(s.id === issuePayload.supplyId) {
-        return { ...s, used: s.used + issuePayload.amount, alert: (s.total - (s.used + issuePayload.amount)) < 10 };
-      }
-      return s;
-    }));
-    setShowOutboundModal(false);
-    setIssuePayload({ supplyId: '', amount: 0, targetBatch: '' });
-    showToast('领用单下发成功');
   };
 
-  const handleInboundSubmit = () => {
-    if(!inboundPayload.name || inboundPayload.amount <= 0) return showToast('请输入完整信息');
-    setSuppliesData([...suppliesData, {
-      id: `SP-2026-00${suppliesData.length + 1}`,
-      name: inboundPayload.name,
-      unit: inboundPayload.unit,
-      total: inboundPayload.amount,
-      used: 0,
-      alert: false
-    }]);
-    setShowInboundModal(false);
-    setInboundPayload({ name: '', amount: 0, unit: '箱' });
-    showToast('农资入库完成');
+  const handleInboundSubmit = async () => {
+    if (!inboundPayload.name || inboundPayload.amount <= 0) return showToast('请输入完整信息');
+    try {
+      await createSupply({ name: inboundPayload.name, unit: inboundPayload.unit, amount: inboundPayload.amount });
+      setShowInboundModal(false);
+      setInboundPayload({ name: '', amount: 0, unit: '箱' });
+      showToast('农资入库完成');
+      await reloadSupplies();
+    } catch (e: any) {
+      showToast(e?.message || '入库失败');
+    }
   };
 
   const filteredRoutes = routes.filter(route => 
@@ -125,7 +116,7 @@ export default function LogisticsTracker() {
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
             <Truck className="w-6 h-6 text-indigo-600" />
             芍药智能物流与农资追踪面板
-            <DemoBadge />
+            {viewMode !== 'supplies' && <DemoBadge />}
           </h2>
           <p className="text-xs text-slate-500 mt-1">集成包裹物流追踪、车队运力优化与农资出入库自动关联</p>
         </div>
@@ -436,9 +427,11 @@ export default function LogisticsTracker() {
               </div>
 
               <h4 className="font-bold text-slate-700 text-sm mb-4">投入品台账</h4>
+              {suppliesLoading && <p className="text-sm text-slate-400">加载中...</p>}
+              {suppliesError && <p className="text-sm text-red-600">{suppliesError}</p>}
               <div className="space-y-3">
                  <AnimatePresence>
-                 {suppliesData.map((item, idx) => (
+                 {(supplies ?? []).map((item, idx) => (
                     <motion.div 
                        initial={{ opacity: 0, y: 15 }}
                        animate={{ opacity: 1, y: 0 }}
@@ -466,17 +459,22 @@ export default function LogisticsTracker() {
                           <div className="w-32 hidden md:block">
                              <div className="flex justify-between text-xs mb-1">
                                 <span className="text-slate-500 font-medium">剩余</span>
-                                <span className={`font-bold ${item.total - item.used < 10 ? 'text-red-600' : 'text-slate-700'}`}>{item.total - item.used}</span>
+                                <span className={`font-bold ${item.alert ? 'text-red-600' : 'text-slate-700'}`}>{item.remaining}</span>
                              </div>
                              <div className="h-2 bg-slate-100 rounded-full w-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all duration-1000 ${item.total - item.used < 10 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${(item.used / item.total) * 100}%` }}></div>
+                                <div className={`h-full rounded-full transition-all duration-1000 ${item.alert ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${(item.used / item.total) * 100}%` }}></div>
                              </div>
                           </div>
-                          <button 
-                            onClick={() => {
-                              if (window.confirm('确认删除此农资记录吗？')) {
-                                setSuppliesData(suppliesData.filter(s => s.id !== item.id));
-                                showToast(`已删除农资档案：${item.name}`);
+                          <button
+                            onClick={async () => {
+                              if (window.confirm('确认删除此农资记录吗?')) {
+                                try {
+                                  await deleteSupply(item.id);
+                                  showToast(`已删除农资档案:${item.name}`);
+                                  await reloadSupplies();
+                                } catch (e: any) {
+                                  showToast(e?.message || '删除失败');
+                                }
                               }
                             }}
                             className="ml-4 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-[10px] font-bold transition-colors border border-red-200"
@@ -536,7 +534,7 @@ export default function LogisticsTracker() {
                     <label className="block text-xs font-bold text-slate-500 mb-1">选择库存物资</label>
                     <select value={issuePayload.supplyId} onChange={(e) => setIssuePayload({...issuePayload, supplyId: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500">
                        <option value="">-- 请选择 --</option>
-                       {suppliesData.map(s => <option key={s.id} value={s.id}>{s.name} (剩余 {s.total - s.used} {s.unit})</option>)}
+                       {(supplies ?? []).map(s => <option key={s.id} value={s.id}>{s.name} (剩余 {s.remaining} {s.unit})</option>)}
                     </select>
                  </div>
                  <div>
