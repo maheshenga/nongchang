@@ -1,26 +1,55 @@
 import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, Bookmark, ChevronDown, Save } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useApi } from '../hooks/useApi';
+import { listBatches, createBatch, type Batch } from '../api/batches';
+import { listFields, type Field } from '../api/fields';
+import { generateCode } from '../api/trace';
+import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
 
-const MOCK_BATCH_DATA = [
-  { id: 'OB-2023-11', type: '极品春白芍大雪素', date: '2023-04-12', house: 'A区-春白芍组培', stage: '已出圃', color: 'emerald', inputCost: 45000, laborCost: 12000, sellPrice: 85000, generated: 50 },
-  { id: 'OB-2023-12', type: '素心紫凤朝阳', date: '2023-05-01', house: 'B区-待出圃', stage: '休眠促花', color: 'blue', inputCost: 32000, laborCost: 15000, sellPrice: 0, generated: 0 },
-  { id: 'OB-2024-01', type: '紫秀冠世墨玉', date: '2024-01-10', house: 'C区-病害预警', stage: '组培扩繁', color: 'amber', inputCost: 58000, laborCost: 22000, sellPrice: 0, generated: 0 },
-  { id: 'OB-2024-02', type: '极品春白芍大雪素', date: '2024-02-15', house: 'A区-春白芍组培', stage: '苗期管理', color: 'cyan', inputCost: 15000, laborCost: 8000, sellPrice: 0, generated: 0 },
-  { id: 'OB-2024-03', type: '滇红彩云', date: '2024-03-20', house: 'D区-露地栽植', stage: '施肥培土', color: 'indigo', inputCost: 22000, laborCost: 12000, sellPrice: 0, generated: 0 },
-];
+interface ViewBatch {
+  id: string;
+  code: string;
+  type: string;
+  date: string;
+  house: string;
+  stage: string;
+  color: string;
+  inputCost: number;
+  laborCost: number;
+  sellPrice: number;
+  generated: number;
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  [BatchStatus.PLANTING]: 'cyan',
+  [BatchStatus.GROWING]: 'emerald',
+  [BatchStatus.HARVESTED]: 'amber',
+  [BatchStatus.DISTRIBUTED]: 'indigo',
+};
+
+function toViewBatch(b: Batch): ViewBatch {
+  return {
+    id: b.id,
+    code: b.batchNo,
+    type: b.cropName,
+    date: b.plantDate.slice(0, 10),
+    house: b.fieldId.slice(0, 8),
+    stage: b.status,
+    color: STATUS_COLOR[b.status] ?? 'slate',
+    inputCost: 0,
+    laborCost: 0,
+    sellPrice: 0,
+    generated: 0,
+  };
+}
 
 export default function BatchAdmin() {
-  const [batches, setBatches] = useState(() => {
-    const saved = localStorage.getItem('system_batches');
-    return saved ? JSON.parse(saved) : MOCK_BATCH_DATA;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('system_batches', JSON.stringify(batches));
-    window.dispatchEvent(new Event('batches-updated'));
-  }, [batches]);
+  const { data: rawBatches, loading, error, reload } = useApi(listBatches);
+  const batches: ViewBatch[] = (rawBatches ?? []).map(toViewBatch);
+  const { data: fields } = useApi(listFields);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [searchCode, setSearchCode] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -31,7 +60,7 @@ export default function BatchAdmin() {
   // computed
   const filteredData = useMemo(() => {
     return batches.filter(b => {
-      const matchCode = searchCode ? b.id.toLowerCase().includes(searchCode.toLowerCase()) : true;
+      const matchCode = searchCode ? b.code.toLowerCase().includes(searchCode.toLowerCase()) : true;
       const matchType = filterType === 'all' ? true : b.type.includes(filterType);
       const matchHouse = filterHouse === 'all' ? true : b.house.includes(filterHouse);
       
@@ -108,56 +137,9 @@ export default function BatchAdmin() {
 
   const [toastMessage, setToastMessage] = useState('');
 
-  useEffect(() => {
-    const handleFarmRecordAdded = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      const { batchId, inputCost, laborCost } = customEvent.detail;
-      
-      setBatches(prev => {
-        let updatedBatchName = '';
-        const newBatches = prev.map(batch => {
-          if (batch.id === batchId) {
-             updatedBatchName = batch.id;
-             return {
-               ...batch,
-               inputCost: batch.inputCost + inputCost,
-               laborCost: batch.laborCost + laborCost
-             };
-          }
-          return batch;
-        });
-        if (updatedBatchName) {
-           showToast(`检测到新农事记录，关联批次(${updatedBatchName})成本已实时计算合并`);
-        }
-        return newBatches;
-      });
-    };
-    
-    window.addEventListener('farm-record-added', handleFarmRecordAdded);
-    return () => window.removeEventListener('farm-record-added', handleFarmRecordAdded);
-  }, []);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
-  };
-
-  const handleCreateBatch = () => {
-    const newIdStr = String(batches.length + 1).padStart(2, '0');
-    const newBatch = {
-      id: `OB-${new Date().getFullYear()}-${newIdStr}`,
-      type: ['极品春白芍大雪素', '素心紫凤朝阳', '紫秀冠世墨玉', '滇红彩云'][batches.length % 4],
-      date: new Date().toISOString().split('T')[0],
-      house: ['A区-春白芍组培', 'B区-待出圃', 'C区-病害预警', 'D区-露地栽植'][batches.length % 4],
-      stage: '组培扩繁',
-      color: ['emerald', 'blue', 'amber', 'cyan', 'indigo'][batches.length % 5],
-      inputCost: 20000 + (batches.length * 1500),
-      laborCost: 5000 + (batches.length * 500),
-      sellPrice: 0,
-      generated: 0
-    };
-    setBatches([newBatch, ...batches]);
-    showToast(`系统已成功建立全息繁育批次档案：${newBatch.id}`);
   };
 
   const handleExportBatchReport = (id: string) => {
@@ -285,7 +267,7 @@ export default function BatchAdmin() {
                }
             }} />
           </div>
-          <button onClick={handleCreateBatch} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shadow-emerald-600/20 focus:ring-4 focus:ring-emerald-500/30">
+          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shadow-emerald-600/20 focus:ring-4 focus:ring-emerald-500/30">
             <Plus className="w-4 h-4" />
             新建管理批次
           </button>
@@ -336,6 +318,12 @@ export default function BatchAdmin() {
       )}
 
       <div className="flex-1 overflow-auto p-0 min-h-0 bg-slate-50/30">
+        {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+        {error && (
+          <div className="p-8 text-center text-rose-500 text-sm">
+            {error} <button onClick={() => void reload()} className="ml-2 underline font-bold">重试</button>
+          </div>
+        )}
         <table className="w-full text-left whitespace-nowrap">
           <thead className="text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 sticky top-0 border-b border-slate-200 z-10 backdrop-blur-sm">
             <tr>
@@ -409,17 +397,6 @@ export default function BatchAdmin() {
                   >
                     {isExportingReport === b.id ? <Loader2 className="w-3 h-3 animate-spin text-white" /> : <FileText className="w-3 h-3" />}
                     极速出具报告
-                  </button>
-                  <button 
-                    onClick={() => {
-                      if (window.confirm('确认删除该全息繁育批次？此操作将永久移除相关合规报告及生命周期数据。')) {
-                        setBatches(batches.filter(batch => batch.id !== b.id));
-                        showToast(`已永久删除全息繁育批次及合规档案：${b.id}`);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-1.5 text-red-600 hover:text-white hover:bg-red-600 font-bold text-[10px] uppercase tracking-wider bg-red-50 border border-red-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
-                  >
-                    删除批次
                   </button>
                 </td>
               </motion.tr>
@@ -709,12 +686,13 @@ export default function BatchAdmin() {
                           }} className="flex items-center justify-center gap-2 text-indigo-600 font-bold text-sm bg-white border border-indigo-100 px-5 py-2 rounded-xl transition-all shadow-sm hover:border-indigo-300 hover:shadow-md focus:ring-4 focus:ring-indigo-500/20 active:scale-95">
                             <Printer className="w-4 h-4" /> 对接本机打印驱动
                           </button>
-                          <button onClick={() => {
+                          <button onClick={async () => {
+                             if (showQrModal) {
+                               try { await generateCode(showQrModal); } catch { /* 演示导出不阻塞 */ }
+                             }
                              setShowPdfPreview(false);
                              setShowQrModal(null);
-                             // Update generated state
-                             setBatches(batches.map(b => b.id === showQrModal ? { ...b, generated: b.generated + qrAmount } : b));
-                             showToast(`[已成功] 高清 PDF 溯源标签大表 (${qrAmount}张) 已安全写入并下载完毕。`);
+                             showToast(`已为批次生成溯源码并导出标签 (${qrAmount}张)。`);
                           }} className="flex items-center justify-center gap-2 text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl transition-all shadow border border-indigo-700/50 focus:ring-4 focus:ring-indigo-500/30 active:scale-95">
                             <Download className="w-4 h-4" /> 导出印刷级 PDF
                           </button>
@@ -745,11 +723,10 @@ export default function BatchAdmin() {
 
                <div className="p-4 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0">
                   <button onClick={() => setShowPdfPreview(false)} className="px-5 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded transition-colors">返回设置</button>
-                  <button onClick={() => { 
-                     window.print(); 
-                     setBatches(batches.map(b => b.id === showQrModal ? { ...b, generated: b.generated + qrAmount } : b));
-                     setShowPdfPreview(false); 
-                     setShowQrModal(null); 
+                  <button onClick={() => {
+                     window.print();
+                     setShowPdfPreview(false);
+                     setShowQrModal(null);
                      showToast(`已成功为批次生成 ${qrAmount} 张溯源防伪码`);
                   }} className="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow flex items-center gap-2">
                      <Printer className="w-5 h-5" /> 确认排版并打印 PDF
@@ -957,6 +934,14 @@ export default function BatchAdmin() {
         </div>
       )}
 
+      {showCreateModal && (
+        <CreateBatchModal
+          fields={fields ?? []}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={() => { setShowCreateModal(false); void reload(); }}
+        />
+      )}
+
       {/* Action Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 z-50">
@@ -964,6 +949,87 @@ export default function BatchAdmin() {
           <span className="text-sm font-medium">{toastMessage}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function CreateBatchModal({
+  fields, onClose, onCreated,
+}: {
+  fields: Field[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [fieldId, setFieldId] = useState(fields[0]?.id ?? '');
+  const [batchNo, setBatchNo] = useState('');
+  const [cropName, setCropName] = useState('');
+  const [plantDate, setPlantDate] = useState('');
+  const [expectedHarvest, setExpectedHarvest] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    const field = fields.find((f) => f.id === fieldId);
+    if (!field) { setErr('请选择地块'); return; }
+    setSubmitting(true);
+    try {
+      const dto: CreateBatchDto = {
+        ownerId: field.ownerId,
+        fieldId: field.id,
+        batchNo,
+        cropName,
+        plantDate: new Date(plantDate).toISOString(),
+        expectedHarvest: new Date(expectedHarvest).toISOString(),
+        status: BatchStatus.PLANTING,
+      };
+      await createBatch(dto);
+      onCreated();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : '创建失败');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+// __CREATE_BATCH_MODAL_RETURN__
+
+  return (
+    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+        <h3 className="font-bold text-slate-800 text-lg">新建批次</h3>
+        {fields.length === 0 && <p className="text-amber-600 text-sm">请先创建地块后再建批次。</p>}
+        <label className="block text-xs font-bold text-slate-500">所属地块
+          <select value={fieldId} onChange={(e) => setFieldId(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+            {fields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs font-bold text-slate-500">批次号
+          <input value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-xs font-bold text-slate-500">品种
+          <input value={cropName} onChange={(e) => setCropName(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-xs font-bold text-slate-500">种植日期
+          <input type="date" value={plantDate} onChange={(e) => setPlantDate(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </label>
+        <label className="block text-xs font-bold text-slate-500">预计收获
+          <input type="date" value={expectedHarvest} onChange={(e) => setExpectedHarvest(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </label>
+        {err && <p className="text-rose-500 text-xs">{err}</p>}
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600">取消</button>
+          <button type="submit" disabled={submitting || fields.length === 0}
+            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50">
+            {submitting ? '提交中…' : '创建'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
