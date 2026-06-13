@@ -112,6 +112,7 @@ model TraceCode {
   batchId   String   @map("batch_id")
   code      String   @unique
   scanCount Int      @default(0) @map("scan_count")
+  status    String   @default("active") @map("status")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -133,4 +134,19 @@ model TraceEvent {
   @@index([tenantId])
   @@index([batchId])
   @@map("trace_events")
+}
+
+model TraceScan {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  code      String
+  batchId   String   @map("batch_id")
+  ip        String
+  userAgent String?  @map("user_agent")
+  scannedAt DateTime @default(now()) @map("scanned_at")
+
+  @@index([tenantId])
+  @@index([code, scannedAt])
+  @@index([batchId])
+  @@map("trace_scans")
 }
