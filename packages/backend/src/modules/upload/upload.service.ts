@@ -11,7 +11,7 @@ const ALLOWED: Record<string, string> = {
 };
 
 // multer 内存存储文件的最小形状(避免依赖 @types/multer)
-interface UploadedFile {
+export interface UploadedFile {
   originalname: string;
   mimetype: string;
   size: number;
