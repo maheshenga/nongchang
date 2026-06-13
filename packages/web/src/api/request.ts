@@ -54,7 +54,7 @@ async function parseError(res: Response): Promise<ApiError> {
 async function send(path: string, init: RequestInit, accessToken: string | null): Promise<Response> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  if (init.body && !('Content-Type' in headers) && !(init.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+  if (init.body && !(init.body instanceof FormData) && !Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
   return fetch(`/api${path}`, { ...init, headers });
 }
 
