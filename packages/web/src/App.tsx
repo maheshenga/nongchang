@@ -2,6 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppLogin from './components/AppLogin';
+import { useAuth } from './auth/auth-context';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
@@ -35,10 +36,12 @@ type NavItem = { id: string; label: string; icon: any };
 type NavCategory = { category: string; items: NavItem[] };
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isAuthenticated, logout } = useAuth();
+  const systemRole: SystemRole | null = user
+    ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
+    : null;
   const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles'>('dashboard');
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dashboard']));
-  const [systemRole, setSystemRole] = useState<SystemRole>('system_admin');
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
 
@@ -73,13 +76,8 @@ export default function App() {
     return () => window.removeEventListener('toggle-presentation', handleTogglePresentation);
   }, [isPresentationMode]);
 
-  const handleLogin = (role: string) => {
-    setSystemRole(role as SystemRole);
-    setIsAuthenticated(true);
-  };
-
   const handleLogout = () => {
-    setIsAuthenticated(false);
+    logout();
     setActiveTab('dashboard');
   };
 
@@ -175,7 +173,7 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return <AppLogin onLogin={handleLogin} />;
+    return <AppLogin />;
   }
 
   return (
@@ -267,18 +265,6 @@ export default function App() {
               <span className="px-2.5 py-1 bg-gradient-to-r from-blue-50 to-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-md border border-indigo-100/50 shadow-sm">
                  {systemRole === 'system_admin' ? '总管理员' : systemRole === 'agent_admin' ? '代理商' : '商家'}
               </span>
-              <select 
-                 value={systemRole}
-                 onChange={(e) => {
-                    setSystemRole(e.target.value as SystemRole);
-                    setActiveTab('dashboard'); // Reset tab on role switch
-                 }}
-                 className="text-xs bg-white border border-slate-200 rounded-md py-1 px-2 font-bold text-slate-600 focus:outline-none focus:border-emerald-500 shadow-sm"
-              >
-                 <option value="system_admin">💻 总管理员后台</option>
-                 <option value="agent_admin">🏢 代理商后台</option>
-                 <option value="merchant_admin">🏪 商家后台</option>
-              </select>
             </div>
           </div>
           <div className="flex items-center gap-6">
