@@ -11,6 +11,7 @@ import { FarmRecordModule } from './modules/farm-record/farm-record.module';
 import { TraceModule } from './modules/trace/trace.module';
 import { UserModule } from './modules/user/user.module';
 import { PublicTraceModule } from './modules/public-trace/public-trace.module';
+import { UploadModule } from './modules/upload/upload.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -30,6 +31,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     TraceModule,
     UserModule,
     PublicTraceModule,
+    UploadModule,
   ],
   providers: [
     ScopeService,
