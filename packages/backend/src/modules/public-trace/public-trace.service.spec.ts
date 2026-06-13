@@ -40,6 +40,7 @@ describe('PublicTraceService.getByCode', () => {
     const prisma = makePrisma();
     const svc = new PublicTraceService(prisma);
     const res = await svc.getByCode('ORC-X');
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
     expect(res.code).toBe('ORC-X');
     expect(res.batch.cropName).toBe('白芍');
     expect(res.batch.fieldName).toBe('A区露地');
@@ -57,6 +58,7 @@ describe('PublicTraceService.getByCode', () => {
     expect(prisma.traceCode.update).toHaveBeenCalledWith({
       where: { code: 'ORC-X' }, data: { scanCount: { increment: 1 } },
     });
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
     expect(res.scanCount).toBe(5);
   });
 

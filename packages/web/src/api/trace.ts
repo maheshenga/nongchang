@@ -1,13 +1,13 @@
-import type { CreateTraceEventDto, PublicTraceResponse } from '@nongchang/shared';
+import type { CreateTraceEventDto, PublicTraceResult } from '@nongchang/shared';
 import { request } from './request';
 
 export class TraceNotFoundError extends Error {}
 
-export async function fetchPublicTrace(code: string): Promise<PublicTraceResponse> {
+export async function fetchPublicTrace(code: string): Promise<PublicTraceResult> {
   const res = await fetch(`/api/public/trace/${encodeURIComponent(code)}`);
   if (res.status === 404) throw new TraceNotFoundError('溯源码无效或不存在');
   if (!res.ok) throw new Error(`溯源查询失败 (${res.status})`);
-  return res.json() as Promise<PublicTraceResponse>;
+  return res.json() as Promise<PublicTraceResult>;
 }
 
 export interface TraceCode {

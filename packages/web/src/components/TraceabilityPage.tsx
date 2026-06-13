@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ShieldCheck, MapPin, Calendar, Sprout, Truck, Store, Leaf, ArrowLeft, Hexagon, Sun, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchPublicTrace, TraceNotFoundError } from '../api/trace';
-import type { PublicTraceResponse, TraceEventType } from '@nongchang/shared';
+import type { PublicTraceResult, TraceEventType } from '@nongchang/shared';
 
 const ICON_BY_TYPE: Record<TraceEventType, typeof Sprout> = {
   origin: Sprout, farm: Leaf, harvest: Sun, warehouse: Hexagon, logistics: Truck, retail: Store,
@@ -15,7 +15,7 @@ function fmtTime(iso: string) {
 
 export default function TraceabilityPage({ code, onBack }: { code: string, onBack?: () => void }) {
   const [activeTab, setActiveTab] = useState<'journey' | 'cert'>('journey');
-  const [data, setData] = useState<PublicTraceResponse | null>(null);
+  const [data, setData] = useState<PublicTraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +49,19 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
         <ShieldCheck className="w-12 h-12 text-slate-300 mb-4" />
         <h2 className="text-lg font-bold text-slate-800 mb-1">溯源码无效或不存在</h2>
         <p className="text-sm text-slate-500 mb-6 break-all">{error ?? `未找到溯源码 ${code}`}</p>
+        {onBack && (
+          <button onClick={onBack} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors">返回</button>
+        )}
+      </div>
+    );
+  }
+
+  if (data.frozen) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 px-6 text-center">
+        <ShieldCheck className="w-12 h-12 text-red-300 mb-4" />
+        <h2 className="text-lg font-bold text-slate-800 mb-1">该溯源码已被冻结</h2>
+        <p className="text-sm text-slate-500 mb-6 break-all">此溯源码 {code} 因疑似异常已被冻结，请谨慎辨别商品真伪。</p>
         {onBack && (
           <button onClick={onBack} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors">返回</button>
         )}
