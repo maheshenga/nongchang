@@ -39,10 +39,12 @@ export default function AppLogin() {
           </div>
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">登录账号</label>
+              <label htmlFor="login-username" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">登录账号</label>
               <div className="relative">
                 <input
+                  id="login-username"
                   type="text"
+                  autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
@@ -53,10 +55,12 @@ export default function AppLogin() {
               </div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">密码</label>
+              <label htmlFor="login-password" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">密码</label>
               <div className="relative">
                 <input
+                  id="login-password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
