@@ -45,8 +45,6 @@ export default function MerchantAdmin() {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // Still keeping selectedCrop for the side panel logic if needed, 
-  // or use the last one from the set. Let's adapt it.
   const selectedCrops = crops.filter(c => selectedCropIds.has(c.id));
   const activeCrop = selectedCrops.length > 0 ? selectedCrops[selectedCrops.length - 1] : null;
 
@@ -139,9 +137,10 @@ export default function MerchantAdmin() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="relative">
               <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input 
-                type="text" 
-                placeholder="搜索批次或芍药品种..." 
+              <input
+                type="text"
+                placeholder="搜索批次或芍药品种..."
+                aria-label="搜索批次或芍药品种"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 w-full sm:w-72 text-slate-700 shadow-sm transition-all"
@@ -240,7 +239,7 @@ export default function MerchantAdmin() {
                     <div className="flex flex-wrap items-center gap-2">
                        <button
                          onClick={() => showToast('状态流转待后端接入')}
-                         className="text-slate-600 hover:text-white hover:bg-slate-800 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                         className="text-slate-600 hover:text-white hover:bg-slate-800 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                        >
                          进入下一阶段
                        </button>
@@ -363,7 +362,7 @@ export default function MerchantAdmin() {
 
       {/* H5 Template Editor Modal */}
       {showH5Editor && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm shadow-xl">
+        <div role="dialog" aria-modal="true" aria-label="溯源H5页面模板定制" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm shadow-xl">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col md:flex-row">
             <div className="w-full md:w-[60%] p-6 bg-slate-50 border-r border-slate-200 overflow-y-auto flex flex-col">
               <div className="flex justify-between items-center mb-6 shrink-0">
@@ -373,7 +372,7 @@ export default function MerchantAdmin() {
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">支持拖拽组件调整展示顺序，一键生成品牌专属体验</p>
                 </div>
-                <button onClick={() => setShowH5Editor(false)} className="text-slate-400 hover:text-slate-600 md:hidden">
+                <button onClick={() => setShowH5Editor(false)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 md:hidden">
                   <X className="w-6 h-6" />
                 </button>
               </div>
@@ -438,8 +437,8 @@ export default function MerchantAdmin() {
                        <span className={`font-bold ${block.enabled ? 'text-slate-700' : 'text-slate-400 line-through'}`}>{block.name}</span>
                      </div>
                      <div className="flex flex-col gap-1">
-                       <button onClick={() => moveBlock(index, 'up')} disabled={index === 0} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer">▲</button>
-                       <button onClick={() => moveBlock(index, 'down')} disabled={index === activeBlocks.length - 1} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer">▼</button>
+                       <button onClick={() => moveBlock(index, 'up')} disabled={index === 0} aria-label="上移" className="w-6 h-6 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer">▲</button>
+                       <button onClick={() => moveBlock(index, 'down')} disabled={index === activeBlocks.length - 1} aria-label="下移" className="w-6 h-6 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded disabled:opacity-30 cursor-pointer">▼</button>
                      </div>
                    </div>
                 ))}
@@ -455,7 +454,7 @@ export default function MerchantAdmin() {
             </div>
             
             <div className="w-full md:w-[40%] bg-slate-200 flex items-center justify-center relative p-4 h-full hidden md:flex">
-               <button onClick={() => setShowH5Editor(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-white/50 p-1 rounded-full backdrop-blur-sm z-10">
+               <button onClick={() => setShowH5Editor(false)} aria-label="关闭" className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 bg-white/50 p-1 rounded-full backdrop-blur-sm z-10">
                   <X className="w-5 h-5" />
                </button>
                {/* Mobile Preview Frame */}
@@ -535,7 +534,7 @@ export default function MerchantAdmin() {
       )}
 
       {showPrintPreview && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div role="dialog" aria-modal="true" aria-label="物流热敏打印机联机预览" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-slate-50/50">
               <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
@@ -544,7 +543,7 @@ export default function MerchantAdmin() {
                 </div>
                 物流热敏打印机联机预览 (4x6寸)
               </h3>
-              <button onClick={() => setShowPrintPreview(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
+              <button onClick={() => setShowPrintPreview(false)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -612,7 +611,7 @@ export default function MerchantAdmin() {
 
       {/* Consumer Insights & Anti-fake Analytics Modal */}
       {showScanInsights && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
+        <div role="dialog" aria-modal="true" aria-label="防伪扫码监控与终端消费者洞察" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
              <div className="flex justify-between items-center p-6 border-b border-orange-100 bg-orange-50/80 shrink-0">
                <div>
@@ -624,7 +623,7 @@ export default function MerchantAdmin() {
                  </h3>
                  <p className="text-xs text-orange-700/80 mt-1.5 tracking-wide">基于真实扫码记录的大数据分析、留存转化率与防窜货预警网</p>
                </div>
-               <button onClick={() => setShowScanInsights(false)} className="text-orange-900/40 hover:text-orange-900 hover:bg-orange-100/50 p-2 rounded-lg transition-colors">
+               <button onClick={() => setShowScanInsights(false)} aria-label="关闭" className="text-orange-900/40 hover:text-orange-900 hover:bg-orange-100/50 p-2 rounded-lg transition-colors">
                  <X className="w-5 h-5" />
                </button>
              </div>
@@ -711,7 +710,7 @@ export default function MerchantAdmin() {
 
       {/* RFID / NFC Binding Modal */}
       {showRfidModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
+        <div role="dialog" aria-modal="true" aria-label="RFID/NFC 物理智能芯片绑定" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="font-bold text-slate-800 flex items-center gap-3">
@@ -720,7 +719,7 @@ export default function MerchantAdmin() {
                 </div>
                 RFID/NFC 物理智能芯片绑定
               </h3>
-              <button onClick={() => setShowRfidModal(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowRfidModal(null)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
             <div className="p-8 flex flex-col items-center">
