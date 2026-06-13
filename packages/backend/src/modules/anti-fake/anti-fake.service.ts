@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { Role } from '@nongchang/shared';
 import type { AuthUser, TraceScanItem, AntiFakeAlert, FreezeResponse } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -20,8 +21,10 @@ export class AntiFakeService {
    *  TraceScan 无 ownerId,故先解析作用域内的 batchId 集合,再按 batchId 过滤。
    *  sysadmin 直接按 tenantId。fail-closed 由 ScopeService 保证。 */
   private async scanWhere(user: AuthUser): Promise<Record<string, unknown>> {
+    if (user.role === Role.SYSTEM_ADMIN) return { tenantId: user.tenantId };
+    // 非 sysadmin:经 ScopeService(fail-closed)解析归属,再转成作用域内的 batchId 集合。
+    // 空集合时 Prisma `in: []` 匹配零行,安全退化为"什么都看不到"。
     const owned = await this.scope.ownedScopeWhere(this.prisma, user);
-    if (!('ownerId' in owned)) return { tenantId: user.tenantId };
     const batches = await this.prisma.batch.findMany({
       where: owned as any, select: { id: true },
     });

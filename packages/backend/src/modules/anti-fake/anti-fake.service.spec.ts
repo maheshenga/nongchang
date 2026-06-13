@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { AntiFakeService } from './anti-fake.service';
 import { ScopeService } from '../../common/scope/scope.service';
