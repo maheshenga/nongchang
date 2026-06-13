@@ -47,6 +47,8 @@ export const createFarmRecordSchema = z.object({
   location: z.string().max(128).optional(),
   recordedAt: z.string().datetime(),
   source: z.enum([FarmRecordSource.WEB, FarmRecordSource.MINIAPP, FarmRecordSource.VOICE]),
+  supplyId: z.string().uuid().optional(),
+  supplyAmount: z.number().positive().optional(),
 });
 export type CreateFarmRecordDto = z.infer<typeof createFarmRecordSchema>;
 

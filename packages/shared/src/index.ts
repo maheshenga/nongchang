@@ -41,6 +41,19 @@ export {
 } from './dto/anti-fake.dto';
 export type { TraceScanItem, AntiFakeAlert, FreezeResponse } from './dto/anti-fake.dto';
 
+export {
+  supplyItemSchema,
+  createSupplyInputSchema,
+  issueSupplyInputSchema,
+  supplyIssueResponseSchema,
+} from './dto/supply.dto';
+export type {
+  SupplyItem,
+  CreateSupplyInput,
+  IssueSupplyInput,
+  SupplyIssueResponse,
+} from './dto/supply.dto';
+
 export { uploadResponseSchema } from './dto/upload.dto';
 export type { UploadResponse } from './dto/upload.dto';
 
