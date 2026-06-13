@@ -1,4 +1,4 @@
-import { ShieldCheck, Download, MoreHorizontal, AlertTriangle, X, Bell, Thermometer, Search, ToggleLeft, ToggleRight, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
+import { ShieldCheck, Download, MoreHorizontal, AlertTriangle, X, Bell, Thermometer, Search, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
 import { Agent } from '../types';
 import { useState, useEffect, type FormEvent } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -86,10 +86,10 @@ export default function SystemAdmin() {
   };
 
   const handleSelectAllAgents = () => {
-    if (selectedAgents.size === agents.length) {
+    if (selectedAgents.size === filteredAgents.length) {
       setSelectedAgents(new Set());
     } else {
-      setSelectedAgents(new Set(agents.map(a => a.id)));
+      setSelectedAgents(new Set(filteredAgents.map(a => a.id)));
     }
   };
 
@@ -575,16 +575,10 @@ export default function SystemAdmin() {
               <thead className="text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 sticky top-0 border-b border-slate-200 z-10 backdrop-blur-sm">
                 <tr>
                   <th className="px-6 py-4 font-bold border-l-2 border-transparent w-12">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={selectedAgents.size === filteredAgents.length && filteredAgents.length > 0}
-                      onChange={() => {
-                        if (selectedAgents.size === filteredAgents.length) {
-                          setSelectedAgents(new Set());
-                        } else {
-                          setSelectedAgents(new Set(filteredAgents.map(a => a.id)));
-                        }
-                      }}
+                      onChange={handleSelectAllAgents}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                   </th>

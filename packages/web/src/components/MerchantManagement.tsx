@@ -42,11 +42,13 @@ export default function MerchantManagement() {
     e.preventDefault();
     if (!newMerchant.name || !newMerchant.contact) return;
     try {
+      // Note: location is intentionally not sent — backend CreateUserDto has no location field.
       const dto: CreateUserDto = {
         username: newMerchant.contact,
         password: 'password123',
         role: Role.MERCHANT,
         displayName: newMerchant.name,
+        phone: newMerchant.phone || undefined,
       };
       await createUser(dto);
       setShowAddModal(false);

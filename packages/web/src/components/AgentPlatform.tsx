@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Store, Activity, TrendingUp, Search, Plus, MapPin, CheckCircle2, ShieldCheck, Loader2 } from 'lucide-react';
+import { Users, Store, Activity, TrendingUp, Search, Plus, MapPin, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { listMerchants, type MerchantUser } from '../api/agents';
 
@@ -18,7 +18,6 @@ export default function AgentPlatform() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [toastMessage, setToastMessage] = useState('');
-  const [isProcessing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
@@ -146,12 +145,11 @@ export default function AgentPlatform() {
                </div>
              )}
 
-             <button 
+             <button
                onClick={handleInvite}
-               disabled={isProcessing}
                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center justify-center gap-2 transition-all focus:ring-4 focus:ring-indigo-500/30 shrink-0 disabled:opacity-50"
              >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4" />}
+                <Plus className="w-4 h-4" />
                 邀请新商家入驻系统
              </button>
            </div>
