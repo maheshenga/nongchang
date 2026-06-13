@@ -5,6 +5,7 @@
     "build:shared": "pnpm --filter @nongchang/shared build",
     "build:backend": "pnpm --filter @nongchang/backend build",
     "build": "pnpm build:shared && pnpm build:backend",
+    "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
     "test": "pnpm --filter @nongchang/backend test"
   },
   "engines": { "node": ">=20" },
