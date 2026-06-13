@@ -1,5 +1,5 @@
 import { request, uploadFile } from './request';
-import type { CreateFarmRecordDto } from '@nongchang/shared';
+import type { CreateFarmRecordDto, SupplyItem } from '@nongchang/shared';
 
 // 后端实体类型未在 shared 导出,这里按 GET 响应声明所需字段。
 export interface Batch {
@@ -24,6 +24,10 @@ export async function listFarmRecords(batchId: string): Promise<FarmRecord[]> {
 
 export function createFarmRecord(dto: CreateFarmRecordDto): Promise<FarmRecord> {
   return request<FarmRecord>({ url: '/farm-records', method: 'POST', data: dto });
+}
+
+export function listSupplies(): Promise<SupplyItem[]> {
+  return request<SupplyItem[]>({ url: '/supplies' });
 }
 
 export function uploadImage(filePath: string): Promise<string> {

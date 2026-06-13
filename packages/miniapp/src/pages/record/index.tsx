@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, Textarea, Button, Image } from '@tarojs/components';
 import Taro, { useRouter } from '@tarojs/taro';
-import { createFarmRecord, uploadImage } from '../../api/farm';
+import { createFarmRecord, uploadImage, listSupplies } from '../../api/farm';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
+import type { SupplyItem } from '@nongchang/shared';
 
 export default function Record() {
   const router = useRouter();
@@ -12,6 +13,13 @@ export default function Record() {
   const [note, setNote] = useState('');
   const [images, setImages] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [supplies, setSupplies] = useState<SupplyItem[]>([]);
+  const [supplyId, setSupplyId] = useState('');
+  const [supplyAmount, setSupplyAmount] = useState('');
+
+  useEffect(() => {
+    listSupplies().then(setSupplies).catch(() => setSupplies([]));
+  }, []);
 
   async function chooseAndUpload() {
     const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] });
@@ -39,6 +47,7 @@ export default function Record() {
         images: images.length ? images : undefined,
         recordedAt: new Date().toISOString(),
         source: FarmRecordSource.MINIAPP,
+        ...(supplyId ? { supplyId, supplyAmount: Number(supplyAmount) || 0 } : {}),
       });
       Taro.showToast({ title: '已保存', icon: 'success' });
       Taro.navigateBack();
@@ -75,6 +84,25 @@ export default function Record() {
         placeholder="可填写补充说明(可选)"
         style={{ background: '#fff', padding: '24px', borderRadius: '8px', marginTop: '16px', width: '100%', height: '160px' }}
       />
+
+      <Text style={{ fontSize: '28px', display: 'block', marginTop: '24px' }}>使用农资(可选)</Text>
+      {supplies.length === 0 ? (
+        <Text style={{ color: '#999', fontSize: '24px', display: 'block', marginTop: '8px' }}>无可选农资</Text>
+      ) : (
+        <View style={{ display: 'flex', flexWrap: 'wrap', marginTop: '16px' }}>
+          {supplies.map(s => (
+            <View key={s.id} onClick={() => setSupplyId(supplyId === s.id ? '' : s.id)}
+              style={{ padding: '12px 20px', marginRight: '12px', marginBottom: '12px', borderRadius: '24px',
+                background: supplyId === s.id ? '#2e7d32' : '#fff', color: supplyId === s.id ? '#fff' : '#333' }}>
+              <Text>{s.name}(剩余 {s.remaining} {s.unit})</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {supplyId ? (
+        <Textarea value={supplyAmount} onInput={e => setSupplyAmount(e.detail.value)}
+          placeholder="本次用量" style={{ background: '#fff', padding: '16px', borderRadius: '8px', marginTop: '12px', width: '100%', height: '80px' }} />
+      ) : null}
 
       <Text style={{ fontSize: '28px', display: 'block', marginTop: '24px' }}>照片</Text>
       <View style={{ display: 'flex', flexWrap: 'wrap', marginTop: '16px' }}>
