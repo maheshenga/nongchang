@@ -1,5 +1,9 @@
-import { FileSpreadsheet, Search, Filter, Droplet, Sun, CheckCircle2, Clock, Calendar, CheckCircle, Sparkles, X, Loader2, Link as LinkIcon, ImageIcon, GitCompare, ChevronsRightLeft } from 'lucide-react';
+import { FileSpreadsheet, Search, Filter, CheckCircle2, Clock, Calendar, CheckCircle, Sparkles, X, Loader2, Link as LinkIcon, ImageIcon, GitCompare, ChevronsRightLeft } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useApi } from '../hooks/useApi';
+import { listFarmRecords, createFarmRecord, type FarmRecord } from '../api/farm-records';
+import { listBatches } from '../api/batches';
+import { FarmRecordSource, type CreateFarmRecordDto } from '@nongchang/shared';
 
 type RecordTask = {
   id: string;
@@ -14,16 +18,27 @@ type RecordTask = {
   labor?: number;
 };
 
-const INITIAL_TASKS: RecordTask[] = [
-  { id: '1', time: '待安排', batch: 'OB-2023-11', type: '温室浇水', desc: '完成A区常规温室喷洒浇水，控水控湿。', person: '李建国', icon: Droplet, status: 'pending', material: '水 2T', labor: 1 },
-  { id: '2', time: '待安排', batch: 'OB-2023-12', type: '施缓释肥', desc: '追施芍药专用缓释肥，补充微量元素。', person: '张华', icon: CheckCircle2, status: 'pending', material: '缓释肥 50kg', labor: 1.5 },
-  { id: '3', time: '09:30 前天', batch: 'OB-2024-01', type: '病虫检测', desc: '例行病害巡查看，检测是否有炭疽或介壳虫。', person: '王质检', icon: Sun, status: 'completed', material: '无', labor: 2 },
-];
+function toRecordTask(r: FarmRecord): RecordTask {
+  const detail = r.detail ?? {};
+  return {
+    id: r.id,
+    time: r.recordedAt.slice(0, 10),
+    batch: r.batchId,
+    type: r.action,
+    desc: typeof detail.desc === 'string' ? detail.desc : r.action,
+    person: r.operatorId.slice(0, 8),
+    icon: undefined,
+    status: 'completed',
+    material: typeof detail.material === 'string' ? detail.material : undefined,
+    labor: typeof detail.labor === 'number' ? detail.labor : undefined,
+  };
+}
 
 export default function FarmRecords() {
-  const [tasks, setTasks] = useState<RecordTask[]>(INITIAL_TASKS);
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  
+  const { data: rawRecords, loading, error, reload } = useApi(listFarmRecords);
+  const { data: batches } = useApi(listBatches);
+  const tasks: RecordTask[] = (rawRecords ?? []).map(toRecordTask);
+
   // Encyclopedia Search State
   const [showEncyclopedia, setShowEncyclopedia] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,45 +76,29 @@ export default function FarmRecords() {
      showToast('已加载快捷模板');
   };
 
-  const triggerBatchUpdate = (batchId: string, cost: number, labor: number) => {
-    window.dispatchEvent(new CustomEvent('farm-record-added', { detail: { batchId, inputCost: cost, laborCost: labor } }));
-  };
-
-  const handleCreateTask = () => {
-    if(!newTask.type || !newTask.desc || !newTask.batch) return showToast('请输入完整的农事实操信息及批次号');
-    
-    // Data Validation Layer
-    const saved = localStorage.getItem('system_batches');
-    const systemBatches = saved ? JSON.parse(saved) : [];
-    const targetBatch = systemBatches.find((b: {id: string, stage: string}) => b.id === newTask.batch);
-    
-    if (!targetBatch && systemBatches.length > 0) {
-      return showToast(`数据校验失败：批次 ${newTask.batch} 不存在于总线程！孤立数据将被拒绝！`);
+  const handleCreateTask = async () => {
+    if (!newTask.type || !newTask.desc || !newTask.batch) {
+      return showToast('请输入完整的农事实操信息及批次号');
     }
-    if (targetBatch && (targetBatch.stage === '已出圃' || targetBatch.stage === '已流转终端')) {
-      return showToast(`校验预警：目标系统批次状态已进入不可操作范围「${targetBatch.stage}」，拒绝写入操作！`);
+    const batch = (batches ?? []).find((b) => b.id === newTask.batch);
+    if (!batch) return showToast('请选择有效批次');
+    try {
+      const dto: CreateFarmRecordDto = {
+        batchId: batch.id,
+        fieldId: batch.fieldId,
+        action: newTask.type,
+        detail: { desc: newTask.desc, material: newTask.material, labor: newTask.labor },
+        recordedAt: new Date().toISOString(),
+        source: FarmRecordSource.WEB,
+      };
+      await createFarmRecord(dto);
+      setShowCreateModal(false);
+      setNewTask({ type: '', desc: '', material: '', labor: 1, batch: '' });
+      showToast('农事记录已保存');
+      void reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '保存失败');
     }
-
-    const inputCost = parseFloat(String(newTask.material)?.replace(/[^0-9.]/g, '') || '0') || 0;
-    const laborCost = parseFloat(String(newTask.labor)?.replace(/[^0-9.]/g, '') || '0') || 0;
-    
-    const newTaskItem: RecordTask = {
-      id: Math.random().toString(),
-      time: '待安排',
-      batch: newTask.batch,
-      type: newTask.type,
-      desc: newTask.desc,
-      person: '管理员',
-      icon: CheckCircle2,
-      status: 'pending',
-      material: newTask.material,
-      labor: newTask.labor
-    };
-    setTasks(prev => [newTaskItem, ...prev]);
-    setShowCreateModal(false);
-    setNewTask({ type: '', desc: '', material: '', labor: 1, batch: '' });
-    triggerBatchUpdate(newTaskItem.batch, inputCost, laborCost);
-    showToast('农事记录已保存并已实时同步地块健康和全局批次溯源状态');
   };
 
   
@@ -180,35 +179,6 @@ export default function FarmRecords() {
       setSearchResult(result);
       setIsSearching(false);
     }, 1200);
-  };
-
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    setDraggedTaskId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e: React.DragEvent, newStatus: 'pending' | 'completed') => {
-    e.preventDefault();
-    if (!draggedTaskId) return;
-
-    setTasks(prev => prev.map(task => {
-      if (task.id === draggedTaskId) {
-        if (task.status !== newStatus && newStatus === 'completed') {
-          // Add automated timestamp when moving to completed
-          const now = new Date();
-          const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} 今天`;
-          return { ...task, status: newStatus, time: timeString };
-        }
-        return { ...task, status: newStatus };
-      }
-      return task;
-    }));
-    setDraggedTaskId(null);
   };
 
   const pendingTasks = tasks.filter(t => t.status === 'pending');
@@ -312,11 +282,11 @@ export default function FarmRecords() {
         
         {viewMode === 'list' ? (
           <>
+            {loading && <div className="w-full p-8 text-center text-slate-400 text-sm">加载中…</div>}
+            {error && <div className="w-full p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
             {/* Pending Column */}
-            <div 
+            <div
               className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'pending')}
             >
           <div className="p-4 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
             <h4 className="font-bold text-slate-700 flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500" /> 待完成任务</h4>
@@ -327,15 +297,13 @@ export default function FarmRecords() {
           </div>
           <div className="flex-1 overflow-auto p-4 space-y-3">
             {pendingTasks.map((task) => (
-              <div 
+              <div
                 key={task.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, task.id)}
-                className="bg-white border border-slate-200 p-4 rounded-lg shadow-sm cursor-grab active:cursor-grabbing hover:border-emerald-300 hover:shadow-md transition-all group"
+                className="bg-white border border-slate-200 p-4 rounded-lg shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group"
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
-                    <task.icon className="w-4 h-4 text-emerald-500" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                     {task.type}
                   </span>
                   <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{task.batch}</span>
@@ -349,8 +317,6 @@ export default function FarmRecords() {
                   <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {task.time}</span>
                   <div className="flex items-center gap-2">
                      <span className="font-medium px-2 py-1 bg-slate-50 rounded">执行人: {task.person}</span>
-                     <button onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, status: 'completed' } : t))} className="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-colors">标记完成</button>
-                     <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))} className="text-red-400 hover:bg-red-50 hover:text-red-600 px-2 py-1 rounded font-bold transition-colors">删除</button>
                   </div>
                 </div>
               </div>
@@ -362,10 +328,8 @@ export default function FarmRecords() {
         </div>
 
         {/* Completed Column */}
-        <div 
+        <div
           className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm"
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, 'completed')}
         >
           <div className="p-4 border-b border-emerald-100 bg-emerald-50 flex items-center justify-between">
             <h4 className="font-bold text-emerald-800 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-600" /> 已完成 (已上链)</h4>
@@ -373,15 +337,13 @@ export default function FarmRecords() {
           </div>
           <div className="flex-1 overflow-auto p-4 space-y-3">
             {completedTasks.map((task) => (
-              <div 
+              <div
                 key={task.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, task.id)}
-                className="bg-slate-50 border border-slate-200 p-4 rounded-lg shadow-sm cursor-grab active:cursor-grabbing hover:border-emerald-300 hover:shadow-md transition-all group opacity-80 hover:opacity-100"
+                className="bg-slate-50 border border-slate-200 p-4 rounded-lg shadow-sm hover:border-emerald-300 hover:shadow-md transition-all group opacity-80 hover:opacity-100"
               >
                 <div className="flex justify-between items-start mb-2">
                   <span className="flex items-center gap-1.5 text-sm font-bold text-slate-800 line-through decoration-slate-300">
-                    <task.icon className="w-4 h-4 text-slate-400" />
+                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
                     {task.type}
                   </span>
                   <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{task.batch}</span>
@@ -395,8 +357,6 @@ export default function FarmRecords() {
                   <span className="flex items-center gap-1 text-emerald-600 font-medium"><Clock className="w-3 h-3 text-emerald-500" /> {task.time}</span>
                   <div className="flex items-center gap-2">
                      <span className="font-medium px-2 py-1 bg-white rounded border border-slate-100">质检/执行: {task.person}</span>
-                     <button onClick={() => setTasks(tasks.map(t => t.id === task.id ? { ...t, status: 'pending' } : t))} className="bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-1 rounded font-bold transition-colors">撤回</button>
-                     <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))} className="text-red-400 hover:bg-red-50 hover:text-red-600 px-2 py-1 rounded font-bold transition-colors">删除</button>
                   </div>
                 </div>
               </div>
@@ -628,7 +588,10 @@ export default function FarmRecords() {
                <div className="space-y-4">
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">关联批次</label>
-                   <input type="text" value={newTask.batch} onChange={(e) => setNewTask({...newTask, batch: e.target.value.toUpperCase()})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono" placeholder="例如：OB-2023-11" />
+                   <select value={newTask.batch} onChange={(e) => setNewTask({ ...newTask, batch: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                     <option value="">请选择批次…</option>
+                     {(batches ?? []).map((b) => <option key={b.id} value={b.id}>{b.batchNo}</option>)}
+                   </select>
                  </div>
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">作业类型</label>
