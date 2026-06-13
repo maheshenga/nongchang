@@ -12,7 +12,6 @@ type RecordTask = {
   type: string;
   desc: string;
   person: string;
-  icon: any;
   status: 'pending' | 'completed';
   material?: string;
   labor?: number;
@@ -27,7 +26,6 @@ function toRecordTask(r: FarmRecord): RecordTask {
     type: r.action,
     desc: typeof detail.desc === 'string' ? detail.desc : r.action,
     person: r.operatorId.slice(0, 8),
-    icon: undefined,
     status: 'completed',
     material: typeof detail.material === 'string' ? detail.material : undefined,
     labor: typeof detail.labor === 'number' ? detail.labor : undefined,
@@ -225,7 +223,7 @@ export default function FarmRecords() {
             <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
             农事实操与质检记录看板
           </h3>
-          <p className="text-xs text-slate-500 mt-1">支持拖拽改变任务状态，移入「已完成」将自动打上时间戳并上链</p>
+          <p className="text-xs text-slate-500 mt-1">记录由农户端与后台填报，已完成农事自动归档上链</p>
         </div>
         <div className="flex gap-3 items-center">
           <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition shadow-sm mr-2 hidden md:flex">
@@ -555,13 +553,13 @@ export default function FarmRecords() {
 
       {showCreateModal && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+           <div role="dialog" aria-modal="true" aria-labelledby="fr-modal-title" className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
              <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-               <h3 className="font-bold text-slate-800 flex items-center gap-2">
+               <h3 id="fr-modal-title" className="font-bold text-slate-800 flex items-center gap-2">
                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
                  快捷新建记录
                </h3>
-               <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600 p-1">
+               <button onClick={() => setShowCreateModal(false)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 p-1">
                  <X className="w-5 h-5" />
                </button>
              </div>
@@ -587,28 +585,28 @@ export default function FarmRecords() {
 
                <div className="space-y-4">
                  <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">关联批次</label>
-                   <select value={newTask.batch} onChange={(e) => setNewTask({ ...newTask, batch: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                   <label htmlFor="fr-batch" className="block text-xs font-medium text-slate-700 mb-1">关联批次</label>
+                   <select id="fr-batch" value={newTask.batch} onChange={(e) => setNewTask({ ...newTask, batch: e.target.value })} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                      <option value="">请选择批次…</option>
                      {(batches ?? []).map((b) => <option key={b.id} value={b.id}>{b.batchNo}</option>)}
                    </select>
                  </div>
                  <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">作业类型</label>
-                   <input type="text" value={newTask.type} onChange={(e) => setNewTask({...newTask, type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例如：打药、采摘" />
+                   <label htmlFor="fr-type" className="block text-xs font-medium text-slate-700 mb-1">作业类型</label>
+                   <input id="fr-type" type="text" value={newTask.type} onChange={(e) => setNewTask({...newTask, type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例如：打药、采摘" />
                  </div>
                  <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">执行描述</label>
-                   <textarea rows={2} value={newTask.desc} onChange={(e) => setNewTask({...newTask, desc: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="填写具体的作业步骤和发现..."></textarea>
+                   <label htmlFor="fr-desc" className="block text-xs font-medium text-slate-700 mb-1">执行描述</label>
+                   <textarea id="fr-desc" rows={2} value={newTask.desc} onChange={(e) => setNewTask({...newTask, desc: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="填写具体的作业步骤和发现..."></textarea>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">物料消耗</label>
-                      <input type="text" value={newTask.material} onChange={(e) => setNewTask({...newTask, material: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例如：水2吨" />
+                      <label htmlFor="fr-material" className="block text-xs font-medium text-slate-700 mb-1">物料消耗</label>
+                      <input id="fr-material" type="text" value={newTask.material} onChange={(e) => setNewTask({...newTask, material: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="例如：水2吨" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">预估工时</label>
-                      <input type="number" step="0.5" value={newTask.labor} onChange={(e) => setNewTask({...newTask, labor: Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                      <label htmlFor="fr-labor" className="block text-xs font-medium text-slate-700 mb-1">预估工时</label>
+                      <input id="fr-labor" type="number" step="0.5" value={newTask.labor} onChange={(e) => setNewTask({...newTask, labor: Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                  </div>
                </div>
@@ -630,7 +628,7 @@ export default function FarmRecords() {
                <Sparkles className="w-5 h-5 text-purple-600" />
                Gemini AI 植保百科检索
              </h3>
-             <button onClick={() => setShowEncyclopedia(false)} className="text-purple-400 hover:text-purple-600">
+             <button onClick={() => setShowEncyclopedia(false)} aria-label="关闭" className="text-purple-400 hover:text-purple-600">
                <X className="w-5 h-5" />
              </button>
            </div>
