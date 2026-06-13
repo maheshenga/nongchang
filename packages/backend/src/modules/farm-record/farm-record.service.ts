@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateFarmRecordDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -8,7 +8,20 @@ import { ScopeService } from '../../common/scope/scope.service';
 export class FarmRecordService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
-  create(user: AuthUser, dto: CreateFarmRecordDto) {
+  async create(user: AuthUser, dto: CreateFarmRecordDto) {
+    if (dto.supplyId && dto.supplyAmount != null) {
+      const quotaAgg = await this.prisma.supplyIssue.aggregate({
+        where: { batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
+      });
+      const consumedAgg = await this.prisma.farmRecord.aggregate({
+        where: { batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
+      });
+      const quota = quotaAgg._sum.amount ?? 0;
+      const consumed = consumedAgg._sum.supplyAmount ?? 0;
+      if (consumed + dto.supplyAmount > quota * 1.1) {
+        throw new BadRequestException('实际用量超过领用配额 110%,核销熔断');
+      }
+    }
     return this.prisma.farmRecord.create({
       data: {
         tenantId: user.tenantId, batchId: dto.batchId, fieldId: dto.fieldId,
@@ -16,6 +29,7 @@ export class FarmRecordService {
         detail: (dto.detail ?? undefined) as Prisma.InputJsonValue | undefined,
         images: (dto.images ?? undefined) as Prisma.InputJsonValue | undefined,
         location: dto.location ?? null, recordedAt: new Date(dto.recordedAt), source: dto.source,
+        supplyId: dto.supplyId ?? undefined, supplyAmount: dto.supplyAmount ?? undefined,
       },
     });
   }
