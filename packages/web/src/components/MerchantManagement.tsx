@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { Search, Plus, Filter, MoreVertical, Edit, Trash2, MapPin, CheckCircle2, XCircle, Store } from 'lucide-react';
+import { Search, Plus, Filter, MoreVertical, MapPin, CheckCircle2, XCircle, Store } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useApi } from '../hooks/useApi';
+import { listMerchants, type MerchantUser } from '../api/agents';
+import { createUser } from '../api/users';
+import { Role, type CreateUserDto } from '@nongchang/shared';
 
 type Merchant = {
   id: string;
@@ -13,42 +17,44 @@ type Merchant = {
   rating: number;
 };
 
-const MOCK_MERCHANTS: Merchant[] = [
-  { id: 'M001', name: '大理苍山有机花卉专卖', contact: '李建国', phone: '138****0001', location: '云南省大理市', status: 'active', joinDate: '2023-01-15', rating: 4.8 },
-  { id: 'M002', name: '昆明斗南一级批发商', contact: '张华', phone: '139****0002', location: '云南省昆明市', status: 'active', joinDate: '2023-03-22', rating: 4.9 },
-  { id: 'M003', name: '北京绿源生态花卉', contact: '王强', phone: '137****0003', location: '北京市丰台区', status: 'pending', joinDate: '2024-05-10', rating: 0 },
-  { id: 'M004', name: '上海花之梦贸易', contact: '陈静', phone: '158****0004', location: '上海市浦东新区', status: 'suspended', joinDate: '2023-11-05', rating: 3.5 },
-];
-
 export default function MerchantManagement() {
-  const [merchants, setMerchants] = useState<Merchant[]>(MOCK_MERCHANTS);
+  const { data: rawMerchants, loading, error, reload } = useApi(listMerchants);
+  const merchants: Merchant[] = (rawMerchants ?? []).map((m: MerchantUser) => ({
+    id: m.id,
+    name: m.displayName,
+    contact: m.username,
+    phone: '—',
+    location: '—',
+    status: 'active' as const,
+    joinDate: '—',
+    rating: 0,
+  }));
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMerchant, setNewMerchant] = useState<Partial<Merchant>>({ status: 'pending' });
 
-  const filteredMerchants = merchants.filter(m => 
-    m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredMerchants = merchants.filter(m =>
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     m.contact.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMerchant.name || !newMerchant.contact) return;
-    
-    const merchant: Merchant = {
-      id: `M00${merchants.length + 1}`,
-      name: newMerchant.name,
-      contact: newMerchant.contact,
-      phone: newMerchant.phone || '未提供',
-      location: newMerchant.location || '未知',
-      status: 'pending',
-      joinDate: new Date().toISOString().split('T')[0],
-      rating: 0
-    };
-    
-    setMerchants([merchant, ...merchants]);
-    setShowAddModal(false);
-    setNewMerchant({ status: 'pending' });
+    try {
+      const dto: CreateUserDto = {
+        username: newMerchant.contact,
+        password: 'password123',
+        role: Role.MERCHANT,
+        displayName: newMerchant.name,
+      };
+      await createUser(dto);
+      setShowAddModal(false);
+      setNewMerchant({ status: 'pending' });
+      void reload();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '创建失败');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -95,6 +101,8 @@ export default function MerchantManagement() {
         </div>
 
         <div className="flex-1 overflow-auto">
+          {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+          {error && <div className="p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
               <tr>
@@ -131,9 +139,7 @@ export default function MerchantManagement() {
                   <td className="p-4">{getStatusBadge(merchant.status)}</td>
                   <td className="p-4 text-right">
                     <div className="flex flex-row justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                      <button className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-                      <button className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><MoreVertical className="w-4 h-4" /></button>
+                      <button aria-label="更多操作" className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><MoreVertical className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -151,24 +157,28 @@ export default function MerchantManagement() {
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="add-merchant-title"
             >
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <h3 id="add-merchant-title" className="font-bold text-slate-800 flex items-center gap-2">
                   <Store className="w-5 h-5 text-indigo-500" /> 新增入驻商户
                 </h3>
-                <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><XCircle className="w-5 h-5" /></button>
+                <button onClick={() => setShowAddModal(false)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><XCircle className="w-5 h-5" /></button>
               </div>
               <form onSubmit={handleAddSubmit}>
                 <div className="p-6 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">企业/商户名称 <span className="text-red-500">*</span></label>
-                    <input 
-                      type="text" 
+                    <label htmlFor="add-merchant-name" className="block text-xs font-bold text-slate-500 mb-1">企业/商户名称 <span className="text-red-500">*</span></label>
+                    <input
+                      id="add-merchant-name"
+                      type="text"
                       required
                       value={newMerchant.name || ''}
                       onChange={e => setNewMerchant({...newMerchant, name: e.target.value})}
@@ -177,9 +187,10 @@ export default function MerchantManagement() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">联系人 <span className="text-red-500">*</span></label>
-                      <input 
-                        type="text" 
+                      <label htmlFor="add-merchant-contact" className="block text-xs font-bold text-slate-500 mb-1">联系人 <span className="text-red-500">*</span></label>
+                      <input
+                        id="add-merchant-contact"
+                        type="text"
                         required
                         value={newMerchant.contact || ''}
                         onChange={e => setNewMerchant({...newMerchant, contact: e.target.value})}
@@ -187,9 +198,10 @@ export default function MerchantManagement() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">手机号码</label>
-                      <input 
-                        type="text" 
+                      <label htmlFor="add-merchant-phone" className="block text-xs font-bold text-slate-500 mb-1">手机号码</label>
+                      <input
+                        id="add-merchant-phone"
+                        type="text"
                         value={newMerchant.phone || ''}
                         onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})}
                         className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -197,9 +209,10 @@ export default function MerchantManagement() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">所在区域</label>
-                    <input 
-                      type="text" 
+                    <label htmlFor="add-merchant-location" className="block text-xs font-bold text-slate-500 mb-1">所在区域</label>
+                    <input
+                      id="add-merchant-location"
+                      type="text"
                       value={newMerchant.location || ''}
                       onChange={e => setNewMerchant({...newMerchant, location: e.target.value})}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"

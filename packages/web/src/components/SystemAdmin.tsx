@@ -1,15 +1,22 @@
 import { ShieldCheck, Download, MoreHorizontal, AlertTriangle, X, Bell, Thermometer, Search, ToggleLeft, ToggleRight, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
 import { Agent } from '../types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
+import { useApi } from '../hooks/useApi';
+import { listAgents, createAgent, type Agent as ApiAgent } from '../api/agents';
+import type { CreateAgentDto } from '@nongchang/shared';
 
-const MOCK_AGENTS: Agent[] = [
-  { id: 'A001', name: '华东大区花市总代 (张建国)', level: '一级代理', region: '上海市, 浙江省, 江苏省', sales: 1250000, status: 'Active' },
-  { id: 'A002', name: '华南芍药集散中心', level: '二级代理', parent: '华东大区花市总代', region: '广州市芳村', sales: 340000, status: 'Active' },
-  { id: 'A003', name: '大理品芍合作社', level: '一级代理', region: '云南省大理白族自治州', sales: 890000, status: 'Pending' },
-  { id: 'A004', name: '绿通高档盆景供应链', level: '三级网点', parent: '华南芍药集散中心', region: '深圳市南山区花卉小镇', sales: 12000, status: 'Inactive' },
-];
+function toUiAgent(a: ApiAgent): Agent {
+  return {
+    id: a.id,
+    name: a.name,
+    level: '一级代理',
+    region: a.region,
+    sales: 0,
+    status: a.status === 'active' ? 'Active' : 'Inactive',
+  };
+}
 
 const MOCK_SERVER_DATA = Array.from({ length: 24 }, (_, i) => ({
   time: `${i}:00`,
@@ -47,10 +54,10 @@ export default function SystemAdmin() {
     };
   }, []);
 
-  const [agents, setAgents] = useState<Agent[]>(MOCK_AGENTS);
+  const { data: rawAgents, loading: agentsLoading, error: agentsError, reload: reloadAgents } = useApi(listAgents);
+  const agents: Agent[] = (rawAgents ?? []).map(toUiAgent);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
-  const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchActionType, setBatchActionType] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   
@@ -88,8 +95,7 @@ export default function SystemAdmin() {
 
   const handleBatchAction = (action: string) => {
     if (selectedAgents.size === 0) return;
-    setBatchActionType(action);
-    setShowBatchModal(true);
+    showToast(`批量[${action}]操作待后端接入`);
   };
 
   const handleSensitiveAction = (action: string) => {
@@ -111,26 +117,6 @@ export default function SystemAdmin() {
     }, 800);
   };
 
-  const confirmBatchAction = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-        if (batchActionType === '注销') {
-            setAgents(prev => prev.filter(a => !selectedAgents.has(a.id)));
-        } else {
-            setAgents(prev => prev.map(a => {
-                if (selectedAgents.has(a.id)) {
-                    return { ...a, status: batchActionType === '驳回' ? 'Inactive' : 'Active' };
-                }
-                return a;
-            }));
-        }
-        setIsProcessing(false);
-        setShowBatchModal(false);
-        showToast(`批量操作 [${batchActionType}] 已对 ${selectedAgents.size} 个节点生效`);
-        setSelectedAgents(new Set());
-    }, 800);
-  };
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -138,6 +124,7 @@ export default function SystemAdmin() {
       exit={{ opacity: 0, y: -10 }}
       className="space-y-6 relative"
     >
+      {showCreateAgent && <CreateAgentModal onClose={() => setShowCreateAgent(false)} onCreated={() => { setShowCreateAgent(false); void reloadAgents(); }} />}
       {/* System Command Center Header */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 bg-slate-900 rounded-2xl p-6 text-slate-100 shadow-lg relative overflow-hidden">
@@ -540,6 +527,9 @@ export default function SystemAdmin() {
                    批量注销
                  </button>
               </div>
+              <button onClick={() => setShowCreateAgent(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs transition-colors shadow-sm font-bold">
+                新增代理
+              </button>
               <button className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-1.5 rounded-lg text-xs transition-colors shadow-sm font-medium">
                 <Download className="w-3.5 h-3.5 text-slate-500" />
                 导出数据
@@ -579,6 +569,8 @@ export default function SystemAdmin() {
           </div>
           
           <div className="flex-1 overflow-x-auto p-0 min-h-0 bg-slate-50/30">
+             {agentsLoading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+             {agentsError && <div className="p-8 text-center text-rose-500 text-sm">{agentsError} <button onClick={() => void reloadAgents()} className="underline font-bold ml-2">重试</button></div>}
              <table className="w-full text-left whitespace-nowrap">
               <thead className="text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 sticky top-0 border-b border-slate-200 z-10 backdrop-blur-sm">
                 <tr>
@@ -943,49 +935,6 @@ export default function SystemAdmin() {
         </div>
       )}
 
-      {/* Batch Confirm Modal */}
-      {showBatchModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${batchActionType === '驳回' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                   <ShieldCheck className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-800 text-lg">批量操作确认</h3>
-              </div>
-              <button onClick={() => setShowBatchModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 bg-slate-50/50">
-              <p className="text-sm text-slate-600 mb-4 text-center">
-                您已选中 <span className={`font-bold ${batchActionType === '驳回' ? 'text-red-600' : 'text-emerald-600'} text-lg px-2 py-0.5 bg-white border rounded shadow-sm mx-1`}>{selectedAgents.size}</span> 个机构节点进行批量审批。
-              </p>
-              <div className="text-sm text-slate-800 font-medium bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                确认将选定的节点池批量执行 <span className={`font-bold px-2 py-1 rounded text-white ${batchActionType === '驳回' ? 'bg-red-500' : 'bg-emerald-500'} ml-1`}>{batchActionType}</span> 操作？
-              </div>
-            </div>
-            <div className="p-5 bg-white border-t border-slate-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setShowBatchModal(false)}
-                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                放弃操作
-              </button>
-              <button 
-                onClick={confirmBatchAction}
-                disabled={isProcessing}
-                className={`px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-colors shadow-sm focus:ring-4 ${batchActionType === '驳回' ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500/20' : 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500/20'} disabled:opacity-50 flex items-center gap-2`}
-              >
-                {isProcessing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : null}
-                立即{batchActionType}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Action Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 z-50">
@@ -994,5 +943,53 @@ export default function SystemAdmin() {
         </div>
       )}
     </motion.div>
+  );
+}
+
+function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState('');
+  const [region, setRegion] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr(null); setSubmitting(true);
+    try {
+      const dto: CreateAgentDto = { name, region };
+      await createAgent(dto);
+      onCreated();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : '创建失败');
+    } finally { setSubmitting(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="create-agent-title">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 id="create-agent-title" className="font-bold text-slate-800 text-lg">新增代理商</h3>
+          <button type="button" onClick={onClose} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div>
+          <label htmlFor="create-agent-name" className="block text-xs font-bold text-slate-500">名称</label>
+          <input id="create-agent-name" value={name} onChange={(e) => setName(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label htmlFor="create-agent-region" className="block text-xs font-bold text-slate-500">区域</label>
+          <input id="create-agent-region" value={region} onChange={(e) => setRegion(e.target.value)} required
+            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        {err && <p className="text-rose-500 text-xs">{err}</p>}
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600">取消</button>
+          <button type="submit" disabled={submitting}
+            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50">
+            {submitting ? '提交中…' : '创建'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

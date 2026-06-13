@@ -1,18 +1,24 @@
 import { useState } from 'react';
 import { Users, Store, Activity, TrendingUp, Search, Plus, MapPin, CheckCircle2, ShieldCheck, Loader2 } from 'lucide-react';
-
-const SUB_MERCHANTS = [
-  { id: 'M-1001', name: '大理有机芍药合作社', contact: '李建国', phone: '138****0001', fields: 4, area: '85.7', status: 'active', joinDate: '2025-03-12' },
-  { id: 'M-1002', name: '昆明高山花卉基地', contact: '张华', phone: '139****1122', fields: 2, area: '45.0', status: 'active', joinDate: '2025-06-01' },
-  { id: 'M-1003', name: '红河州特供农场', contact: '王五', phone: '137****3344', fields: 1, area: '20.5', status: 'pending', joinDate: '2026-01-15' },
-];
+import { useApi } from '../hooks/useApi';
+import { listMerchants, type MerchantUser } from '../api/agents';
 
 export default function AgentPlatform() {
-  const [merchants, setMerchants] = useState(SUB_MERCHANTS);
+  const { data: rawMerchants, loading, error, reload } = useApi(listMerchants);
+  const merchants = (rawMerchants ?? []).map((m: MerchantUser) => ({
+    id: m.id,
+    name: m.displayName,
+    contact: m.username,
+    phone: '—',
+    fields: 0,
+    area: '—',
+    status: 'active',
+    joinDate: '—',
+  }));
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [toastMessage, setToastMessage] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
@@ -26,57 +32,17 @@ export default function AgentPlatform() {
     return matchQuery && matchStatus;
   });
 
-  const handleBulkAction = (action: string) => {
+  const handleBulkAction = (_action: string) => {
     if (selectedIds.size === 0) return;
-    
-    if (action === 'delete') {
-      setMerchants(merchants.filter(m => !selectedIds.has(m.id)));
-      showToast(`已批量注销 ${selectedIds.size} 个节点`);
-    } else if (action === 'activate') {
-      setMerchants(merchants.map(m => selectedIds.has(m.id) ? { ...m, status: 'active' } : m));
-      showToast(`已批量激活 ${selectedIds.size} 个节点`);
-    } else if (action === 'suspend') {
-      setMerchants(merchants.map(m => selectedIds.has(m.id) ? { ...m, status: 'pending' } : m));
-      showToast(`已批量挂起 ${selectedIds.size} 个节点`);
-    }
-    setSelectedIds(new Set());
+    showToast('该操作待后端接入');
   };
 
   const handleInvite = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-        setIsProcessing(false);
-        const newMerchant = { 
-          id: `M-10${Math.floor(Math.random()*100).toString().padStart(2, '0')}`, 
-          name: ['安宁市优质芍药合作方', '昆明鲜切花进出口公司', '大理苍山生态花卉园'][Math.floor(Math.random()*3)], 
-          contact: ['赵六', '孙七', '周八'][Math.floor(Math.random()*3)], 
-          phone: `13${Math.floor(Math.random()*9+1)}****${Math.floor(Math.random()*9999).toString().padStart(4, '0')}`, 
-          fields: Math.floor(Math.random()*5)+1, 
-          area: (Math.random()*100 + 10).toFixed(1), 
-          status: 'pending', 
-          joinDate: new Date().toISOString().split('T')[0] 
-        };
-        setMerchants([newMerchant, ...merchants]);
-        showToast('已生成入驻邀请链接，该商家（预分配ID）已增开系统档案');
-    }, 800);
+    showToast('该操作待后端接入');
   };
 
-  const handleAction = (id: string, action: string) => {
-    if (action === '切换状态') {
-      setMerchants(merchants.map(m => m.id === id ? { ...m, status: m.status === 'active' ? 'pending' : 'active' } : m));
-      showToast('该商家节点状态已切换');
-    } else if (action === '注销节点') {
-      setMerchants(merchants.filter(m => m.id !== id));
-      setSelectedIds(prev => {
-        const newSel = new Set(prev);
-        newSel.delete(id);
-        return newSel;
-      });
-      showToast('该商家节点已被从系统拓扑中安全剥离');
-    } else {
-      const mName = merchants.find(m => m.id === id)?.name;
-      showToast(`已成功执行：${action} [${mName}]`);
-    }
+  const handleAction = (_id: string, _action: string) => {
+    showToast('该操作待后端接入');
   };
 
   const toggleSelect = (id: string) => {
@@ -192,6 +158,8 @@ export default function AgentPlatform() {
         </div>
         
         <div className="flex-1 overflow-x-auto min-h-0 bg-slate-50/30">
+           {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+           {error && <div className="p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
            <table className="w-full text-left border-collapse whitespace-nowrap">
               <thead className="bg-slate-100/80 text-slate-500 text-[10px] uppercase tracking-widest sticky top-0 z-10 shadow-sm backdrop-blur-sm">
                  <tr>
