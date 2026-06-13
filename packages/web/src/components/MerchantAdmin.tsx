@@ -1,56 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Plus, Download, Printer, Search, QrCode, X, Settings2, GripVertical, BarChart, MapPin, ShieldCheck, Map, ScanLine } from 'lucide-react';
 import { Crop } from '../types';
+import { useApi } from '../hooks/useApi';
+import { listBatches, type Batch } from '../api/batches';
 
-const MOCK_CROPS: Crop[] = [
-  { id: 'O001', name: '极品春白芍大雪素', batchNo: 'OB-2023-11', plantDate: '2023-04-12', expectedHarvest: '2025-11-20', qrCodesGenerated: 500, status: 'Harvested' },
-  { id: 'O002', name: '素心紫凤朝阳', batchNo: 'OB-2023-05', plantDate: '2023-05-01', expectedHarvest: '2025-09-30', qrCodesGenerated: 1200, status: 'Distributed' },
-  { id: 'O003', name: '紫秀冠世墨玉', batchNo: 'OB-2024-01', plantDate: '2024-01-10', expectedHarvest: '2026-03-15', qrCodesGenerated: 0, status: 'Planting' },
-  { id: 'O004', name: '朱砂判仙客', batchNo: 'OB-2024-03', plantDate: '2024-03-01', expectedHarvest: '2026-04-20', qrCodesGenerated: 200, status: 'Growing' },
-];
+function toCrop(b: Batch): Crop {
+  return {
+    id: b.id,
+    name: b.cropName,
+    batchNo: b.batchNo,
+    plantDate: b.plantDate.slice(0, 10),
+    expectedHarvest: b.expectedHarvest.slice(0, 10),
+    qrCodesGenerated: 0,
+    status: b.status as Crop['status'],
+  };
+}
 
 export default function MerchantAdmin() {
-  const [crops, setCrops] = useState<Crop[]>(() => {
-    const saved = localStorage.getItem('system_batches');
-    if (saved) {
-      try {
-        const batches = JSON.parse(saved);
-        return batches.map((b: any) => ({
-          id: 'O' + (b.id.replace(/[^0-9]/g, '').slice(-3) || '000'),
-          name: b.type,
-          batchNo: b.id,
-          plantDate: b.date,
-          expectedHarvest: '2026-11-20',
-          qrCodesGenerated: b.generated || 0,
-          status: b.stage === '已出圃' ? 'Distributed' : b.stage === '休眠促花' ? 'Harvested' : 'Growing'
-        }));
-      } catch (e) {}
-    }
-    return MOCK_CROPS;
-  });
-
-  useEffect(() => {
-    const handleSync = () => {
-      const saved = localStorage.getItem('system_batches');
-      if (saved) {
-        try {
-          const batches = JSON.parse(saved);
-          setCrops(batches.map((b: any) => ({
-            id: 'O' + (b.id.replace(/[^0-9]/g, '').slice(-3) || '000'),
-            name: b.type,
-            batchNo: b.id,
-            plantDate: b.date,
-            expectedHarvest: '2026-11-20',
-            qrCodesGenerated: b.generated || 0,
-            status: b.stage === '已出圃' ? 'Distributed' : b.stage === '休眠促花' ? 'Harvested' : 'Growing'
-          })));
-        } catch(e) {}
-      }
-    };
-    window.addEventListener('batches-updated', handleSync);
-    return () => window.removeEventListener('batches-updated', handleSync);
-  }, []);
+  const { data: rawBatches, loading, error, reload } = useApi(listBatches);
+  const crops: Crop[] = (rawBatches ?? []).map(toCrop);
   const [selectedCropIds, setSelectedCropIds] = useState<Set<string>>(new Set());
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -162,20 +131,6 @@ export default function MerchantAdmin() {
     setActiveBlocks(newBlocks);
   };
 
-  const handleCreateCrop = () => {
-    const newCrop: Crop = {
-      id: `O${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
-      name: ['粉玉奴', '杨妃出浴', '大富贵', '奇花霜露'][Math.floor(Math.random() * 4)],
-      batchNo: `OB-2026-${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`,
-      plantDate: new Date().toISOString().split('T')[0],
-      expectedHarvest: '2028-05-01',
-      qrCodesGenerated: 0,
-      status: 'Planting'
-    };
-    setCrops([newCrop, ...crops]);
-    showToast(`已成功增开系统生产批次：${newCrop.batchNo}`);
-  };
-
   return (
     <div className="flex gap-6 h-full">
       {/* List Panel */}
@@ -218,8 +173,8 @@ export default function MerchantAdmin() {
               </div>
             )}
           </div>
-          <button 
-            onClick={handleCreateCrop}
+          <button
+            onClick={() => showToast('请前往「批次管理」新增繁育批次')}
             className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -228,6 +183,8 @@ export default function MerchantAdmin() {
         </div>
         
         <div className="flex-1 overflow-auto">
+          {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+          {error && <div className="p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-[10px] text-slate-500 uppercase bg-slate-50/80 sticky top-0 border-b border-slate-200 z-10 shadow-sm">
               <tr>
@@ -281,16 +238,8 @@ export default function MerchantAdmin() {
                   <td className="px-6 py-4 font-mono font-bold text-slate-700 text-xs">{crop.qrCodesGenerated.toLocaleString()} 张</td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap items-center gap-2">
-                       <button 
-                         onClick={() => {
-                            const statuses: any = { 'Planting': 'Growing', 'Growing': 'Harvested', 'Harvested': 'Distributed' };
-                            const next = statuses[crop.status];
-                            if (next) {
-                               setCrops(crops.map(c => c.id === crop.id ? { ...c, status: next } : c));
-                               showToast(`批次 ${crop.batchNo} 状态已更新为：${next === 'Growing' ? '大棚养护' : next === 'Harvested' ? '已出圃' : '已流转终端'}`);
-                            }
-                         }}
-                         disabled={crop.status === 'Distributed'}
+                       <button
+                         onClick={() => showToast('状态流转待后端接入')}
                          className="text-slate-600 hover:text-white hover:bg-slate-800 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm disabled:opacity-50"
                        >
                          进入下一阶段
@@ -319,19 +268,8 @@ export default function MerchantAdmin() {
                         <Printer className="w-3 h-3" />
                         出入库单 PDF
                       </button>
-                      <button 
-                        onClick={() => {
-                          const conf = window.confirm('确认删除该批次所有数据？此操作不可撤销。');
-                          if (conf) {
-                            setCrops(crops.filter(c => c.id !== crop.id));
-                            setSelectedCropIds(prev => {
-                              const newSel = new Set(prev);
-                              newSel.delete(crop.id);
-                              return newSel;
-                            });
-                            showToast('生产批次已成功删除');
-                          }
-                        }}
+                      <button
+                        onClick={() => showToast('删除批次待后端接入')}
                         className="flex items-center gap-1 text-red-600 hover:text-white hover:bg-red-600 font-bold text-[10px] border border-red-200 bg-red-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm"
                       >
                         注销批次
