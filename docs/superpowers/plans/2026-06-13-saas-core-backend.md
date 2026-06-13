@@ -10,6 +10,11 @@
 
 参考 spec:`docs/superpowers/specs/2026-06-13-saas-core-backend-design.md`
 
+> **计划修订(2026-06-13,基于 Task 1 代码评审)**:
+> 1. `@nongchang/shared` 产出 **CommonJS**(不再 `type: module`),与 backend 的 CJS 运行时一致,消除 ESM/CJS 边界风险。
+> 2. 所有相对导入使用**无扩展名**写法(如 `from './prisma.service'`,而非 `./prisma.service.js`),适配 CJS + moduleResolution node。下文各任务代码块如出现 `.js` 扩展名,实现时一律去掉。
+> 3. backend 增加 `unplugin-swc` + `@swc/core`,vitest 经 swc 转换以产出 NestJS DI 所需的装饰器元数据(否则 Task 12 e2e 的 `Test.createTestingModule` 无法解析 provider)。
+
 ---
 
 ## File Structure
