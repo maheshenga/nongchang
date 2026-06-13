@@ -992,7 +992,6 @@ function CreateBatchModal({
       setSubmitting(false);
     }
   };
-// __CREATE_BATCH_MODAL_RETURN__
 
   return (
     <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
