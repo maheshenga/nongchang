@@ -99,6 +99,8 @@ model FarmRecord {
   location   String?
   recordedAt DateTime @map("recorded_at")
   source     String
+  supplyId     String?  @map("supply_id")
+  supplyAmount Float?   @map("supply_amount")
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -149,4 +151,35 @@ model TraceScan {
   @@index([code, scannedAt])
   @@index([batchId])
   @@map("trace_scans")
+}
+
+model Supply {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  ownerId   String   @map("owner_id")
+  name      String
+  unit      String
+  total     Float    @default(0)
+  used      Float    @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@map("supplies")
+}
+
+model SupplyIssue {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  ownerId   String   @map("owner_id")
+  supplyId  String   @map("supply_id")
+  batchId   String   @map("batch_id")
+  amount    Float
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@index([supplyId])
+  @@index([batchId, supplyId])
+  @@map("supply_issues")
 }
