@@ -11,6 +11,15 @@
 @source inline("from-{emerald,purple}-500/20");
 
 @layer components {
+  /* 隐藏滚动条但保留滚轮/触控滚动能力(侧栏导航用) */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .shadow-sm.bg-white.rounded-xl.border {
     transition: all 300ms ease;
   }
