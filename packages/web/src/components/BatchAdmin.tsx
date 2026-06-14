@@ -5,7 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
 import { listBatches, createBatch, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
-import { generateCode } from '../api/trace';
+import { generateCodes } from '../api/trace';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
 
 interface ViewBatch {
@@ -74,6 +74,9 @@ export default function BatchAdmin() {
   const [showProfitModal, setShowProfitModal] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
   const [qrAmount, setQrAmount] = useState<number>(100);
+  // 一物一码:进入排版预览时为批次真实生成的溯源码列表。
+  const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
   const [paperSize, setPaperSize] = useState('4x6');
   
   // Custom layout config
@@ -180,6 +183,27 @@ export default function BatchAdmin() {
   };
 
   const activeBatch = batches.find(b => b.id === showQrModal);
+
+  // 消费者扫码访问的真实溯源页 URL(hash 路由 H5)。
+  const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
+  // 标签按索引取真实码;未生成时回退到批次号占位(仅预览,导出前会真实生成)。
+  const codeForIndex = (i: number) => generatedCodes[i] ?? `${activeBatch?.code ?? ''}-预览${i + 1}`;
+
+  // 进入排版沙盒前为批次真实生成 qrAmount 个唯一溯源码。
+  const handleGenerateCodes = async (): Promise<boolean> => {
+    if (!showQrModal) return false;
+    setGenerating(true);
+    try {
+      const codes = await generateCodes(showQrModal, qrAmount);
+      setGeneratedCodes(codes.map(c => c.code));
+      return true;
+    } catch (e) {
+      showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
+      return false;
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden relative">
@@ -506,9 +530,10 @@ export default function BatchAdmin() {
                           description: `将针对高优批次 [${activeBatch?.id}] 同步派生出 ${qrAmount} 枚具有唯一标识防伪哈希值的溯源码 (物理输出尺寸: ${paperSize})。当前系统操作不可逆，是否授权推进？`,
                           affectedCount: qrAmount,
                           batchId: activeBatch?.id,
-                          onConfirm: () => {
+                          onConfirm: async () => {
+                             const ok = await handleGenerateCodes();
                              setPendingAction(null);
-                             setShowPdfPreview(true);
+                             if (ok) setShowPdfPreview(true);
                           }
                         });
                     }} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30">
@@ -546,12 +571,12 @@ export default function BatchAdmin() {
                            )}
                            <div className="flex-1 flex flex-col items-center justify-center p-6 bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
                              <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
-                                <QRCodeSVG value={`${window.location.origin}${window.location.pathname}#/trace/${activeBatch.id}`} size={140} level="H" />
+                                <QRCodeSVG value={traceUrl(codeForIndex(0))} size={140} level="H" />
                              </div>
                              <div className="mt-5 flex flex-col items-center gap-2 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 w-full text-center">
                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">唯一数字映射标识</span>
                                <span className="font-mono font-black text-xl text-slate-900 tracking-widest bg-white px-2 rounded shadow-sm border border-slate-100 w-full overflow-hidden text-ellipsis">
-                                 {activeBatch.id}
+                                 {codeForIndex(0)}
                                </span>
                              </div>
                            </div>
@@ -564,20 +589,20 @@ export default function BatchAdmin() {
                          <div className="flex-1 w-full h-full border-2 border-slate-200 border-dashed rounded-sm flex flex-row items-center justify-between p-2 bg-white relative overflow-hidden">
                            <div className="absolute top-0 right-0 w-8 h-8 bg-slate-50 origin-bottom-left transform rotate-45 translate-x-4 -translate-y-4"></div>
                            <div className="p-1 border border-slate-100 rounded-md bg-white shadow-sm shrink-0">
-                             <QRCodeSVG value={`${window.location.origin}${window.location.pathname}#/trace/${activeBatch.id}`} size={showAntiFakeLogo ? 60 : 76} level="H" />
+                             <QRCodeSVG value={traceUrl(codeForIndex(0))} size={showAntiFakeLogo ? 60 : 76} level="H" />
                            </div>
                            <div className="flex-1 ml-3 text-right flex flex-col justify-center h-full">
                              {showAntiFakeLogo && <div className="text-[8px] font-black text-emerald-600 mb-1 tracking-widest flex justify-end items-center gap-1 uppercase"><ShieldCheck className="w-2.5 h-2.5" /> 核准溯源</div>}
                              <div className="font-black text-xs text-slate-800 leading-tight tracking-wide bg-slate-50 px-1 py-0.5 rounded ml-auto border border-slate-100 mb-1 w-max max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{activeBatch.type}</div>
-                             <div className="font-mono font-bold text-[9px] text-slate-500 mt-auto truncate tracking-widest px-1">{activeBatch.id}</div>
+                             <div className="font-mono font-bold text-[9px] text-slate-500 mt-auto truncate tracking-widest px-1">{codeForIndex(0)}</div>
                            </div>
                          </div>
                       ) : (
                        Array.from({length: 8}).map((_, i) => (
                           <div key={i} className="border border-slate-300 border-dashed rounded flex flex-col items-center justify-center p-1 bg-white relative">
                              {showAntiFakeLogo && <ShieldCheck className="absolute top-1 left-1 w-2.5 h-2.5 text-emerald-500 opacity-50" />}
-                             <QRCodeSVG value={`${window.location.origin}${window.location.pathname}#/trace/${activeBatch.id}`} size={38} level="L" />
-                             <div className="text-[6px] font-mono mt-1 text-slate-600 bg-slate-100 px-1 rounded">{activeBatch.id.substring(0,8)}</div>
+                             <QRCodeSVG value={traceUrl(codeForIndex(i))} size={38} level="L" />
+                             <div className="text-[6px] font-mono mt-1 text-slate-600 bg-slate-100 px-1 rounded">{codeForIndex(i).substring(0,8)}</div>
                           </div>
                        ))
                     )}
@@ -686,13 +711,11 @@ export default function BatchAdmin() {
                           }} className="flex items-center justify-center gap-2 text-indigo-600 font-bold text-sm bg-white border border-indigo-100 px-5 py-2 rounded-xl transition-all shadow-sm hover:border-indigo-300 hover:shadow-md focus:ring-4 focus:ring-indigo-500/20 active:scale-95">
                             <Printer className="w-4 h-4" /> 对接本机打印驱动
                           </button>
-                          <button onClick={async () => {
-                             if (showQrModal) {
-                               try { await generateCode(showQrModal); } catch { /* 演示导出不阻塞 */ }
-                             }
+                          <button onClick={() => {
                              setShowPdfPreview(false);
                              setShowQrModal(null);
-                             showToast(`已为批次生成溯源码并导出标签 (${qrAmount}张)。`);
+                             showToast(`已为批次生成 ${generatedCodes.length} 个唯一溯源码并导出标签。`);
+                             setGeneratedCodes([]);
                           }} className="flex items-center justify-center gap-2 text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl transition-all shadow border border-indigo-700/50 focus:ring-4 focus:ring-indigo-500/30 active:scale-95">
                             <Download className="w-4 h-4" /> 导出印刷级 PDF
                           </button>
@@ -706,9 +729,9 @@ export default function BatchAdmin() {
                                  <CheckCircle className="w-3 h-3 text-emerald-500" />
                               </div>
                               <div className="absolute top-1 right-1 text-[8px] text-slate-400 font-mono font-bold">{i+1}/{qrAmount}</div>
-                              <QRCodeSVG value={`${window.location.origin}${window.location.pathname}#/trace/${activeBatch?.id}-S${i}`} size={80} level="M" />
+                              <QRCodeSVG value={traceUrl(codeForIndex(i))} size={80} level="M" />
                               <div className="mt-2 text-[10px] font-bold text-slate-800 text-center">{activeBatch?.type}</div>
-                              <div className="text-[8px] text-slate-500 font-mono">{activeBatch?.id}-S{i}</div>
+                              <div className="text-[8px] text-slate-500 font-mono">{codeForIndex(i)}</div>
                               <div className="absolute inset-0 border-2 border-indigo-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"></div>
                            </div>
                         ))}
@@ -923,11 +946,12 @@ export default function BatchAdmin() {
                  >
                     取消
                  </button>
-                 <button 
-                    onClick={() => pendingAction.onConfirm()} 
-                    className={`px-5 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-colors ${pendingAction.type === 'export' ? 'bg-indigo-600 hover:bg-indigo-700' : pendingAction.type === 'report' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                 <button
+                    onClick={() => pendingAction.onConfirm()}
+                    disabled={generating}
+                    className={`px-5 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-colors disabled:opacity-50 ${pendingAction.type === 'export' ? 'bg-indigo-600 hover:bg-indigo-700' : pendingAction.type === 'report' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                  >
-                    确认 {pendingAction.type === 'generate' ? '生成' : '导出'}
+                    {generating ? '生成中…' : `确认 ${pendingAction.type === 'generate' ? '生成' : '导出'}`}
                  </button>
               </div>
            </div>

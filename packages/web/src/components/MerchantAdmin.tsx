@@ -4,6 +4,7 @@ import { Plus, Download, Printer, Search, QrCode, X, Settings2, GripVertical, Ba
 import { Crop } from '../types';
 import { useApi } from '../hooks/useApi';
 import { listBatches, type Batch } from '../api/batches';
+import { generateCodes } from '../api/trace';
 
 function toCrop(b: Batch): Crop {
   return {
@@ -25,6 +26,9 @@ export default function MerchantAdmin() {
   const [toastMessage, setToastMessage] = useState('');
   const [isProcessingRfid, setIsProcessingRfid] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // 打印预览时为每个批次真实生成的溯源码:batchId → code。
+  const [cropCodes, setCropCodes] = useState<Record<string, string>>({});
+  const [generatingPrint, setGeneratingPrint] = useState(false);
 
   const filteredCrops = crops.filter(crop => 
     crop.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -47,6 +51,29 @@ export default function MerchantAdmin() {
 
   const selectedCrops = crops.filter(c => selectedCropIds.has(c.id));
   const activeCrop = selectedCrops.length > 0 ? selectedCrops[selectedCrops.length - 1] : null;
+
+  // 消费者扫码访问的真实溯源页 URL(hash 路由 H5)。
+  const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
+
+  // 打开打印预览前为每个选中批次真实生成一个溯源码。
+  const openPrintPreview = async () => {
+    if (selectedCrops.length === 0) return;
+    setGeneratingPrint(true);
+    try {
+      const entries = await Promise.all(
+        selectedCrops.map(async (c) => {
+          const codes = await generateCodes(c.id, 1);
+          return [c.id, codes[0]?.code] as const;
+        }),
+      );
+      setCropCodes(Object.fromEntries(entries.filter(([, code]) => code)));
+      setShowPrintPreview(true);
+    } catch (e) {
+      showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
+    } finally {
+      setGeneratingPrint(false);
+    }
+  };
 
   const toggleSelect = (id: string) => {
     const newSet = new Set(selectedCropIds);
@@ -148,12 +175,13 @@ export default function MerchantAdmin() {
             </div>
             {selectedCropIds.size > 0 && (
               <div className="flex flex-wrap gap-2">
-                <button 
-                  onClick={() => setShowPrintPreview(true)}
-                  className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
+                <button
+                  onClick={() => void openPrintPreview()}
+                  disabled={generatingPrint}
+                  className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-50 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
                 >
                   <Printer className="w-4 h-4" />
-                  打印追溯标签 ({selectedCropIds.size})
+                  {generatingPrint ? '生成中…' : `打印追溯标签 (${selectedCropIds.size})`}
                 </button>
                 <button 
                   onClick={() => setShowH5Editor(true)}
@@ -333,7 +361,7 @@ export default function MerchantAdmin() {
               <div className="bg-white border text-center border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center space-y-5 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-emerald-600"></div>
                 <div className="bg-white p-2.5 border border-slate-100 rounded-xl shadow-md transform hover:scale-105 transition-transform">
-                  <QRCodeSVG value={`https://agritrace.app/t/${activeCrop.batchNo}-preview`} size={120} />
+                  <QRCodeSVG value={traceUrl(`${activeCrop.batchNo}-样例`)} size={120} />
                 </div>
                 <p className="text-xs text-center text-slate-500 leading-relaxed font-medium">预览专属赋码样式: <br/>自动注入地理标志与全网唯一身份序列号</p>
               </div>
@@ -558,13 +586,13 @@ export default function MerchantAdmin() {
                    
                    <div className="flex justify-between items-center mb-8">
                       <div className="bg-white p-2 border-2 border-slate-100 rounded-xl shadow-sm">
-                        <QRCodeSVG value={`https://agritrace.app/t/${crop.batchNo}-${Date.now()}`} size={120} level="H" />
+                        <QRCodeSVG value={traceUrl(cropCodes[crop.id] ?? crop.batchNo)} size={120} level="H" />
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">内部流转序列</div>
                         <div className="text-3xl font-black font-mono text-slate-900 mt-1">{crop.batchNo.split('-').pop()}</div>
                         <div className="text-xs text-slate-400 mt-3 font-bold uppercase tracking-wider">全局防伪编码</div>
-                        <div className="text-sm font-bold font-mono text-slate-700 mt-1 bg-slate-100 px-2 py-0.5 rounded">{crop.batchNo}</div>
+                        <div className="text-sm font-bold font-mono text-slate-700 mt-1 bg-slate-100 px-2 py-0.5 rounded">{cropCodes[crop.id] ?? crop.batchNo}</div>
                       </div>
                    </div>
 

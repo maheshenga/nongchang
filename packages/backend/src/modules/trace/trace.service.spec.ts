@@ -10,15 +10,20 @@ const evt: CreateTraceEventDto = {
 };
 
 function make(batchInScope = true) {
+  const created: any[] = [];
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
-    traceCode: { create: vi.fn().mockResolvedValue({ id: 'tc1' }) },
+    traceCode: {
+      create: vi.fn().mockResolvedValue({ id: 'tc1' }),
+      createMany: vi.fn().mockImplementation(async ({ data }: any) => { created.push(...data); return { count: data.length }; }),
+      findMany: vi.fn().mockImplementation(async () => created),
+    },
     traceEvent: {
       create: vi.fn().mockResolvedValue({ id: 'te1' }),
       findMany: vi.fn().mockResolvedValue([]),
     },
   };
-  return { svc: new TraceService(prisma as any, new ScopeService()), prisma };
+  return { svc: new TraceService(prisma as any, new ScopeService()), prisma, created };
 }
 
 describe('TraceService #24 batch 归属校验', () => {
@@ -41,5 +46,32 @@ describe('TraceService #24 batch 归属校验', () => {
     const h = make(false);
     await expect(h.svc.listEvents(merchant, 'b1')).rejects.toThrow();
     expect(h.prisma.traceEvent.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('TraceService.generateCodes 批量', () => {
+  it('生成指定数量的唯一码并返回列表', async () => {
+    const h = make(true);
+    const out = await h.svc.generateCodes(merchant, 'b1', 5);
+    expect(out.length).toBe(5);
+    expect(h.prisma.traceCode.createMany).toHaveBeenCalled();
+    const codes = h.created.map((c) => c.code);
+    expect(new Set(codes).size).toBe(5); // 全部唯一
+    codes.forEach((c) => expect(c).toMatch(/^ORC-/));
+  });
+  it('count 缺省为 1', async () => {
+    const h = make(true);
+    const out = await h.svc.generateCodes(merchant, 'b1');
+    expect(out.length).toBe(1);
+  });
+  it('batch 不在范围则抛 Forbidden(不创建)', async () => {
+    const h = make(false);
+    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+  });
+  it('count 非法(0 或超上限)抛错', async () => {
+    const h = make(true);
+    await expect(h.svc.generateCodes(merchant, 'b1', 0)).rejects.toThrow();
+    await expect(h.svc.generateCodes(merchant, 'b1', 100000)).rejects.toThrow();
   });
 });

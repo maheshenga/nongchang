@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { AuthUser, CreateTraceEventDto, createTraceEventSchema, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -10,8 +10,12 @@ export class TraceController {
   constructor(private svc: TraceService) {}
 
   @Post('codes/:batchId') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
-  genCode(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string) {
-    return this.svc.generateCode(user, batchId);
+  genCode(
+    @CurrentUser() user: AuthUser,
+    @Param('batchId') batchId: string,
+    @Query('count', new DefaultValuePipe(1), ParseIntPipe) count: number,
+  ) {
+    return this.svc.generateCodes(user, batchId, count);
   }
 
   @Post('events') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)

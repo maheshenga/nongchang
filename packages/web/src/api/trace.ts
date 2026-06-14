@@ -32,8 +32,9 @@ export interface TraceEvent {
   createdAt: string;
 }
 
-export function generateCode(batchId: string): Promise<TraceCode> {
-  return request<TraceCode>(`/trace/codes/${encodeURIComponent(batchId)}`, { method: 'POST' });
+// 一物一码:为批次批量生成 count 个唯一溯源码,返回码列表。
+export function generateCodes(batchId: string, count: number): Promise<TraceCode[]> {
+  return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}?count=${encodeURIComponent(count)}`, { method: 'POST' });
 }
 
 export function listEvents(batchId: string): Promise<TraceEvent[]> {
