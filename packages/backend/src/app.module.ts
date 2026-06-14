@@ -18,9 +18,12 @@ import { CryptoModule } from './common/crypto/crypto.module';
 import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
 import { AiModule } from './modules/ai/ai.module';
 import { OssConfigModule } from './modules/oss-config/oss-config.module';
+import { IntegrationModule } from './modules/integration/integration.module';
+import { UserGroupModule } from './modules/user-group/user-group.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { PermissionGuard } from './common/guards/permission.guard';
 
 @Module({
   imports: [
@@ -44,11 +47,14 @@ import { RolesGuard } from './common/guards/roles.guard';
     AiProviderModule,
     AiModule,
     OssConfigModule,
+    IntegrationModule,
+    UserGroupModule,
   ],
   providers: [
     ScopeService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard },
   ],
 })
 export class AppModule {}
