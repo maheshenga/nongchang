@@ -1,0 +1,97 @@
+@import '../../styles/theme.scss';
+
+.login {
+  min-height: 100vh;
+  background: $c-bg;
+
+  &__hero {
+    @include gradient-header;
+    padding: 88px 32px 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &__logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  &__title {
+    font-size: 44px;
+    font-weight: bold;
+    color: #fff;
+  }
+
+  &__subtitle {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  &__card {
+    @include card;
+    margin: -32px 28px 0;
+    padding: 36px 28px;
+  }
+
+  &__label {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    color: $c-text-sub;
+    margin: 18px 0 10px;
+  }
+
+  &__input {
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 22px 24px;
+    font-size: 28px;
+    color: $c-text;
+  }
+
+  &__submit {
+    margin-top: 36px;
+    background: $c-primary;
+    color: #fff;
+    font-size: 30px;
+    font-weight: bold;
+    border-radius: 16px;
+    padding: 6px 0;
+  }
+
+  &__wechat {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+    border-radius: 16px;
+    border: 1px solid $c-border;
+  }
+
+  &__wechat-text {
+    font-size: 28px;
+    color: #07c160;
+    font-weight: bold;
+  }
+
+  &__apply {
+    margin-top: 28px;
+    text-align: center;
+  }
+
+  &__apply-text {
+    font-size: 24px;
+    color: $c-text-sub;
+  }
+}

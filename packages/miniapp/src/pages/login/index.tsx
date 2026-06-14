@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { View, Input, Button, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { login } from '../../api/auth';
+import Icon from '../../components/Icon';
+import './index.scss';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -16,7 +18,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login(username, password);
-      Taro.redirectTo({ url: '/pages/index/index' });
+      // work 为 tabBar 页，必须用 switchTab 跳转
+      Taro.switchTab({ url: '/pages/work/index' });
     } catch (e: any) {
       Taro.showToast({ title: e.message || '登录失败', icon: 'none' });
     } finally {
@@ -24,31 +27,44 @@ export default function Login() {
     }
   }
 
+  const comingSoon = () => Taro.showToast({ title: '功能即将开放', icon: 'none' });
+
   return (
-    <View style={{ padding: '48px 32px' }}>
-      <Text style={{ fontSize: '40px', fontWeight: 'bold', color: '#2e7d32' }}>农事记录</Text>
-      <View style={{ marginTop: '48px' }}>
-        <Input
-          placeholder="账号"
-          value={username}
-          onInput={e => setUsername(e.detail.value)}
-          style={{ background: '#fff', padding: '24px', borderRadius: '8px', marginBottom: '24px' }}
-        />
-        <Input
-          password
-          placeholder="密码"
-          value={password}
-          onInput={e => setPassword(e.detail.value)}
-          style={{ background: '#fff', padding: '24px', borderRadius: '8px' }}
-        />
+    <View className="login">
+      <View className="login__hero">
+        <View className="login__logo">
+          <Icon name="leaf" color="#fff" size={40} />
+        </View>
+        <Text className="login__title">溯源工作台</Text>
+        <Text className="login__subtitle">数字生态农业移动管理端 · 让每一次农事都被信任</Text>
       </View>
-      <Button
-        loading={loading}
-        onClick={onSubmit}
-        style={{ marginTop: '48px', background: '#2e7d32', color: '#fff' }}
-      >
-        登录
-      </Button>
+
+      <View className="login__card">
+        <Text className="login__label">账号</Text>
+        <Input
+          className="login__input"
+          placeholder="手机号 / 用户名"
+          value={username}
+          onInput={(e) => setUsername(e.detail.value)}
+        />
+        <Text className="login__label">服务密码</Text>
+        <Input
+          className="login__input"
+          password
+          placeholder="请输入服务密码"
+          value={password}
+          onInput={(e) => setPassword(e.detail.value)}
+        />
+        <Button className="login__submit" loading={loading} onClick={onSubmit}>
+          安全登录
+        </Button>
+        <View className="login__wechat" onClick={comingSoon}>
+          <Text className="login__wechat-text">微信一键登录</Text>
+        </View>
+        <View className="login__apply" onClick={comingSoon}>
+          <Text className="login__apply-text">没有账号? 申请入驻</Text>
+        </View>
+      </View>
     </View>
   );
 }
