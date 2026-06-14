@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AiService } from './ai.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, BadGatewayException } from '@nestjs/common';
 import type { AuthUser } from '@nongchang/shared';
 
 const user = { userId: 'u1', tenantId: 't1', role: 'merchant' } as AuthUser;
@@ -31,5 +31,18 @@ describe('AiService', () => {
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: 'vm' }));
     const r = await svc.diagnose(user, { imageBase64: 'AAAA' });
     expect(r.result).toBe('叶片缺氮');
+  });
+
+  it('调用返回非 2xx 时抛 BadGatewayException 且不泄露 apiKey', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }));
+    await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(svc.chat(user, 'hi')).rejects.not.toThrow(/sk-secret-1/);
+  });
+
+  it('网络错误（fetch reject）时抛 BadGatewayException', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }));
+    await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadGatewayException);
   });
 });
