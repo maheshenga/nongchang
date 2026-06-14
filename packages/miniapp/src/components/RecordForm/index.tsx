@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, Text, Textarea, Input, Button, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { createFarmRecord, uploadImage, listSupplies, type Batch } from '../../api/farm';
 import { transcribeVoice, normalizeAiError } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
-import type { SupplyItem } from '@nongchang/shared';
+import type { SupplyItem, QuickTemplateView } from '@nongchang/shared';
 import Icon from '../Icon';
 import './index.scss';
 
@@ -14,7 +14,11 @@ interface Props {
   onSaved: () => void;
 }
 
-export default function RecordForm({ batches, onSaved }: Props) {
+export interface RecordFormHandle {
+  applyTemplate: (t: QuickTemplateView) => void;
+}
+
+const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ batches, onSaved }, ref) {
   const [batchId, setBatchId] = useState('');
   const [action, setAction] = useState('');
   const [note, setNote] = useState('');
@@ -29,9 +33,21 @@ export default function RecordForm({ batches, onSaved }: Props) {
   const [transcribing, setTranscribing] = useState(false);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
 
+  // 父组件(工作台)点击快捷模板时回填表单。
+  useImperativeHandle(ref, () => ({
+    applyTemplate(t: QuickTemplateView) {
+      setAction(t.action);
+      setNote(t.note ?? '');
+      setCost(t.cost != null ? String(t.cost) : '');
+      setLabor(t.labor != null ? String(t.labor) : '');
+      Taro.showToast({ title: `已套用:${t.name}`, icon: 'none' });
+    },
+  }));
+
   useEffect(() => {
     if (!batchId && batches[0]) setBatchId(batches[0].id);
   }, [batches, batchId]);
+
 
   useEffect(() => {
     listSupplies().then(setSupplies).catch(() => setSupplies([]));
@@ -199,4 +215,6 @@ export default function RecordForm({ batches, onSaved }: Props) {
       </Button>
     </View>
   );
-}
+});
+
+export default RecordForm;

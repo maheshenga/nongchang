@@ -1,27 +1,29 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { View, Text, ScrollView, Image } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
 import { listBatches, type Batch, type FarmRecord } from '../../api/farm';
+import { listQuickTemplates } from '../../api/quickTemplate';
 import { request } from '../../api/request';
 import { sortByRecentDesc } from '../../utils/stats';
 import Sensors from '../../components/Sensors';
 import Icon from '../../components/Icon';
-import RecordForm from '../../components/RecordForm';
+import RecordForm, { type RecordFormHandle } from '../../components/RecordForm';
 import AiPanel from '../../components/AiPanel';
+import type { QuickTemplateView } from '@nongchang/shared';
 import './index.scss';
-
-const QUICK = ['浇水', '施肥', '除草', '病虫防治'];
 
 type AiMode = 'chat' | 'diagnose' | null;
 
 export default function Work() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [records, setRecords] = useState<FarmRecord[]>([]);
+  const [templates, setTemplates] = useState<QuickTemplateView[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [aiMode, setAiMode] = useState<AiMode>(null);
+  const formRef = useRef<RecordFormHandle>(null);
 
   useDidShow(() => {
     if (!getToken()) {
@@ -46,6 +48,8 @@ export default function Work() {
     } finally {
       setLoading(false);
     }
+    // 模板失败不影响主流程
+    listQuickTemplates().then(setTemplates).catch(() => setTemplates([]));
   }
 
   const subtitle = batches[0]?.cropName
@@ -105,14 +109,14 @@ export default function Work() {
           <View className="work__quick-item work__quick-item--reserved" onClick={() => comingSoon('区块链定位即将开放')}>
             <Icon name="trace" size={22} color="#94a3b8" /><Text className="work__quick-text">区块链定位</Text>
           </View>
-          {QUICK.map((q) => (
-            <View className="work__quick-item" key={q} onClick={() => comingSoon(`已选模板：${q}`)}>
-              <Text className="work__quick-text">{q}</Text>
+          {templates.map((t) => (
+            <View className="work__quick-item" key={t.id} onClick={() => formRef.current?.applyTemplate(t)}>
+              <Text className="work__quick-text">{t.name}</Text>
             </View>
           ))}
         </ScrollView>
 
-        <RecordForm batches={batches} onSaved={() => void load()} />
+        <RecordForm ref={formRef} batches={batches} onSaved={() => void load()} />
       </View>
 
       <AiPanel mode={aiMode} onClose={() => setAiMode(null)} />
