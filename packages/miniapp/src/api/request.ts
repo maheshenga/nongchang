@@ -1,9 +1,10 @@
 import Taro from '@tarojs/taro';
 import { getToken, clearToken } from '../store/auth';
+import { API_BASE_URL } from '../config/env';
 
 // 开发:微信开发者工具勾"不校验合法域名"连本机后端。
 // 生产:改成线上 https 域名(需在小程序后台配置合法域名)。
-export const BASE_URL = 'http://localhost:3001/api';
+export const BASE_URL = API_BASE_URL;
 
 interface RequestOptions {
   url: string;
