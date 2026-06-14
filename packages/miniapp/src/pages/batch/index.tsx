@@ -5,7 +5,7 @@ import { listFarmRecords, type FarmRecord } from '../../api/farm';
 
 export default function Batch() {
   const router = useRouter();
-  const { id, fieldId, cropName, batchNo } = router.params as Record<string, string>;
+  const { id, cropName, batchNo } = router.params as Record<string, string>;
   const [records, setRecords] = useState<FarmRecord[]>([]);
 
   useDidShow(() => {
@@ -15,7 +15,7 @@ export default function Batch() {
   });
 
   function addRecord() {
-    Taro.navigateTo({ url: `/pages/record/index?batchId=${id}&fieldId=${fieldId}` });
+    Taro.switchTab({ url: '/pages/work/index' });
   }
 
   return (

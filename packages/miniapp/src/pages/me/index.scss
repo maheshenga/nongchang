@@ -1,0 +1,131 @@
+@import '../../styles/theme.scss';
+
+.me {
+  min-height: 100vh;
+  background: $c-bg;
+  padding-bottom: 60px;
+
+  &__header {
+    @include gradient-header;
+    display: flex;
+    align-items: center;
+    padding: 56px 28px 40px;
+  }
+
+  &__avatar {
+    width: 112px;
+    height: 112px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    margin-right: 24px;
+  }
+
+  &__name {
+    display: block;
+    font-size: 38px;
+    font-weight: bold;
+    color: #fff;
+  }
+
+  &__role {
+    display: block;
+    font-size: 26px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 6px;
+  }
+
+  &__stats {
+    display: flex;
+    margin: -24px 24px 0;
+    padding: 28px 0;
+    @include card;
+  }
+
+  &__stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    & + & {
+      border-left: 1px solid $c-border;
+    }
+  }
+
+  &__stat-num {
+    font-size: 40px;
+    font-weight: bold;
+    color: $c-primary;
+  }
+
+  &__stat-label {
+    font-size: 24px;
+    color: $c-text-sub;
+    margin-top: 8px;
+  }
+
+  &__menu {
+    margin: 28px 24px 0;
+    @include card;
+    overflow: hidden;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    padding: 32px 28px;
+
+    & + & {
+      border-top: 1px solid $c-border;
+    }
+
+    &--reserved {
+      opacity: 0.7;
+    }
+  }
+
+  &__item-text {
+    flex: 1;
+    font-size: 30px;
+    color: $c-text;
+  }
+
+  &__item-badge {
+    @include reserved-badge;
+  }
+
+  &__item-arrow {
+    font-size: 28px;
+    color: $c-text-sub;
+  }
+
+  &__fields {
+    padding: 8px 28px 24px;
+    border-top: 1px solid $c-border;
+  }
+
+  &__field {
+    display: block;
+    font-size: 26px;
+    color: $c-text-sub;
+    padding: 12px 0;
+  }
+
+  &__field-empty {
+    font-size: 26px;
+    color: $c-text-sub;
+  }
+
+  &__logout {
+    margin: 40px 24px 0;
+    padding: 28px 0;
+    text-align: center;
+    @include card;
+  }
+
+  &__logout-text {
+    font-size: 30px;
+    color: $c-rose;
+    font-weight: bold;
+  }
+}
