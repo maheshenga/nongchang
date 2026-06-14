@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { Role } from '@nongchang/shared';
@@ -21,5 +22,11 @@ describe('AgentService.listMerchants', () => {
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { tenantId: 't1', role: Role.MERCHANT },
     });
+  });
+  it('agent_admin 缺 agentId:抛 Forbidden(不查库)', () => {
+    const prisma = { user: { findMany: vi.fn() } } as any;
+    const svc = new AgentService(prisma, new ScopeService());
+    expect(() => svc.listMerchants(ctx({ agentId: null }))).toThrow(ForbiddenException);
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 });

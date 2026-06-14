@@ -12,6 +12,8 @@ const base = { batchId: BATCH, fieldId: FIELD, action: '施肥', recordedAt: '20
 function makeService(overrides: any = {}) {
   let created: any;
   const prisma = {
+    batch: { findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }) },
+    field: { findFirst: async () => (overrides.fieldScoped === false ? null : { id: 'f1' }) },
     farmRecord: {
       create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
       aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
@@ -48,5 +50,15 @@ describe('FarmRecordService.create 核销', () => {
     const h = makeService({ quota: 100, consumed: 0, supplyScoped: false });
     await expect(h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 }))
       .rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('batch 不在作用域内:抛 Forbidden(不创建)', async () => {
+    const h = makeService({ batchScoped: false });
+    await expect(h.svc.create(merchant, { ...base })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.created).toBeUndefined();
+  });
+  it('field 不在作用域内:抛 Forbidden(不创建)', async () => {
+    const h = makeService({ fieldScoped: false });
+    await expect(h.svc.create(merchant, { ...base })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.created).toBeUndefined();
   });
 });

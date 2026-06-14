@@ -9,12 +9,14 @@ import { ScopeService } from '../../common/scope/scope.service';
 export class TraceService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
-  generateCode(user: AuthUser, batchId: string) {
+  async generateCode(user: AuthUser, batchId: string) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
     const code = `ORC-${randomUUID().slice(0, 8).toUpperCase()}`;
     return this.prisma.traceCode.create({ data: { tenantId: user.tenantId, batchId, code } });
   }
 
-  addEvent(user: AuthUser, dto: CreateTraceEventDto) {
+  async addEvent(user: AuthUser, dto: CreateTraceEventDto) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
     return this.prisma.traceEvent.create({
       data: {
         tenantId: user.tenantId, batchId: dto.batchId, type: dto.type, title: dto.title,
@@ -25,6 +27,7 @@ export class TraceService {
   }
 
   async listEvents(user: AuthUser, batchId: string) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
     return this.prisma.traceEvent.findMany({
       where: { tenantId: user.tenantId, batchId }, orderBy: { occurredAt: 'asc' },
     });

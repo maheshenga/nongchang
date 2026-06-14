@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { AuthUser, CreateAgentDto, Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -17,7 +17,10 @@ export class AgentService {
 
   listMerchants(user: AuthUser) {
     const where: Record<string, string> = { tenantId: user.tenantId, role: Role.MERCHANT };
-    if (user.role === Role.AGENT_ADMIN && user.agentId) where.agentId = user.agentId;
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
+      where.agentId = user.agentId;
+    }
     return this.prisma.user.findMany({ where });
   }
 }

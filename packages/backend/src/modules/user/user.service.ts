@@ -26,7 +26,10 @@ export class UserService {
 
   list(actor: AuthUser) {
     const where: Record<string, string> = { tenantId: actor.tenantId };
-    if (actor.role === Role.AGENT_ADMIN && actor.agentId) where.agentId = actor.agentId;
+    if (actor.role === Role.AGENT_ADMIN) {
+      if (!actor.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
+      where.agentId = actor.agentId;
+    }
     return this.prisma.user.findMany({
       where, select: { id: true, username: true, role: true, agentId: true, displayName: true, status: true },
     });
