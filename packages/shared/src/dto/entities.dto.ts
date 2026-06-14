@@ -49,6 +49,9 @@ export const createFarmRecordSchema = z.object({
   source: z.enum([FarmRecordSource.WEB, FarmRecordSource.MINIAPP, FarmRecordSource.VOICE]),
   supplyId: z.string().uuid().optional(),
   supplyAmount: z.number().positive().optional(),
+}).refine(d => (d.supplyId == null) === (d.supplyAmount == null), {
+  message: 'supplyId 与 supplyAmount 必须同时提供或同时省略',
+  path: ['supplyAmount'],
 });
 export type CreateFarmRecordDto = z.infer<typeof createFarmRecordSchema>;
 

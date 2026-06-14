@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateFarmRecordDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -10,11 +10,18 @@ export class FarmRecordService {
 
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
     if (dto.supplyId && dto.supplyAmount != null) {
+      // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额。
+      const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+      const sup = await this.prisma.supply.findFirst({
+        where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
+        select: { id: true },
+      });
+      if (!sup) throw new ForbiddenException('农资不在可操作范围内');
       const quotaAgg = await this.prisma.supplyIssue.aggregate({
-        where: { batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
+        where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
       });
       const consumedAgg = await this.prisma.farmRecord.aggregate({
-        where: { batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
+        where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
       });
       const quota = quotaAgg._sum.amount ?? 0;
       const consumed = consumedAgg._sum.supplyAmount ?? 0;
