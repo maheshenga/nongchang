@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 import { OssConfigService } from './oss-config.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import type { AuthUser } from '@nongchang/shared';
@@ -43,5 +44,16 @@ describe('OssConfigService', () => {
     await svc.upsert(user, { region: 'cn', bucket: 'b', accessKeyId: 'AK', accessKeySecret: 'SECRET1234', enabled: true });
     const c = await svc.getCredentials('t1');
     expect(c?.accessKeySecret).toBe('SECRET1234');
+  });
+
+  it('首次无 secret 抛 BadRequestException', async () => {
+    await expect(
+      svc.upsert(user, { region: 'cn', bucket: 'b', accessKeyId: 'AK' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('getCredentials 未启用返回 null', async () => {
+    await svc.upsert(user, { region: 'cn', bucket: 'b', accessKeyId: 'AK', accessKeySecret: 'SECRET1234' });
+    expect(await svc.getCredentials('t1')).toBeNull();
   });
 });
