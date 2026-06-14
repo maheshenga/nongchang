@@ -6,6 +6,7 @@ import { useApi } from '../hooks/useApi';
 import { listBatches, createBatch, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
 import { generateCodes } from '../api/trace';
+import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
 
 interface ViewBatch {
@@ -73,6 +74,8 @@ export default function BatchAdmin() {
   }, [searchCode, filterType, filterHouse, filterDateRange, batches]);
   const [showProfitModal, setShowProfitModal] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
+  // 资质/检测管理弹窗:存当前批次 {id, label}。
+  const [credentialBatch, setCredentialBatch] = useState<{ id: string; label: string } | null>(null);
   const [qrAmount, setQrAmount] = useState<number>(100);
   // 一物一码:进入排版预览时为批次真实生成的溯源码列表。
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
@@ -406,6 +409,13 @@ export default function BatchAdmin() {
                   >
                     {isScanningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
                     合规性探针
+                  </button>
+                  <button
+                    onClick={() => setCredentialBatch({ id: b.id, label: b.code })}
+                    className="flex items-center justify-center gap-1.5 text-teal-600 hover:text-white hover:bg-teal-600 font-bold text-[10px] uppercase tracking-wider bg-teal-50 border border-teal-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                    资质 / 检测
                   </button>
                   <button 
                     onClick={() => setShowProfitModal(b.id)}
@@ -963,6 +973,14 @@ export default function BatchAdmin() {
           fields={fields ?? []}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => { setShowCreateModal(false); void reload(); }}
+        />
+      )}
+
+      {credentialBatch && (
+        <BatchCredentialModal
+          batchId={credentialBatch.id}
+          batchLabel={credentialBatch.label}
+          onClose={() => setCredentialBatch(null)}
         />
       )}
 

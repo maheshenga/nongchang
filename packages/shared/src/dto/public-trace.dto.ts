@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BatchStatus, TraceEventType } from '../enums';
+import { publicTraceCredentialSchema } from './trace-credential.dto';
 
 export const publicTraceEventSchema = z.object({
   type: z.enum([
@@ -33,6 +34,7 @@ export const publicTraceResponseSchema = z.object({
   scanCount: z.number(),
   batch: publicTraceBatchSchema,
   events: z.array(publicTraceEventSchema),
+  credentials: z.array(publicTraceCredentialSchema).default([]),
 });
 export type PublicTraceResponse = z.infer<typeof publicTraceResponseSchema>;
 

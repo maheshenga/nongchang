@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, MapPin, Calendar, Sprout, Truck, Store, Leaf, ArrowLeft, Hexagon, Sun, CheckCircle } from 'lucide-react';
+import { ShieldCheck, MapPin, Calendar, Sprout, Truck, Store, Leaf, ArrowLeft, Hexagon, Sun, CheckCircle, FileText, FlaskConical } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchPublicTrace, TraceNotFoundError } from '../api/trace';
 import type { PublicTraceResult, TraceEventType } from '@nongchang/shared';
@@ -70,6 +70,7 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
   }
 
   const { batch, events, scanCount } = data;
+  const credentials = data.credentials ?? [];
   const origin = batch.region ?? batch.fieldName;
 
   return (
@@ -216,6 +217,29 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
                   <span className="text-emerald-600 font-bold text-sm flex items-center gap-1">真实有效 <CheckCircle className="w-4 h-4"/></span>
                 </div>
               </div>
+
+              {credentials.length > 0 && (
+                <div className="mt-6 relative z-10">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 权威背书 · 资质与检测</h3>
+                  <div className="space-y-3">
+                    {credentials.map((c, idx) => (
+                      <a key={idx} href={c.fileUrl} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors">
+                        <div className={`p-2 rounded-lg shrink-0 ${c.type === 'certificate' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {c.type === 'certificate' ? <ShieldCheck className="w-5 h-5" /> : <FlaskConical className="w-5 h-5" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-slate-800 text-sm truncate">{c.title}</div>
+                          <div className="text-xs text-slate-500 truncate">
+                            {c.issuer}{c.issuedAt ? ` · ${c.issuedAt.slice(0, 10)}` : ''}
+                          </div>
+                        </div>
+                        <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

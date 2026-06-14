@@ -28,6 +28,11 @@ export class PublicTraceService {
       orderBy: { occurredAt: 'asc' },
     });
 
+    const credentials = await this.prisma.traceCredential.findMany({
+      where: { tenantId: traceCode.tenantId, batchId: batch.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const updated = await this.prisma.traceCode.update({
       where: { code },
       data: { scanCount: { increment: 1 } },
@@ -64,6 +69,13 @@ export class PublicTraceService {
         location: e.location,
         occurredAt: e.occurredAt.toISOString(),
         payload: (e.payload as Record<string, unknown> | null) ?? null,
+      })),
+      credentials: credentials.map((c) => ({
+        type: c.type as Extract<PublicTraceResult, { frozen: false }>['credentials'][number]['type'],
+        title: c.title,
+        issuer: c.issuer,
+        issuedAt: c.issuedAt ? c.issuedAt.toISOString() : null,
+        fileUrl: c.fileUrl,
       })),
     };
   }

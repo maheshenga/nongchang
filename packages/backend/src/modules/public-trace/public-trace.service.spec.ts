@@ -24,6 +24,11 @@ function makePrisma(overrides: any = {}) {
         { type: 'retail', title: '零售', actor: '店', location: '昆明', occurredAt: new Date('2026-05-12T10:00:00Z'), payload: null },
       ]),
     },
+    traceCredential: {
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'cr1', batchId: 'b1', type: 'certificate', title: '有机认证', issuer: '认证中心', serialNo: 'OC-1', issuedAt: new Date('2026-06-01T00:00:00Z'), fileUrl: 'https://oss/cert.pdf', createdAt: new Date() },
+      ]),
+    },
     ...overrides,
   } as any;
 }
@@ -49,6 +54,13 @@ describe('PublicTraceService.getByCode', () => {
     expect(res.events).toHaveLength(2);
     expect(res.events[0].type).toBe('origin');
     expect(typeof res.batch.plantDate).toBe('string');
+    expect(res.credentials).toHaveLength(1);
+    expect(res.credentials[0].type).toBe('certificate');
+    expect(res.credentials[0].title).toBe('有机认证');
+    expect(res.credentials[0].issuedAt).toBe('2026-06-01T00:00:00.000Z');
+    // 脱敏:不应暴露内部 id/serialNo
+    expect(res.credentials[0]).not.toHaveProperty('id');
+    expect(res.credentials[0]).not.toHaveProperty('serialNo');
   });
 
   it('scanCount 原子自增并透传新值', async () => {

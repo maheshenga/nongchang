@@ -156,6 +156,23 @@ model TraceScan {
   @@map("trace_scans")
 }
 
+model TraceCredential {
+  id        String    @id @default(uuid())
+  tenantId  String    @map("tenant_id")
+  batchId   String    @map("batch_id")
+  type      String
+  title     String
+  issuer    String
+  serialNo  String?   @map("serial_no")
+  issuedAt  DateTime? @map("issued_at")
+  fileUrl   String    @map("file_url")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([batchId])
+  @@map("trace_credentials")
+}
+
 model Supply {
   id        String   @id @default(uuid())
   tenantId  String   @map("tenant_id")

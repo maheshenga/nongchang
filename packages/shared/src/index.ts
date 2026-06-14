@@ -81,3 +81,16 @@ export type {
 
 export { quickTemplateInputSchema, quickTemplateViewSchema } from './dto/quick-template.dto';
 export type { QuickTemplateInput, QuickTemplateView } from './dto/quick-template.dto';
+
+export {
+  traceCredentialTypeSchema,
+  traceCredentialViewSchema,
+  createTraceCredentialSchema,
+  publicTraceCredentialSchema,
+} from './dto/trace-credential.dto';
+export type {
+  TraceCredentialType,
+  TraceCredentialView,
+  CreateTraceCredentialInput,
+  PublicTraceCredential,
+} from './dto/trace-credential.dto';

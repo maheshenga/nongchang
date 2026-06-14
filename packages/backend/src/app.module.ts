@@ -21,6 +21,7 @@ import { OssConfigModule } from './modules/oss-config/oss-config.module';
 import { IntegrationModule } from './modules/integration/integration.module';
 import { UserGroupModule } from './modules/user-group/user-group.module';
 import { QuickTemplateModule } from './modules/quick-template/quick-template.module';
+import { TraceCredentialModule } from './modules/trace-credential/trace-credential.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -51,6 +52,7 @@ import { PermissionGuard } from './common/guards/permission.guard';
     IntegrationModule,
     UserGroupModule,
     QuickTemplateModule,
+    TraceCredentialModule,
   ],
   providers: [
     ScopeService,
