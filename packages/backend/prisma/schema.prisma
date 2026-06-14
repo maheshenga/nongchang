@@ -252,3 +252,18 @@ model UserGroup {
   @@index([tenantId])
   @@map("user_groups")
 }
+
+model QuickTemplate {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  action    String
+  note      String?
+  cost      Float?
+  labor     Float?
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("quick_templates")
+}

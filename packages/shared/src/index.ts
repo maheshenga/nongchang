@@ -78,3 +78,6 @@ export type {
   IntegrationProvider, WechatConfigInput, XfyunConfigInput, IntegrationConfigView,
   UserGroupInput, UserGroupView, AssignUserGroupInput, WechatLoginDto,
 } from './dto/integration.dto';
+
+export { quickTemplateInputSchema, quickTemplateViewSchema } from './dto/quick-template.dto';
+export type { QuickTemplateInput, QuickTemplateView } from './dto/quick-template.dto';
