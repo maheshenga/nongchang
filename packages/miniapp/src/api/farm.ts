@@ -33,3 +33,11 @@ export function listSupplies(): Promise<SupplyItem[]> {
 export function uploadImage(filePath: string): Promise<string> {
   return uploadFile(filePath);
 }
+
+export interface Field {
+  id: string; ownerId: string; name: string; area: number;
+  lng: number; lat: number; iotDeviceId?: string | null;
+}
+export function listFields(): Promise<Field[]> {
+  return request<Field[]>({ url: '/fields' });
+}
