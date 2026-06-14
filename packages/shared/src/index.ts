@@ -10,6 +10,13 @@ export {
   createBatchSchema,
   createFarmRecordSchema,
   createTraceEventSchema,
+  updateUserSchema,
+  setUserStatusSchema,
+  merchantListItemSchema,
+  createUserResponseSchema,
+  updateAgentSchema,
+  setAgentStatusSchema,
+  agentListItemSchema,
 } from './dto/entities.dto';
 export type {
   CreateUserDto,
@@ -18,6 +25,13 @@ export type {
   CreateBatchDto,
   CreateFarmRecordDto,
   CreateTraceEventDto,
+  UpdateUserDto,
+  SetUserStatusInput,
+  MerchantListItem,
+  CreateUserResponse,
+  UpdateAgentDto,
+  SetAgentStatusInput,
+  AgentListItem,
 } from './dto/entities.dto';
 
 export {

@@ -65,3 +65,60 @@ export const createTraceEventSchema = z.object({
   payload: z.record(z.unknown()).optional(),
 });
 export type CreateTraceEventDto = z.infer<typeof createTraceEventSchema>;
+
+// ---- 商户管理(User)更新/状态/列表视图 ----
+export const updateUserSchema = z.object({
+  displayName: z.string().min(2).max(64).optional(),
+  phone: z.string().max(20).nullable().optional(),
+});
+export type UpdateUserDto = z.infer<typeof updateUserSchema>;
+
+export const setUserStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+});
+export type SetUserStatusInput = z.infer<typeof setUserStatusSchema>;
+
+export const merchantListItemSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  displayName: z.string(),
+  phone: z.string().nullable(),
+  status: z.string(),
+  agentId: z.string().nullable(),
+  createdAt: z.string(),
+  fieldCount: z.number(),
+  totalArea: z.number(),
+});
+export type MerchantListItem = z.infer<typeof merchantListItemSchema>;
+
+export const createUserResponseSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  role: z.string(),
+  agentId: z.string().nullable(),
+  displayName: z.string(),
+  initialPassword: z.string(),
+});
+export type CreateUserResponse = z.infer<typeof createUserResponseSchema>;
+
+// ---- 代理商管理(Agent)更新/状态/列表视图 ----
+export const updateAgentSchema = z.object({
+  name: z.string().min(1).max(128).optional(),
+  region: z.string().max(64).optional(),
+});
+export type UpdateAgentDto = z.infer<typeof updateAgentSchema>;
+
+export const setAgentStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+});
+export type SetAgentStatusInput = z.infer<typeof setAgentStatusSchema>;
+
+export const agentListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  region: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+  merchantCount: z.number(),
+});
+export type AgentListItem = z.infer<typeof agentListItemSchema>;
