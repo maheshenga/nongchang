@@ -1,0 +1,106 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import type { AuthUser, OssConfigInput, OssConfigView } from '@nongchang/shared';
+import { PrismaService } from '../../prisma/prisma.service';
+import { EncryptionService } from '../../common/crypto/encryption.service';
+
+interface OssConfigRow {
+  id: string;
+  tenantId: string;
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  accessKeySecEnc: string;
+  baseUrl: string | null;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface OssCredentials {
+  region: string;
+  bucket: string;
+  accessKeyId: string;
+  accessKeySecret: string;
+  baseUrl: string | null;
+}
+
+@Injectable()
+export class OssConfigService {
+  constructor(private prisma: PrismaService, private enc: EncryptionService) {}
+
+  private toView(r: OssConfigRow): OssConfigView {
+    return {
+      region: r.region,
+      bucket: r.bucket,
+      accessKeyId: r.accessKeyId,
+      accessKeySecretMasked: this.enc.maskSecret(this.enc.decrypt(r.accessKeySecEnc)),
+      baseUrl: r.baseUrl ?? null,
+      enabled: r.enabled,
+    };
+  }
+
+  async get(user: AuthUser): Promise<OssConfigView | null> {
+    const row = (await this.prisma.ossConfig.findUnique({
+      where: { tenantId: user.tenantId },
+    })) as OssConfigRow | null;
+    return row ? this.toView(row) : null;
+  }
+
+  async upsert(user: AuthUser, dto: OssConfigInput): Promise<OssConfigView> {
+    const existing = (await this.prisma.ossConfig.findUnique({
+      where: { tenantId: user.tenantId },
+    })) as OssConfigRow | null;
+
+    if (!existing && !dto.accessKeySecret) {
+      throw new BadRequestException('首次配置需提供 accessKeySecret');
+    }
+
+    const enabled = dto.enabled ?? existing?.enabled ?? false;
+
+    // 仅当 secret 有值时加密；首次配置必有 secret(上方已校验)
+    const secretEnc = dto.accessKeySecret ? this.enc.encrypt(dto.accessKeySecret) : '';
+
+    const create = {
+      tenantId: user.tenantId,
+      region: dto.region,
+      bucket: dto.bucket,
+      accessKeyId: dto.accessKeyId,
+      accessKeySecEnc: secretEnc,
+      baseUrl: dto.baseUrl ?? null,
+      enabled,
+    };
+
+    const update: Record<string, unknown> = {
+      region: dto.region,
+      bucket: dto.bucket,
+      accessKeyId: dto.accessKeyId,
+      baseUrl: dto.baseUrl ?? null,
+      enabled,
+    };
+    if (dto.accessKeySecret) {
+      update.accessKeySecEnc = secretEnc;
+    }
+
+    const row = (await this.prisma.ossConfig.upsert({
+      where: { tenantId: user.tenantId },
+      create,
+      update,
+    })) as OssConfigRow;
+
+    return this.toView(row);
+  }
+
+  async getCredentials(tenantId: string): Promise<OssCredentials | null> {
+    const row = (await this.prisma.ossConfig.findUnique({
+      where: { tenantId },
+    })) as OssConfigRow | null;
+    if (!row || !row.enabled) return null;
+    return {
+      region: row.region,
+      bucket: row.bucket,
+      accessKeyId: row.accessKeyId,
+      accessKeySecret: this.enc.decrypt(row.accessKeySecEnc),
+      baseUrl: row.baseUrl ?? null,
+    };
+  }
+}
