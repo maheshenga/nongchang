@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, Input, Button, Text } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { login } from '../../api/auth';
+import { login, loginWechat } from '../../api/auth';
+import { WX_APPID } from '../../config/env';
 import Icon from '../../components/Icon';
 import './index.scss';
 
@@ -9,6 +10,7 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [wxLoading, setWxLoading] = useState(false);
 
   async function onSubmit() {
     if (!username || !password) {
@@ -24,6 +26,22 @@ export default function Login() {
       Taro.showToast({ title: e.message || '登录失败', icon: 'none' });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onWechatLogin() {
+    if (!WX_APPID) {
+      Taro.showToast({ title: '未配置微信登录', icon: 'none' });
+      return;
+    }
+    setWxLoading(true);
+    try {
+      await loginWechat();
+      Taro.switchTab({ url: '/pages/work/index' });
+    } catch (e: any) {
+      Taro.showToast({ title: e.message || '微信登录失败', icon: 'none' });
+    } finally {
+      setWxLoading(false);
     }
   }
 
@@ -58,8 +76,8 @@ export default function Login() {
         <Button className="login__submit" loading={loading} onClick={onSubmit}>
           安全登录
         </Button>
-        <View className="login__wechat" onClick={comingSoon}>
-          <Text className="login__wechat-text">微信一键登录</Text>
+        <View className="login__wechat" onClick={wxLoading ? undefined : onWechatLogin}>
+          <Text className="login__wechat-text">{wxLoading ? '登录中…' : '微信一键登录'}</Text>
         </View>
         <View className="login__apply" onClick={comingSoon}>
           <Text className="login__apply-text">没有账号? 申请入驻</Text>

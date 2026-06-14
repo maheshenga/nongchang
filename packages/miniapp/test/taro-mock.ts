@@ -8,6 +8,7 @@ const removeStorageImpl = (k: string) => void store.delete(k);
 
 export const taroMock = {
   request: vi.fn(),
+  login: vi.fn(),
   uploadFile: vi.fn(),
   redirectTo: vi.fn(),
   navigateTo: vi.fn(),
