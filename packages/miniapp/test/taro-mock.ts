@@ -16,6 +16,13 @@ export const taroMock = {
   showToast: vi.fn(),
   chooseImage: vi.fn(),
   scanCode: vi.fn(),
+  getRecorderManager: vi.fn(() => ({
+    onStart: vi.fn(),
+    onStop: vi.fn(),
+    onError: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  })),
   getStorageSync: vi.fn(getStorageImpl),
   setStorageSync: vi.fn(setStorageImpl),
   removeStorageSync: vi.fn(removeStorageImpl),

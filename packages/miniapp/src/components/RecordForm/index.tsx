@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, Textarea, Input, Button, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { createFarmRecord, uploadImage, listSupplies, type Batch } from '../../api/farm';
+import { transcribeVoice, normalizeAiError } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
 import type { SupplyItem } from '@nongchang/shared';
@@ -24,6 +25,9 @@ export default function RecordForm({ batches, onSaved }: Props) {
   const [supplies, setSupplies] = useState<SupplyItem[]>([]);
   const [supplyId, setSupplyId] = useState('');
   const [supplyAmount, setSupplyAmount] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
 
   useEffect(() => {
     if (!batchId && batches[0]) setBatchId(batches[0].id);
@@ -32,6 +36,42 @@ export default function RecordForm({ batches, onSaved }: Props) {
   useEffect(() => {
     listSupplies().then(setSupplies).catch(() => setSupplies([]));
   }, []);
+
+  // 录音管理器:停止后把音频上传后端转写,结果追加到「农事实录」。
+  useEffect(() => {
+    const rec = Taro.getRecorderManager();
+    recorderRef.current = rec;
+    rec.onStart(() => setRecording(true));
+    rec.onError(() => {
+      setRecording(false);
+      Taro.showToast({ title: '录音失败', icon: 'none' });
+    });
+    rec.onStop(async (res: { tempFilePath: string }) => {
+      setRecording(false);
+      if (!res?.tempFilePath) return;
+      setTranscribing(true);
+      try {
+        const text = await transcribeVoice(res.tempFilePath);
+        if (text) setNote((prev) => (prev ? prev + ' ' + text : text));
+        else Taro.showToast({ title: '未识别到语音', icon: 'none' });
+      } catch (e) {
+        Taro.showToast({ title: normalizeAiError(e), icon: 'none' });
+      } finally {
+        setTranscribing(false);
+      }
+    });
+  }, []);
+
+  function toggleVoice() {
+    if (transcribing) return;
+    const rec = recorderRef.current;
+    if (!rec) return;
+    if (recording) {
+      rec.stop();
+    } else {
+      rec.start({ format: 'PCM', sampleRate: 16000, numberOfChannels: 1, duration: 60000 });
+    }
+  }
 
   const selectedBatch = batches.find((b) => b.id === batchId);
 
@@ -137,8 +177,11 @@ export default function RecordForm({ batches, onSaved }: Props) {
           </View>
         ))}
       </View>
-      <View className="rec-form__voice" onClick={() => Taro.showToast({ title: '语音录入即将开放', icon: 'none' })}>
-        <Icon name="mic" size={20} color="#94a3b8" /><Text className="rec-form__voice-text">语音录入</Text>
+      <View className={`rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`} onClick={toggleVoice}>
+        <Icon name="mic" size={20} color={recording ? '#ef4444' : '#94a3b8'} />
+        <Text className="rec-form__voice-text">
+          {transcribing ? '识别中…' : recording ? '点击结束录音' : '语音录入'}
+        </Text>
       </View>
 
       <Text className="rec-form__label">现场图片证明</Text>

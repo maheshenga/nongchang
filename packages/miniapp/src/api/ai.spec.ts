@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import taro from '@tarojs/taro';
-import { aiChat, aiDiagnose, normalizeAiError } from './ai';
+import { aiChat, aiDiagnose, normalizeAiError, transcribeVoice } from './ai';
 
 const okResp = (data: unknown) => ({ statusCode: 200, data });
 
@@ -36,5 +36,20 @@ describe('api/ai', () => {
     expect(normalizeAiError(new Error('AI 服务商未配置'))).toBe('AI 服务未配置，请联系管理员');
     expect(normalizeAiError(new Error('boom'))).toBe('boom');
     expect(normalizeAiError('x')).toBe('AI 调用失败');
+  });
+
+  it('transcribeVoice uploads file and returns text', async () => {
+    (taro.uploadFile as any).mockResolvedValue({ statusCode: 200, data: JSON.stringify({ text: '浇水完成' }) });
+    const out = await transcribeVoice('/tmp/a.pcm');
+    expect(out).toBe('浇水完成');
+    const arg = (taro.uploadFile as any).mock.calls[0][0];
+    expect(arg.url).toMatch(/\/ai\/transcribe$/);
+    expect(arg.name).toBe('file');
+    expect(arg.filePath).toBe('/tmp/a.pcm');
+  });
+
+  it('transcribeVoice surfaces backend message on non-2xx', async () => {
+    (taro.uploadFile as any).mockResolvedValue({ statusCode: 400, data: JSON.stringify({ message: '未配置讯飞语音' }) });
+    await expect(transcribeVoice('/tmp/a.pcm')).rejects.toThrow('未配置讯飞语音');
   });
 });

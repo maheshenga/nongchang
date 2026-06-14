@@ -92,6 +92,9 @@
     margin-top: 16px;
   }
 
+  &__voice--on &__voice-text,
+  &__voice--on { color: #ef4444; }
+
   &__voice-text { font-size: 24px; color: $c-text-sub; }
 
   &__imgs {
