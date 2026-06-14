@@ -4,6 +4,8 @@ import OSS from 'ali-oss';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 
+const OSS_TEST_TIMEOUT_MS = 10_000;
+
 interface OssConfigRow {
   id: string;
   tenantId: string;
@@ -110,24 +112,27 @@ export class OssConfigService {
     if (!cred) return { ok: false, error: '未配置或未启用 OSS' };
 
     const start = Date.now();
+    let timer: NodeJS.Timeout | undefined;
     try {
       const client = new OSS({
         region: cred.region,
         bucket: cred.bucket,
         accessKeyId: cred.accessKeyId,
         accessKeySecret: cred.accessKeySecret,
-        timeout: 10_000,
+        timeout: OSS_TEST_TIMEOUT_MS,
       });
       // 轻量探测连通性，限制只取 1 个对象
-      await Promise.race([
-        client.list({ 'max-keys': 1 }, {}),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
-      ]);
+      const racePromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), OSS_TEST_TIMEOUT_MS);
+      });
+      await Promise.race([client.list({ 'max-keys': 1 }, {}), racePromise]);
       const latencyMs = Date.now() - start;
       return { ok: true, latencyMs };
     } catch {
       // 不泄露 accessKeySecret：仅返回通用文案
       return { ok: false, error: '连接失败' };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 }

@@ -3,6 +3,8 @@ import type { AuthUser, CreateAiProviderInput, UpdateAiProviderInput, AiProvider
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 
+const AI_TEST_TIMEOUT_MS = 10_000;
+
 interface AiProviderRow {
   id: string; tenantId: string; name: string; baseUrl: string; apiKeyEnc: string;
   textModel: string; visionModel: string | null; enabled: boolean; createdAt: Date; updatedAt: Date;
@@ -111,7 +113,7 @@ export class AiProviderService {
 
     const apiKey = this.enc.decrypt(row.apiKeyEnc);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10_000);
+    const timer = setTimeout(() => controller.abort(), AI_TEST_TIMEOUT_MS);
     const start = Date.now();
     try {
       const res = await fetch(`${row.baseUrl}/chat/completions`, {
