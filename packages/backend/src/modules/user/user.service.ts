@@ -64,7 +64,7 @@ export class UserService {
 
   async update(actor: AuthUser, id: string, dto: UpdateUserDto) {
     if (!id) throw new ForbiddenException('缺少用户 id');
-    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id } });
+    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id, role: Role.MERCHANT } });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
     const data: Record<string, unknown> = {};
     if (dto.displayName !== undefined) data.displayName = dto.displayName;
@@ -77,7 +77,7 @@ export class UserService {
 
   async setStatus(actor: AuthUser, id: string, status: 'active' | 'suspended') {
     if (!id) throw new ForbiddenException('缺少用户 id');
-    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id } });
+    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id, role: Role.MERCHANT } });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
     return this.prisma.user.update({
       where: { id }, data: { status },
