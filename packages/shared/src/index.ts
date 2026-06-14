@@ -58,3 +58,13 @@ export { uploadResponseSchema } from './dto/upload.dto';
 export type { UploadResponse } from './dto/upload.dto';
 
 export type { AuthUser, TokenPair } from './types';
+
+export {
+  createAiProviderSchema, updateAiProviderSchema, aiProviderViewSchema,
+  aiChatSchema, aiDiagnoseSchema, ossConfigSchema, ossConfigViewSchema,
+} from './dto/ai.dto';
+export type {
+  CreateAiProviderInput, UpdateAiProviderInput, AiProviderView,
+  AiChatInput, AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse,
+  OssConfigInput, OssConfigView, AiTestResponse,
+} from './dto/ai.dto';
