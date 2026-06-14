@@ -33,12 +33,14 @@ export class UserGroupController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.svc.remove(user, id);
+  async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.svc.remove(user, id);
+    return { ok: true as const };
   }
 
   @Put('assign')
-  assign(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(assignUserGroupSchema)) dto: AssignUserGroupInput) {
-    return this.svc.assignUserGroup(user, dto);
+  async assign(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(assignUserGroupSchema)) dto: AssignUserGroupInput) {
+    await this.svc.assignUserGroup(user, dto);
+    return { ok: true as const };
   }
 }
