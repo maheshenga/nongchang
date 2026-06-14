@@ -40,9 +40,15 @@ export default function AiPanel({ mode, onClose }: Props) {
   }
 
   async function pickImage() {
-    const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'] });
+    let tempPath: string;
     try {
-      setImageUrl(await uploadImage(r.tempFilePaths[0]));
+      const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'] });
+      tempPath = r.tempFilePaths[0];
+    } catch {
+      return; // 用户取消选图，静默忽略
+    }
+    try {
+      setImageUrl(await uploadImage(tempPath));
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });
     }

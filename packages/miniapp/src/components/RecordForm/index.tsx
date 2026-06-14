@@ -45,9 +45,15 @@ export default function RecordForm({ batches, onSaved }: Props) {
   }
 
   async function chooseAndUpload() {
-    const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] });
+    let tempPath: string;
     try {
-      const url = await uploadImage(r.tempFilePaths[0]);
+      const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] });
+      tempPath = r.tempFilePaths[0];
+    } catch {
+      return; // 用户取消选图，静默忽略
+    }
+    try {
+      const url = await uploadImage(tempPath);
       setImages((prev) => [...prev, url]);
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });
