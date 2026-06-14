@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build:weapp": "taro build --type weapp",
-    "dev:weapp": "taro build --type weapp --watch"
+    "dev:weapp": "taro build --type weapp --watch",
+    "test": "vitest run"
   },
   "dependencies": {
     "@nongchang/shared": "workspace:*",
@@ -26,6 +27,7 @@
     "@tarojs/webpack5-runner": "4.0.9",
     "@types/react": "^18.3.1",
     "babel-preset-taro": "4.0.9",
-    "react-refresh": "^0.14.0"
+    "react-refresh": "^0.14.0",
+    "vitest": "^2.1.9"
   }
 }
