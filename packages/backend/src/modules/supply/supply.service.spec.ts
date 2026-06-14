@@ -9,6 +9,9 @@ const merchant: AuthUser = { userId: 'u2', tenantId: 't1', role: Role.MERCHANT, 
 const BATCH = '11111111-1111-1111-1111-111111111111';
 
 function makeService(overrides: any = {}) {
+  // 事务内以可变状态模拟条件原子自增:updateMany 仅在 used<=total-amount 时命中(count=1),
+  // 否则 count=0(超量熔断)。findUnique 返回最新行,用于计算 remaining。
+  const state: any = { total: 0, used: 0 };
   const prisma = {
     supply: {
       findMany: async () => [], findFirst: async () => null,
@@ -17,11 +20,18 @@ function makeService(overrides: any = {}) {
       ...(overrides.supply ?? {}),
     },
     $transaction: async (fn: any) => fn({
-      supply: { update: async (a: any) => ({ id: a.where.id, ...a.data }) },
+      supply: {
+        updateMany: async (a: any) => {
+          const lte = a.where.used.lte;
+          if (state.used <= lte) { state.used += a.data.used.increment; return { count: 1 }; }
+          return { count: 0 };
+        },
+        findUnique: async () => ({ total: state.total, used: state.used }),
+      },
       supplyIssue: { create: async (a: any) => a.data },
     }),
   };
-  return { svc: new SupplyService(prisma as any, new ScopeService()), prisma };
+  return { svc: new SupplyService(prisma as any, new ScopeService()), prisma, state };
 }
 
 describe('SupplyService.list', () => {
@@ -61,19 +71,22 @@ describe('SupplyService.create', () => {
 });
 
 describe('SupplyService.issue', () => {
-  it('正常领用:事务内 used+=amount 且写 SupplyIssue,返回 remaining', async () => {
-    const { svc } = makeService({
+  it('正常领用:事务内条件自增 used 且写 SupplyIssue,返回 remaining', async () => {
+    const { svc, state } = makeService({
       supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1', tenantId: 't1', total: 100, used: 20 }) },
     });
+    state.total = 100; state.used = 20;
     const res = await svc.issue(merchant, 's1', { batchId: BATCH, amount: 30 });
     expect(res).toEqual({ supplyId: 's1', used: 50, remaining: 50 });
   });
-  it('超量(amount>remaining)抛 BadRequest', async () => {
-    const { svc } = makeService({
+  it('超量(amount>remaining)条件自增不命中抛 BadRequest,库存不变', async () => {
+    const { svc, state } = makeService({
       supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1', tenantId: 't1', total: 100, used: 95 }) },
     });
+    state.total = 100; state.used = 95;
     await expect(svc.issue(merchant, 's1', { batchId: BATCH, amount: 30 }))
       .rejects.toBeInstanceOf(BadRequestException);
+    expect(state.used).toBe(95);
   });
   it('越权(supply 不在作用域)抛 Forbidden', async () => {
     const { svc } = makeService({ supply: { findFirst: async () => null } });

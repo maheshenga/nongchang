@@ -34,26 +34,29 @@ export class SupplyService {
   }
 
   /** 校验 supply 在作用域内,否则 fail-closed。 */
-  private async scopedSupply(user: AuthUser, id: string): Promise<{ id: string; total: number; used: number }> {
+  private async scopedSupply(user: AuthUser, id: string): Promise<{ id: string; ownerId: string; total: number; used: number }> {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
     const sup = await this.prisma.supply.findFirst({ where: { id, ...(where as object) } as any });
     if (!sup) throw new ForbiddenException('农资不在可操作范围内');
-    return sup as { id: string; total: number; used: number };
+    return sup as { id: string; ownerId: string; total: number; used: number };
   }
 
   async issue(user: AuthUser, id: string, input: IssueSupplyInput): Promise<SupplyIssueResponse> {
     const sup = await this.scopedSupply(user, id);
-    const remaining = sup.total - sup.used;
-    if (input.amount > remaining) throw new BadRequestException('领用量超过剩余库存,超量熔断');
-    const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
-    const ownerId = (scopeWhere as { ownerId?: string }).ownerId ?? '';
-    await this.prisma.$transaction(async (tx: any) => {
-      await tx.supply.update({ where: { id }, data: { used: sup.used + input.amount } });
-      await tx.supplyIssue.create({
-        data: { tenantId: user.tenantId, ownerId, supplyId: id, batchId: input.batchId, amount: input.amount },
+    const result = await this.prisma.$transaction(async (tx: any) => {
+      // 条件原子自增:仅当 used + amount <= total(即 used <= total - amount)才扣减,
+      // 避免事务外读快照导致的 lost update 超卖。count===0 即超量熔断。
+      const upd = await tx.supply.updateMany({
+        where: { id, used: { lte: sup.total - input.amount } },
+        data: { used: { increment: input.amount } },
       });
+      if (upd.count === 0) throw new BadRequestException('领用量超过剩余库存,超量熔断');
+      await tx.supplyIssue.create({
+        data: { tenantId: user.tenantId, ownerId: sup.ownerId, supplyId: id, batchId: input.batchId, amount: input.amount },
+      });
+      return (await tx.supply.findUnique({ where: { id } })) as { total: number; used: number };
     });
-    return { supplyId: id, used: sup.used + input.amount, remaining: remaining - input.amount };
+    return { supplyId: id, used: result.used, remaining: result.total - result.used };
   }
 
   async remove(user: AuthUser, id: string): Promise<{ id: string }> {
