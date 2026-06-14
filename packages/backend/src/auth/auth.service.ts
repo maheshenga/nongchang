@@ -1,8 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto } from '@nongchang/shared';
+import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
@@ -35,6 +35,7 @@ export class AuthService {
 
     const roles = Object.values(Role) as string[];
     if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
+    if (user.status !== 'active') throw new ForbiddenException('账号待审核或已停用');
 
     return this.issueTokens(this.toAuthUser(user));
   }
@@ -47,14 +48,44 @@ export class AuthService {
     // 2. code 换 openid
     const openid = await this.exchangeWxCode(dto.appId, lookup.secret, dto.code);
 
-    // 3. 按 (tenantId, wxOpenid) 查用户;无则自动注册进默认组
-    let user = await this.prisma.user.findFirst({
+    // 3. 按 (tenantId, wxOpenid) 查用户;未注册→引导注册,待审核→拒绝
+    const user = await this.prisma.user.findFirst({
       where: { tenantId: lookup.tenantId, wxOpenid: openid },
     });
-    if (!user) {
-      user = await this.registerWechatUser(lookup.tenantId, openid);
-    }
+    if (!user) throw new NotFoundException('账号未注册');
+    if (user.status !== 'active') throw new ForbiddenException('账号审核中');
     return this.issueTokens(this.toAuthUser(user));
+  }
+
+  async registerWechat(dto: WechatRegisterDto): Promise<WechatRegisterResponse> {
+    const lookup = await this.integrations.findTenantByWechatAppId(dto.appId);
+    if (!lookup) throw new UnauthorizedException('该小程序未配置微信登录');
+
+    const openid = await this.exchangeWxCode(dto.appId, lookup.secret, dto.code);
+
+    const existing = await this.prisma.user.findFirst({
+      where: { tenantId: lookup.tenantId, wxOpenid: openid },
+    });
+    if (existing) throw new ConflictException('该微信已注册');
+
+    const group = await this.groups.ensureDefault(lookup.tenantId);
+    // 随机密码哈希,禁止该账号走密码登录
+    const randomHash = await bcrypt.hash(randomBytes(24).toString('hex'), 10);
+    const username = `wx_${openid.slice(0, 12)}_${randomBytes(3).toString('hex')}`;
+    await this.prisma.user.create({
+      data: {
+        tenantId: lookup.tenantId,
+        role: Role.MERCHANT,
+        username,
+        passwordHash: randomHash,
+        wxOpenid: openid,
+        displayName: dto.displayName,
+        phone: dto.phone,
+        status: 'pending',
+        groupId: group.id,
+      },
+    });
+    return { status: 'pending' };
   }
 
   private async exchangeWxCode(appId: string, secret: string, code: string): Promise<string> {

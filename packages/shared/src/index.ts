@@ -73,10 +73,12 @@ export {
   integrationProviderSchema, wechatConfigInputSchema, xfyunConfigInputSchema,
   integrationConfigViewSchema, userGroupInputSchema, userGroupViewSchema,
   assignUserGroupSchema, wechatLoginSchema,
+  wechatRegisterSchema, pendingUserViewSchema, reviewUserSchema,
 } from './dto/integration.dto';
 export type {
   IntegrationProvider, WechatConfigInput, XfyunConfigInput, IntegrationConfigView,
   UserGroupInput, UserGroupView, AssignUserGroupInput, WechatLoginDto,
+  WechatRegisterDto, WechatRegisterResponse, PendingUserView, ReviewUserInput,
 } from './dto/integration.dto';
 
 export { quickTemplateInputSchema, quickTemplateViewSchema } from './dto/quick-template.dto';

@@ -39,13 +39,23 @@ export default function Login() {
       await loginWechat();
       Taro.switchTab({ url: '/pages/work/index' });
     } catch (e: any) {
-      Taro.showToast({ title: e.message || '微信登录失败', icon: 'none' });
+      const msg = e.message || '微信登录失败';
+      if (/未注册/.test(msg)) {
+        Taro.showModal({
+          title: '尚未注册',
+          content: '该微信还未注册账号,是否前往申请入驻?',
+          confirmText: '去注册',
+          success: (r) => { if (r.confirm) Taro.navigateTo({ url: '/pages/register/index' }); },
+        });
+      } else {
+        Taro.showToast({ title: msg, icon: 'none' });
+      }
     } finally {
       setWxLoading(false);
     }
   }
 
-  const comingSoon = () => Taro.showToast({ title: '功能即将开放', icon: 'none' });
+  const goRegister = () => Taro.navigateTo({ url: '/pages/register/index' });
 
   return (
     <View className="login">
@@ -79,7 +89,7 @@ export default function Login() {
         <View className="login__wechat" onClick={wxLoading ? undefined : onWechatLogin}>
           <Text className="login__wechat-text">{wxLoading ? '登录中…' : '微信一键登录'}</Text>
         </View>
-        <View className="login__apply" onClick={comingSoon}>
+        <View className="login__apply" onClick={goRegister}>
           <Text className="login__apply-text">没有账号? 申请入驻</Text>
         </View>
       </View>

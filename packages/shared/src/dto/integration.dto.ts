@@ -62,3 +62,30 @@ export const wechatLoginSchema = z.object({
   appId: z.string().min(1),
 });
 export type WechatLoginDto = z.infer<typeof wechatLoginSchema>;
+
+// ── 微信自助注册(需后台审核) ──
+export const wechatRegisterSchema = z.object({
+  appId: z.string().min(1),
+  code: z.string().min(1),
+  displayName: z.string().min(2).max(64),
+  phone: z.string().regex(/^1[3-9]\d{9}$/, '手机号格式不正确').optional(),
+});
+export type WechatRegisterDto = z.infer<typeof wechatRegisterSchema>;
+
+export interface WechatRegisterResponse {
+  status: 'pending';
+}
+
+// ── 待审核用户(脱敏视图) ──
+export const pendingUserViewSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  phone: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type PendingUserView = z.infer<typeof pendingUserViewSchema>;
+
+export const reviewUserSchema = z.object({
+  action: z.enum(['approve', 'reject']),
+});
+export type ReviewUserInput = z.infer<typeof reviewUserSchema>;

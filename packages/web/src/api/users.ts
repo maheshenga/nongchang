@@ -1,4 +1,4 @@
-import type { CreateUserDto } from '@nongchang/shared';
+import type { CreateUserDto, PendingUserView, ReviewUserInput } from '@nongchang/shared';
 import { request } from './request';
 
 export interface UserListItem {
@@ -24,4 +24,13 @@ export function listUsers(): Promise<UserListItem[]> {
 
 export function createUser(dto: CreateUserDto): Promise<CreatedUser> {
   return request<CreatedUser>('/users', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+// 待审核(微信自助注册)用户
+export function listPendingUsers(): Promise<PendingUserView[]> {
+  return request<PendingUserView[]>('/users/pending');
+}
+
+export function reviewUser(id: string, input: ReviewUserInput): Promise<{ id: string; status: string }> {
+  return request(`/users/${id}/review`, { method: 'POST', body: JSON.stringify(input) });
 }

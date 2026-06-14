@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
-import { AuthUser, CreateUserDto, Role } from '@nongchang/shared';
+import { AuthUser, CreateUserDto, ReviewUserInput, Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -33,5 +33,34 @@ export class UserService {
     return this.prisma.user.findMany({
       where, select: { id: true, username: true, role: true, agentId: true, displayName: true, status: true },
     });
+  }
+
+  // 待审核(微信自助注册)用户列表,租户内隔离;agent_admin 仅见自己名下。
+  private scopedWhere(actor: AuthUser): Record<string, string> {
+    const where: Record<string, string> = { tenantId: actor.tenantId };
+    if (actor.role === Role.AGENT_ADMIN) {
+      if (!actor.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
+      where.agentId = actor.agentId;
+    }
+    return where;
+  }
+
+  async listPending(actor: AuthUser) {
+    const where = { ...this.scopedWhere(actor), status: 'pending' };
+    return this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, displayName: true, phone: true, createdAt: true },
+    });
+  }
+
+  async review(actor: AuthUser, userId: string, dto: ReviewUserInput) {
+    const target = await this.prisma.user.findFirst({
+      where: { ...this.scopedWhere(actor), id: userId, status: 'pending' },
+    });
+    if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
+    const status = dto.action === 'approve' ? 'active' : 'rejected';
+    await this.prisma.user.update({ where: { id: userId }, data: { status } });
+    return { id: userId, status };
   }
 }

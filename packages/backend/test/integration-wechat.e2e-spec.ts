@@ -65,32 +65,85 @@ describe('Integration config + WeChat login + user-group e2e', () => {
     expect(JSON.stringify(res.body)).not.toContain('wx-secret-e2e');
   });
 
-  it('微信登录:新 openid 自动注册并下发 token', async () => {
+  it('微信注册:新 openid 落 pending,不下发 token', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       json: async () => ({ openid: TEST_OPENID, session_key: 'sk' }),
     })) as unknown as typeof fetch);
 
     const res = await request(app.getHttpServer())
-      .post('/api/auth/wechat')
-      .send({ appId: TEST_APPID, code: 'js_code_first' });
+      .post('/api/auth/wechat/register')
+      .send({ appId: TEST_APPID, code: 'js_code_reg', displayName: '注册测试用户', phone: '13800002222' });
     expect(res.status).toBe(201);
-    expect(res.body.accessToken).toBeTruthy();
-    expect(res.body.refreshToken).toBeTruthy();
+    expect(res.body.status).toBe('pending');
+    expect(res.body.accessToken).toBeUndefined();
 
     const created = await prisma.user.findFirst({ where: { wxOpenid: TEST_OPENID } });
     expect(created).toBeTruthy();
     expect(created!.role).toBe('merchant');
+    expect(created!.status).toBe('pending');
+    expect(created!.displayName).toBe('注册测试用户');
     expect(created!.groupId).toBeTruthy();
     createdUserId = created!.id;
   });
 
-  it('微信登录:同 openid 二次登录命中已有用户(不重复注册)', async () => {
+  it('微信注册:同 openid 重复注册 → 409', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/auth/wechat')
-      .send({ appId: TEST_APPID, code: 'js_code_second' });
-    expect(res.status).toBe(201);
+      .post('/api/auth/wechat/register')
+      .send({ appId: TEST_APPID, code: 'js_code_reg2', displayName: '重复用户' });
+    expect(res.status).toBe(409);
     const count = await prisma.user.count({ where: { wxOpenid: TEST_OPENID } });
     expect(count).toBe(1);
+  });
+
+  it('微信登录:待审核(pending)用户 → 403', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/wechat')
+      .send({ appId: TEST_APPID, code: 'js_code_pending' });
+    expect(res.status).toBe(403);
+  });
+
+  it('待审核列表:agent_admin(跨 agent/null-agentId)看不到该注册用户', async () => {
+    const agentToken = await login(app, 'agentA');
+    const res = await request(app.getHttpServer())
+      .get('/api/users/pending')
+      .set('Authorization', `Bearer ${agentToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.some((u: any) => u.id === createdUserId)).toBe(false);
+  });
+
+  it('待审核列表 + 审核通过(sysadmin),通过后可登录拿 token', async () => {
+    const listRes = await request(app.getHttpServer())
+      .get('/api/users/pending')
+      .set('Authorization', `Bearer ${sysToken}`);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.some((u: any) => u.id === createdUserId)).toBe(true);
+
+    const reviewRes = await request(app.getHttpServer())
+      .post(`/api/users/${createdUserId}/review`)
+      .set('Authorization', `Bearer ${sysToken}`)
+      .send({ action: 'approve' });
+    expect(reviewRes.status).toBe(201);
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/auth/wechat')
+      .send({ appId: TEST_APPID, code: 'js_code_after_approve' });
+    expect(loginRes.status).toBe(201);
+    expect(loginRes.body.accessToken).toBeTruthy();
+
+    const res = await request(app.getHttpServer())
+      .get('/api/batches')
+      .set('Authorization', `Bearer ${loginRes.body.accessToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('微信登录:未注册 openid → 404', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({ openid: 'openid_e2e_unregistered', session_key: 'sk' }),
+    })) as unknown as typeof fetch);
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/wechat')
+      .send({ appId: TEST_APPID, code: 'js_code_unreg' });
+    expect(res.status).toBe(404);
   });
 
   it('微信登录:未配置的 appId → 401', async () => {
@@ -100,19 +153,11 @@ describe('Integration config + WeChat login + user-group e2e', () => {
     expect(res.status).toBe(401);
   });
 
-  it('微信用户 token 可访问受保护端点', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      json: async () => ({ openid: TEST_OPENID, session_key: 'sk' }),
-    })) as unknown as typeof fetch);
-    const loginRes = await request(app.getHttpServer())
-      .post('/api/auth/wechat')
-      .send({ appId: TEST_APPID, code: 'js_code_third' });
-    const token = loginRes.body.accessToken;
-
+  it('merchant 无权审核用户 → 403', async () => {
     const res = await request(app.getHttpServer())
-      .get('/api/batches')
-      .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
+      .get('/api/users/pending')
+      .set('Authorization', `Bearer ${merchantToken}`);
+    expect(res.status).toBe(403);
   });
 
   it('用户组 CRUD + assign(sysadmin)', async () => {

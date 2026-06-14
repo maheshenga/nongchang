@@ -26,3 +26,15 @@ export async function loginWechat(): Promise<void> {
   setToken(res.accessToken);
 }
 
+// 微信自助注册:微信授权取 code + 补全资料,提交后落 pending 待后台审核,不下发 token。
+export async function registerWechat(displayName: string, phone?: string): Promise<void> {
+  if (!WX_APPID) throw new Error('未配置微信 AppID');
+  const { code } = await Taro.login();
+  if (!code) throw new Error('微信授权失败,请重试');
+  await request<{ status: 'pending' }>({
+    url: '/auth/wechat/register',
+    method: 'POST',
+    data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) },
+  });
+}
+
