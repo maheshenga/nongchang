@@ -16,6 +16,8 @@ const Settings = lazy(() => import('./components/Settings'));
 const AgentPlatform = lazy(() => import('./components/AgentPlatform'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
 const MerchantManagement = lazy(() => import('./components/MerchantManagement'));
+const AiProviders = lazy(() => import('./components/AiProviders'));
+const SystemSettings = lazy(() => import('./components/SystemSettings'));
 
 const ViewSkeleton = () => (
   <div className="animate-pulse space-y-6 w-full h-full p-4">
@@ -40,7 +42,7 @@ export default function App() {
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings'>('dashboard');
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
@@ -110,6 +112,8 @@ export default function App() {
       category: '移动端与系统',
       items: [
         { id: 'mobile', label: '种植与检测小程序', icon: Smartphone },
+        { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
+        { id: 'aiOssSettings', label: 'AI 与存储设置', icon: SettingsIcon },
         { id: 'settings', label: '系统设置', icon: SettingsIcon },
       ]
     }
@@ -309,6 +313,8 @@ export default function App() {
               {mountedTabs.has('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
               {mountedTabs.has('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
               {mountedTabs.has('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
+              {mountedTabs.has('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
+              {mountedTabs.has('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
             </div>
           </Suspense>
         </section>
