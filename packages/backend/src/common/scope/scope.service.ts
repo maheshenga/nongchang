@@ -49,6 +49,7 @@ export class ScopeService {
 
   /** 校验某 batch/field 在调用方作用域内。缺归属即 fail-closed(ownedScopeWhere 抛错)。 */
   async assertInScope(prisma: any, user: AuthUser, entity: 'batch' | 'field', id: string): Promise<void> {
+    if (!id) throw new ForbiddenException(`缺少 ${entity} id,拒绝操作`);
     const scopeWhere = await this.ownedScopeWhere(prisma, user);
     const found = await prisma[entity].findFirst({
       where: { id, ...scopeWhere }, select: { id: true },

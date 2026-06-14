@@ -81,6 +81,12 @@ describe('ScopeService.assertInScope', () => {
       .rejects.toThrow();
     expect(prisma.batch.findFirst).not.toHaveBeenCalled();
   });
+  it('空 id:fail-closed 抛错(不查库)', async () => {
+    const prisma = { batch: { findFirst: vi.fn() } } as any;
+    await expect(new ScopeService().assertInScope(prisma, merchant, 'batch', ''))
+      .rejects.toThrow();
+    expect(prisma.batch.findFirst).not.toHaveBeenCalled();
+  });
 });
 
 describe('ScopeService.assertOwnerInScope', () => {
