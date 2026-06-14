@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { Role, type AuthUser } from '@nongchang/shared';
 
@@ -12,7 +13,7 @@ describe('UserService.list #27', () => {
   });
   it('agent_admin 缺 agentId:抛 Forbidden(不查库)', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
-    expect(() => new UserService(prisma).list(ctx({ agentId: null }))).toThrow();
+    expect(() => new UserService(prisma).list(ctx({ agentId: null }))).toThrow(ForbiddenException);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
   it('system_admin:where 仅 tenantId(允许整租户)', () => {
