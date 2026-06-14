@@ -1,0 +1,137 @@
+@import '../../styles/theme.scss';
+
+.work {
+  min-height: 100vh;
+  background: $c-bg;
+  padding-bottom: 40px;
+
+  &__header {
+    @include gradient-header;
+    padding: 40px 28px 36px;
+  }
+
+  &__header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 40px;
+    font-weight: bold;
+    color: #fff;
+  }
+
+  &__subtitle {
+    display: block;
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 8px;
+  }
+
+  &__net {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  &__net-text {
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 4px;
+  }
+
+  &__body {
+    padding: 24px 24px 0;
+    margin-top: -20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  &__card {
+    @include card;
+    padding: 28px 24px;
+  }
+
+  &__section-title {
+    font-size: 30px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__hint {
+    display: block;
+    font-size: 24px;
+    color: $c-text-sub;
+    margin-top: 16px;
+
+    &--err { color: $c-rose; }
+  }
+
+  &__rec {
+    border-top: 1px solid $c-border;
+    padding: 20px 0;
+
+    &:first-of-type { border-top: none; }
+  }
+
+  &__rec-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__rec-action {
+    font-size: 26px;
+    font-weight: bold;
+    color: $c-primary;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 4px 16px;
+    border-radius: 999px;
+  }
+
+  &__rec-time {
+    font-size: 22px;
+    color: $c-text-sub;
+  }
+
+  &__rec-note {
+    display: block;
+    font-size: 26px;
+    color: $c-text;
+    margin-top: 12px;
+  }
+
+  &__rec-img {
+    width: 160px;
+    height: 160px;
+    border-radius: 14px;
+    margin-top: 12px;
+  }
+
+  &__quick {
+    white-space: nowrap;
+  }
+
+  &__quick-item {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 120px;
+    padding: 20px 24px;
+    margin-right: 16px;
+    border-radius: 18px;
+    background: $c-card;
+    border: 1px solid $c-border;
+
+    &--reserved { opacity: 0.55; }
+  }
+
+  &__quick-text {
+    font-size: 24px;
+    color: $c-text;
+    margin-top: 6px;
+  }
+}
