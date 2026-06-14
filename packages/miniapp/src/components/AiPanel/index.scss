@@ -1,0 +1,104 @@
+@import '../../styles/theme.scss';
+
+.ai-panel {
+  position: fixed;
+  left: 0; right: 0; top: 0; bottom: 0;
+  z-index: 100;
+
+  &__mask {
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+  }
+
+  &__sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: $c-card;
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    padding: 28px 28px 48px;
+    max-height: 80vh;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  &__title {
+    font-size: 32px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__close {
+    font-size: 26px;
+    color: $c-text-sub;
+  }
+
+  &__textarea {
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    height: 160px;
+    font-size: 28px;
+    color: $c-text;
+  }
+
+  &__input {
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-size: 28px;
+    color: $c-text;
+    margin-top: 16px;
+  }
+
+  &__pick {
+    background: #fff;
+    border: 1px dashed $c-border;
+    border-radius: 16px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  &__pick-text {
+    font-size: 26px;
+    color: $c-text-sub;
+  }
+
+  &__preview {
+    width: 100%;
+    height: 100%;
+  }
+
+  &__btn {
+    margin-top: 20px;
+    background: $c-primary;
+    color: #fff;
+    font-size: 30px;
+    font-weight: bold;
+    border-radius: 16px;
+  }
+
+  &__result {
+    margin-top: 20px;
+    background: $c-bg;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 20px;
+    font-size: 26px;
+    color: $c-text;
+    white-space: pre-wrap;
+  }
+}

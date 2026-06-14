@@ -7,9 +7,13 @@ import { request } from '../../api/request';
 import { sortByRecentDesc } from '../../utils/stats';
 import Sensors from '../../components/Sensors';
 import Icon from '../../components/Icon';
+import RecordForm from '../../components/RecordForm';
+import AiPanel from '../../components/AiPanel';
 import './index.scss';
 
 const QUICK = ['浇水', '施肥', '除草', '病虫防治'];
+
+type AiMode = 'chat' | 'diagnose' | null;
 
 export default function Work() {
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -17,6 +21,7 @@ export default function Work() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [aiMode, setAiMode] = useState<AiMode>(null);
 
   useDidShow(() => {
     if (!getToken()) {
@@ -91,10 +96,10 @@ export default function Work() {
         </View>
 
         <ScrollView scrollX className="work__quick">
-          <View className="work__quick-item" onClick={() => comingSoon('AI 助手即将开放')}>
+          <View className="work__quick-item" onClick={() => setAiMode('chat')}>
             <Icon name="sparkles" size={22} /><Text className="work__quick-text">AI 助手</Text>
           </View>
-          <View className="work__quick-item" onClick={() => comingSoon('AI 诊断即将开放')}>
+          <View className="work__quick-item" onClick={() => setAiMode('diagnose')}>
             <Icon name="camera" size={22} /><Text className="work__quick-text">AI 诊断</Text>
           </View>
           <View className="work__quick-item work__quick-item--reserved" onClick={() => comingSoon('区块链定位即将开放')}>
@@ -107,8 +112,10 @@ export default function Work() {
           ))}
         </ScrollView>
 
-        <View id="record-anchor" />
+        <RecordForm batches={batches} onSaved={() => void load()} />
       </View>
+
+      <AiPanel mode={aiMode} onClose={() => setAiMode(null)} />
     </View>
   );
 }

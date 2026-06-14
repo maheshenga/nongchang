@@ -1,0 +1,128 @@
+@import '../../styles/theme.scss';
+
+.rec-form {
+  @include card;
+  padding: 28px 24px;
+
+  &__title {
+    font-size: 30px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__label {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    color: $c-text-sub;
+    margin: 22px 0 12px;
+  }
+
+  &__chips, &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  &__chip, &__tag {
+    padding: 12px 24px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid $c-border;
+    font-size: 24px;
+    color: $c-text;
+
+    &--on {
+      background: $c-primary;
+      color: #fff;
+      border-color: $c-primary;
+    }
+  }
+
+  &__empty {
+    font-size: 24px;
+    color: $c-text-sub;
+  }
+
+  &__scan {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 18px 0;
+    border: 1px dashed $c-border;
+    border-radius: 14px;
+    justify-content: center;
+  }
+
+  &__scan-text { font-size: 26px; color: $c-primary; }
+
+  &__row {
+    display: flex;
+    gap: 20px;
+  }
+
+  &__col { flex: 1; }
+
+  &__input {
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 18px 20px;
+    font-size: 28px;
+    color: $c-text;
+  }
+
+  &__textarea {
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    height: 140px;
+    font-size: 28px;
+    color: $c-text;
+  }
+
+  &__voice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  &__voice-text { font-size: 24px; color: $c-text-sub; }
+
+  &__imgs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  &__img {
+    width: 160px;
+    height: 160px;
+    border-radius: 14px;
+  }
+
+  &__add {
+    width: 160px;
+    height: 160px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid $c-border;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__submit {
+    margin-top: 36px;
+    background: $c-primary;
+    color: #fff;
+    font-size: 30px;
+    font-weight: bold;
+    border-radius: 16px;
+  }
+}
