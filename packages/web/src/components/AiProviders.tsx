@@ -27,8 +27,12 @@ export default function AiProviders() {
 
   const onDelete = async (id: string) => {
     if (!window.confirm('确定删除该 AI 服务商？此操作不可撤销。')) return;
-    await deleteAiProvider(id);
-    await reload();
+    try {
+      await deleteAiProvider(id);
+      await reload();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '删除失败');
+    }
   };
 
   const onTest = async (id: string) => {
@@ -48,7 +52,7 @@ export default function AiProviders() {
     const r = testResults[id];
     if (!r) return null;
     if (r === 'loading') return <span className="text-[10px] text-slate-400">测试中…</span>;
-    if (r.ok) return <span className="text-[10px] text-emerald-600 font-bold">✓ {r.latencyMs ?? '-'}ms</span>;
+    if (r.ok) return <span className="text-[10px] text-emerald-600 font-bold">✓ 连接正常 {r.latencyMs ?? '-'}ms</span>;
     return <span className="text-[10px] text-rose-500 font-bold" title={r.error}>✗ {r.error ?? '失败'}</span>;
   };
 
@@ -121,6 +125,7 @@ export default function AiProviders() {
                         <button onClick={() => setEditing(p)}
                           className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-3 py-1.5 rounded-lg transition-colors font-bold">编辑</button>
                         <button onClick={() => void onTest(p.id)}
+                          disabled={testResults[p.id] === 'loading'}
                           className="text-[10px] text-slate-600 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors font-bold">测试</button>
                         <button onClick={() => void onDelete(p.id)}
                           className="text-[10px] text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-100 px-3 py-1.5 rounded-lg transition-colors font-bold">删除</button>
