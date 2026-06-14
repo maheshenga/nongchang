@@ -9,6 +9,8 @@ export class FarmRecordService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
+    await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
     if (dto.supplyId && dto.supplyAmount != null) {
       // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额。
       const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
