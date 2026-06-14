@@ -22,7 +22,7 @@ export interface UploadedFile {
 export class UploadService {
   constructor(private oss: OssService) {}
 
-  async upload(file: UploadedFile): Promise<UploadResponse> {
+  async upload(file: UploadedFile, tenantId?: string): Promise<UploadResponse> {
     if (!file) throw new BadRequestException('未收到文件');
     const ext = ALLOWED[file.mimetype];
     if (!ext) throw new BadRequestException('仅支持 jpg/png/webp 图片');
@@ -30,7 +30,7 @@ export class UploadService {
 
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const key = `farm-records/${yyyymm}/${randomUUID()}.${ext}`;
-    const url = await this.oss.put(key, file.buffer);
+    const url = await this.oss.put(key, file.buffer, tenantId);
     return { url };
   }
 }
