@@ -9,9 +9,10 @@ export class FieldService {
 
   async create(user: AuthUser, dto: CreateFieldDto) {
     const { lng, lat, ...rest } = dto;
+    const ownerId = await this.scope.resolveOwnerId(this.prisma, user, rest.ownerId);
     const field = await this.prisma.field.create({
       data: { tenantId: user.tenantId, name: rest.name, area: rest.area,
-        ownerId: rest.ownerId, iotDeviceId: rest.iotDeviceId ?? null },
+        ownerId, iotDeviceId: rest.iotDeviceId ?? null },
     });
     await this.prisma.$executeRawUnsafe(
       `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
