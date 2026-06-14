@@ -17,7 +17,7 @@ export class AgentService {
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, name: true, region: true, status: true, createdAt: true,
-        _count: { select: { users: true } },
+        _count: { select: { users: { where: { role: Role.MERCHANT, status: { not: 'pending' } } } } },
       },
     });
     return rows.map(a => ({
@@ -33,14 +33,14 @@ export class AgentService {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.region !== undefined) data.region = dto.region;
-    return this.prisma.agent.update({ where: { id }, data });
+    return this.prisma.agent.update({ where: { id }, data, select: { id: true, name: true, region: true, status: true } });
   }
 
   async setStatus(user: AuthUser, id: string, status: 'active' | 'suspended') {
     if (!id) throw new ForbiddenException('缺少代理商 id');
     const target = await this.prisma.agent.findFirst({ where: { tenantId: user.tenantId, id } });
     if (!target) throw new ForbiddenException('代理商不存在或不在可管理范围');
-    return this.prisma.agent.update({ where: { id }, data: { status } });
+    return this.prisma.agent.update({ where: { id }, data: { status }, select: { id: true, status: true } });
   }
 
   listMerchants(user: AuthUser) {

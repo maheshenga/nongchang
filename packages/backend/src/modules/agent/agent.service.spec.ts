@@ -54,6 +54,7 @@ describe('AgentService 管理能力', () => {
     await svc.update(sysAdmin, 'a1', { name: '新代理', region: '华东' });
     expect(prisma.agent.update).toHaveBeenCalledWith({
       where: { id: 'a1' }, data: { name: '新代理', region: '华东' },
+      select: expect.anything(),
     });
   });
 
