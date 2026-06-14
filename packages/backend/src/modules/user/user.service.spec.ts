@@ -107,6 +107,14 @@ describe('UserService 管理能力(商户管理)', () => {
     expect(r.status).toBe('suspended');
   });
 
+  it('setStatus 对 pending/不在范围的目标抛 Forbidden', async () => {
+    const prisma = makePrisma();
+    prisma.user.findFirst.mockResolvedValue(null);
+    const svc = new UserService(prisma, new ScopeService());
+    await expect(svc.setStatus(sysAdmin, 'mp', 'active'))
+      .rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('create 生成随机初始密码并返回 initialPassword', async () => {
     const prisma = makePrisma();
     prisma.user.create.mockResolvedValue({ id: 'm9', username: 'u9', role: 'merchant', agentId: null, displayName: '商户9' });
