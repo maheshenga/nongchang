@@ -42,12 +42,15 @@ model User {
   wxOpenid     String?  @unique @map("wx_openid")
   displayName  String   @map("display_name")
   status       String   @default("active")
+  groupId      String?  @map("group_id")
   createdAt    DateTime @default(now()) @map("created_at")
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   agent        Agent?   @relation(fields: [agentId], references: [id])
+  group        UserGroup? @relation(fields: [groupId], references: [id])
 
   @@index([tenantId])
   @@index([agentId])
+  @@index([groupId])
   @@map("users")
 }
 
@@ -213,4 +216,39 @@ model OssConfig {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@map("oss_configs")
+}
+
+model IntegrationConfig {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  provider     String   // "wechat" | "xfyun"
+  appId        String?  @map("app_id")
+  secretEnc    String?  @map("secret_enc")      // 微信 Secret 密文
+  apiKeyEnc    String?  @map("api_key_enc")      // 讯飞 APIKey 密文
+  apiSecretEnc String?  @map("api_secret_enc")   // 讯飞 APISecret 密文
+  enabled      Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // 每租户每类型一条 → upsert
+  @@unique([tenantId, provider])
+  // 微信 appId 全局唯一:微信登录时用 appId 反查租户(匿名请求定位锚点)
+  @@unique([appId])
+  @@index([tenantId])
+  @@map("integration_configs")
+}
+
+model UserGroup {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  isDefault   Boolean  @default(false) @map("is_default")
+  // 叠加式权限点字符串数组,叠加在 role 底座之上
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("user_groups")
 }
