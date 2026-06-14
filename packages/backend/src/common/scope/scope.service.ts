@@ -58,6 +58,7 @@ export class ScopeService {
 
   /** 校验目标 ownerId(role=merchant 的 User)在调用方作用域内。 */
   async assertOwnerInScope(prisma: any, user: AuthUser, ownerId: string): Promise<void> {
+    if (!ownerId) throw new ForbiddenException('缺少目标商家 ownerId,拒绝操作');
     const scopeWhere = await this.ownedScopeWhere(prisma, user);
     // ownedScopeWhere 的 ownerId 维度即 User.id;用 AND 数组避免 id 键冲突。
     const { ownerId: ownerConstraint, ...rest } = scopeWhere;

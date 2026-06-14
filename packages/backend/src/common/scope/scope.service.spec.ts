@@ -101,6 +101,32 @@ describe('ScopeService.assertOwnerInScope', () => {
       where: { AND: [{ id: 'mX', role: Role.MERCHANT, tenantId: 't1' }, {}] }, select: { id: true },
     });
   });
+  it('agent:where 用 AND 数组把范围约束映射为 { id: { in: ids } }', async () => {
+    const prisma = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'm1' }),
+        findMany: vi.fn().mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]),
+      },
+    } as any;
+    await new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.AGENT_ADMIN, agentId: 'a1' }), 'm1');
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { AND: [{ id: 'm1', role: Role.MERCHANT, tenantId: 't1' }, { id: { in: ['m1', 'm2'] } }] },
+      select: { id: true },
+    });
+  });
+  it('agent 旗下无 merchant(ids 为空):匹配不到 → 抛 Forbidden', async () => {
+    const prisma = {
+      user: { findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    await expect(new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.AGENT_ADMIN, agentId: 'a1' }), 'mX'))
+      .rejects.toThrow();
+  });
+  it('ownerId 为空字符串:fail-closed 抛错(不查库)', async () => {
+    const prisma = { user: { findFirst: vi.fn(), findMany: vi.fn() } } as any;
+    await expect(new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.SYSTEM_ADMIN, ownerId: null }), ''))
+      .rejects.toThrow();
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
 });
 
 describe('ScopeService.resolveOwnerId', () => {
