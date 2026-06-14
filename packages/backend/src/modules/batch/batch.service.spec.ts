@@ -42,3 +42,41 @@ describe('BatchService.create #23', () => {
     expect(created).toBeUndefined();
   });
 });
+
+describe('BatchService.findByTraceCode #D④', () => {
+  const batchRow = { id: 'b1', tenantId: 't1', ownerId: 'm1', fieldId: 'f1', batchNo: 'PA-1', cropName: '白芍' };
+
+  it('命中:解析溯源码→归属校验通过→返回批次', async () => {
+    const prisma = {
+      traceCode: { findFirst: vi.fn().mockResolvedValue({ id: 'tc1', code: 'C1', batchId: 'b1', tenantId: 't1' }) },
+      batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), findUnique: vi.fn().mockResolvedValue(batchRow) },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    const out = await svc.findByTraceCode(merchant, 'C1');
+    expect(out).toEqual(batchRow);
+    expect(prisma.traceCode.findFirst).toHaveBeenCalledWith({ where: { code: 'C1', tenantId: 't1' } });
+  });
+
+  it('溯源码不存在:抛 NotFound', async () => {
+    const prisma = {
+      traceCode: { findFirst: vi.fn().mockResolvedValue(null) },
+      batch: { findFirst: vi.fn(), findUnique: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await expect(svc.findByTraceCode(merchant, 'nope')).rejects.toThrow();
+    expect(prisma.batch.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('越权:批次不在调用方范围则抛 Forbidden', async () => {
+    const prisma = {
+      traceCode: { findFirst: vi.fn().mockResolvedValue({ id: 'tc1', code: 'C1', batchId: 'bX', tenantId: 't1' }) },
+      batch: { findFirst: vi.fn().mockResolvedValue(null), findUnique: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await expect(svc.findByTraceCode(merchant, 'C1')).rejects.toThrow();
+    expect(prisma.batch.findUnique).not.toHaveBeenCalled();
+  });
+});

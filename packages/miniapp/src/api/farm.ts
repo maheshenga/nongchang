@@ -16,6 +16,11 @@ export function listBatches(): Promise<Batch[]> {
   return request<Batch[]>({ url: '/batches' });
 }
 
+// 扫码回填:按溯源码解析批次(后端校验归属),用于「记一笔」扫码自动选批次。
+export function findBatchByCode(code: string): Promise<Batch> {
+  return request<Batch>({ url: `/batches/by-code/${encodeURIComponent(code)}` });
+}
+
 // 后端 GET /api/farm-records 返回该 owner 全部记录,无 batchId 参数,客户端过滤。
 export async function listFarmRecords(batchId: string): Promise<FarmRecord[]> {
   const all = await request<FarmRecord[]>({ url: '/farm-records' });

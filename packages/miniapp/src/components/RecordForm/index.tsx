@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, Text, Textarea, Input, Button, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { createFarmRecord, uploadImage, listSupplies, type Batch } from '../../api/farm';
+import { createFarmRecord, uploadImage, listSupplies, findBatchByCode, type Batch } from '../../api/farm';
 import { transcribeVoice, normalizeAiError } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
@@ -31,6 +31,8 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [supplyAmount, setSupplyAmount] = useState('');
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  // 扫码定位到、但 props.batches 未包含的批次(范围内补充)。
+  const [scannedBatches, setScannedBatches] = useState<Batch[]>([]);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
 
   // 父组件(工作台)点击快捷模板时回填表单。
@@ -89,14 +91,31 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     }
   }
 
-  const selectedBatch = batches.find((b) => b.id === batchId);
+  // props 批次 + 扫码补充批次,去重。
+  const allBatches = [...batches, ...scannedBatches.filter((s) => !batches.some((b) => b.id === s.id))];
+  const selectedBatch = allBatches.find((b) => b.id === batchId);
 
   async function scan() {
+    let result: string;
     try {
       const r = await Taro.scanCode({});
-      Taro.showToast({ title: `已扫码：${r.result.slice(0, 12)}`, icon: 'none' });
+      result = r.result;
     } catch {
-      // 用户取消扫码，忽略
+      return; // 用户取消扫码,忽略
+    }
+    // 兼容包装上印的溯源页 URL(形如 .../#/trace/CODE),提取末段溯源码。
+    const code = result.includes('/trace/') ? result.split('/trace/').pop()!.split(/[?#]/)[0] : result.trim();
+    if (!code) {
+      Taro.showToast({ title: '无法识别该码', icon: 'none' });
+      return;
+    }
+    try {
+      const batch = await findBatchByCode(code);
+      setScannedBatches((prev) => (prev.some((b) => b.id === batch.id) ? prev : [...prev, batch]));
+      setBatchId(batch.id);
+      Taro.showToast({ title: `已定位批次:${batch.batchNo}`, icon: 'none' });
+    } catch (e: any) {
+      Taro.showToast({ title: e?.message || '未找到对应批次', icon: 'none' });
     }
   }
 
@@ -158,8 +177,8 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
 
       <Text className="rec-form__label">选择批次</Text>
       <View className="rec-form__chips">
-        {batches.length === 0 && <Text className="rec-form__empty">暂无批次</Text>}
-        {batches.map((b) => (
+        {allBatches.length === 0 && <Text className="rec-form__empty">暂无批次</Text>}
+        {allBatches.map((b) => (
           <View
             key={b.id}
             className={`rec-form__chip ${batchId === b.id ? 'rec-form__chip--on' : ''}`}

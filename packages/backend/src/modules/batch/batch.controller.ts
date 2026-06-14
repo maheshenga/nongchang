@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { AuthUser, CreateBatchDto, createBatchSchema, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -16,4 +16,9 @@ export class BatchController {
 
   @Get()
   list(@CurrentUser() user: AuthUser) { return this.svc.list(user); }
+
+  @Get('by-code/:code')
+  byCode(@CurrentUser() user: AuthUser, @Param('code') code: string) {
+    return this.svc.findByTraceCode(user, code);
+  }
 }
