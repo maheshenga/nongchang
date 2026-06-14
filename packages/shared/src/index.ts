@@ -65,7 +65,7 @@ export {
 } from './dto/ai.dto';
 export type {
   CreateAiProviderInput, UpdateAiProviderInput, AiProviderView,
-  AiChatInput, AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse,
+  AiChatInput, AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse,
   OssConfigInput, OssConfigView, AiTestResponse,
 } from './dto/ai.dto';
 

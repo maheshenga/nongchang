@@ -1,10 +1,15 @@
 import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
-import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AuthUser } from '@nongchang/shared';
+import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser } from '@nongchang/shared';
 import { AiProviderService, EnabledAiProvider } from '../ai-provider/ai-provider.service';
+import { IntegrationConfigService } from '../integration/integration-config.service';
+import { transcribeWithXfyun, WebSocketFactory } from './xfyun-transcribe';
 
 @Injectable()
 export class AiService {
-  constructor(private providers: AiProviderService) {}
+  constructor(
+    private providers: AiProviderService,
+    private integrations: IntegrationConfigService,
+  ) {}
 
   async chat(user: AuthUser, message: string): Promise<AiChatResponse> {
     const p = await this.providers.getEnabled(user);
@@ -36,6 +41,19 @@ export class AiService {
     };
     const result = await this.callChatCompletions(p, body);
     return { result };
+  }
+
+  async transcribe(user: AuthUser, audio: Buffer, factory?: WebSocketFactory): Promise<AiTranscribeResponse> {
+    if (!audio || audio.length === 0) throw new BadRequestException('音频为空');
+    const creds = await this.integrations.getEnabledXfyun(user.tenantId);
+    if (!creds) throw new BadRequestException('未配置讯飞语音');
+    try {
+      const text = await transcribeWithXfyun(creds, audio, factory);
+      return { text };
+    } catch {
+      // 不泄露凭证:统一降级
+      throw new BadGatewayException('语音转写失败');
+    }
   }
 
   private async callChatCompletions(p: EnabledAiProvider, body: unknown): Promise<string> {

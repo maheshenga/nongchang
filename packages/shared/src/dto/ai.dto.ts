@@ -41,6 +41,9 @@ export const aiDiagnoseSchema = z.object({
 export type AiDiagnoseInput = z.infer<typeof aiDiagnoseSchema>;
 export type AiDiagnoseResponse = { result: string };
 
+// 语音转写:小程序上传录音 → 后端走讯飞 IAT → 返回识别文字
+export type AiTranscribeResponse = { text: string };
+
 export const ossConfigSchema = z.object({
   region: z.string().min(1),
   bucket: z.string().min(1),
