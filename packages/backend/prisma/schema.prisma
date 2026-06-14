@@ -183,3 +183,34 @@ model SupplyIssue {
   @@index([batchId, supplyId])
   @@map("supply_issues")
 }
+
+model AiProvider {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  baseUrl     String   @map("base_url")
+  apiKeyEnc   String   @map("api_key_enc")
+  textModel   String   @map("text_model")
+  visionModel String?  @map("vision_model")
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_providers")
+}
+
+model OssConfig {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique @map("tenant_id")
+  region          String
+  bucket          String
+  accessKeyId     String   @map("access_key_id")
+  accessKeySecEnc String   @map("access_key_sec_enc")
+  baseUrl         String?  @map("base_url")
+  enabled         Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("oss_configs")
+}
