@@ -53,9 +53,10 @@ export class AiProviderService {
       enabled,
     };
     const row = enabled
-      ? await this.prisma.$transaction(async () => {
-          await this.prisma.aiProvider.updateMany({ where: { tenantId: user.tenantId }, data: { enabled: false } });
-          return (await this.prisma.aiProvider.create({ data })) as AiProviderRow;
+      ? await this.prisma.$transaction(async (tx) => {
+          const db = tx ?? this.prisma;
+          await db.aiProvider.updateMany({ where: { tenantId: user.tenantId }, data: { enabled: false } });
+          return (await db.aiProvider.create({ data })) as AiProviderRow;
         })
       : ((await this.prisma.aiProvider.create({ data })) as AiProviderRow);
     return this.toView(row);
@@ -76,9 +77,10 @@ export class AiProviderService {
     data.enabled = finalEnabled;
 
     const row = finalEnabled
-      ? await this.prisma.$transaction(async () => {
-          await this.prisma.aiProvider.updateMany({ where: { tenantId: user.tenantId }, data: { enabled: false } });
-          return (await this.prisma.aiProvider.update({ where: { id }, data })) as AiProviderRow;
+      ? await this.prisma.$transaction(async (tx) => {
+          const db = tx ?? this.prisma;
+          await db.aiProvider.updateMany({ where: { tenantId: user.tenantId }, data: { enabled: false } });
+          return (await db.aiProvider.update({ where: { id }, data })) as AiProviderRow;
         })
       : ((await this.prisma.aiProvider.update({ where: { id }, data })) as AiProviderRow);
     return this.toView(row);
