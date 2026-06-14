@@ -68,3 +68,13 @@ export type {
   AiChatInput, AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse,
   OssConfigInput, OssConfigView, AiTestResponse,
 } from './dto/ai.dto';
+
+export {
+  integrationProviderSchema, wechatConfigInputSchema, xfyunConfigInputSchema,
+  integrationConfigViewSchema, userGroupInputSchema, userGroupViewSchema,
+  assignUserGroupSchema, wechatLoginSchema,
+} from './dto/integration.dto';
+export type {
+  IntegrationProvider, WechatConfigInput, XfyunConfigInput, IntegrationConfigView,
+  UserGroupInput, UserGroupView, AssignUserGroupInput, WechatLoginDto,
+} from './dto/integration.dto';
