@@ -72,7 +72,7 @@ describe('OssService.put — 租户 DB 配置路径', () => {
 
     expect(getCredentials).toHaveBeenCalledWith('tenant-1');
     expect(ctorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ region: 'oss-cn-hangzhou', bucket: 'tenant-bucket', accessKeyId: 'AK-DB' }),
+      expect.objectContaining({ region: 'oss-cn-hangzhou', bucket: 'tenant-bucket', accessKeyId: 'AK-DB', accessKeySecret: 'SECRET-DB' }),
     );
     expect(putMock).toHaveBeenCalledWith('farm-records/202606/x.jpg', expect.any(Buffer));
     expect(url).toBe('https://tenant-cdn.example.com/farm-records/202606/x.jpg');

@@ -50,4 +50,11 @@ describe('UploadService.upload', () => {
     const key = oss.put.mock.calls[0][0] as string;
     expect(key).toMatch(/^farm-records\/\d{6}\/[0-9a-f-]{36}\.jpg$/);
   });
+
+  it('tenantId 透传给 oss.put', async () => {
+    const oss = { put: vi.fn().mockResolvedValue('http://x/a.jpg') } as any;
+    const svc = new UploadService(oss);
+    await svc.upload(jpg, 'tenant-1');
+    expect(oss.put).toHaveBeenCalledWith(expect.any(String), expect.any(Buffer), 'tenant-1');
+  });
 });
