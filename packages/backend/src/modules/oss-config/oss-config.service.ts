@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import type { AuthUser, OssConfigInput, OssConfigView } from '@nongchang/shared';
+import type { AuthUser, OssConfigInput, OssConfigView, AiTestResponse } from '@nongchang/shared';
+import OSS from 'ali-oss';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 
@@ -102,5 +103,31 @@ export class OssConfigService {
       accessKeySecret: this.enc.decrypt(row.accessKeySecEnc),
       baseUrl: row.baseUrl ?? null,
     };
+  }
+
+  async test(user: AuthUser): Promise<AiTestResponse> {
+    const cred = await this.getCredentials(user.tenantId);
+    if (!cred) return { ok: false, error: '未配置或未启用 OSS' };
+
+    const start = Date.now();
+    try {
+      const client = new OSS({
+        region: cred.region,
+        bucket: cred.bucket,
+        accessKeyId: cred.accessKeyId,
+        accessKeySecret: cred.accessKeySecret,
+        timeout: 10_000,
+      });
+      // 轻量探测连通性，限制只取 1 个对象
+      await Promise.race([
+        client.list({ 'max-keys': 1 }, {}),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
+      ]);
+      const latencyMs = Date.now() - start;
+      return { ok: true, latencyMs };
+    } catch {
+      // 不泄露 accessKeySecret：仅返回通用文案
+      return { ok: false, error: '连接失败' };
+    }
   }
 }

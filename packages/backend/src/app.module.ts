@@ -14,6 +14,10 @@ import { PublicTraceModule } from './modules/public-trace/public-trace.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { AntiFakeModule } from './modules/anti-fake/anti-fake.module';
 import { SupplyModule } from './modules/supply/supply.module';
+import { CryptoModule } from './common/crypto/crypto.module';
+import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
+import { AiModule } from './modules/ai/ai.module';
+import { OssConfigModule } from './modules/oss-config/oss-config.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -36,6 +40,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     UploadModule,
     AntiFakeModule,
     SupplyModule,
+    CryptoModule,
+    AiProviderModule,
+    AiModule,
+    OssConfigModule,
   ],
   providers: [
     ScopeService,

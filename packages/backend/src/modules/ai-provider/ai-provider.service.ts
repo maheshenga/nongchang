@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { AuthUser, CreateAiProviderInput, UpdateAiProviderInput, AiProviderView } from '@nongchang/shared';
+import type { AuthUser, CreateAiProviderInput, UpdateAiProviderInput, AiProviderView, AiTestResponse } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 
@@ -103,5 +103,37 @@ export class AiProviderService {
       textModel: row.textModel,
       visionModel: row.visionModel ?? null,
     };
+  }
+
+  async test(user: AuthUser, id: string): Promise<AiTestResponse> {
+    const row = (await this.prisma.aiProvider.findFirst({ where: { id, tenantId: user.tenantId } })) as AiProviderRow | null;
+    if (!row) throw new NotFoundException('AI 服务商不存在');
+
+    const apiKey = this.enc.decrypt(row.apiKeyEnc);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    const start = Date.now();
+    try {
+      const res = await fetch(`${row.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: row.textModel,
+          messages: [{ role: 'user', content: 'ping' }],
+        }),
+        signal: controller.signal,
+      });
+      const latencyMs = Date.now() - start;
+      if (!res.ok) return { ok: false, error: `连接失败(HTTP ${res.status})` };
+      return { ok: true, latencyMs };
+    } catch {
+      // 不泄露 apiKey：仅返回通用文案
+      return { ok: false, error: '连接失败' };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
