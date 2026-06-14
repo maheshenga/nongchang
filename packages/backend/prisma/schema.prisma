@@ -24,6 +24,7 @@ model Agent {
   name     String
   region   String
   status   String @default("active")
+  createdAt DateTime @default(now())
   tenant   Tenant @relation(fields: [tenantId], references: [id])
   users    User[]
 
