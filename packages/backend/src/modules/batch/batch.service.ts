@@ -7,10 +7,11 @@ import { ScopeService } from '../../common/scope/scope.service';
 export class BatchService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
-  create(user: AuthUser, dto: CreateBatchDto) {
+  async create(user: AuthUser, dto: CreateBatchDto) {
+    const ownerId = await this.scope.resolveOwnerId(this.prisma, user, dto.ownerId);
     return this.prisma.batch.create({
       data: {
-        tenantId: user.tenantId, ownerId: dto.ownerId, fieldId: dto.fieldId,
+        tenantId: user.tenantId, ownerId, fieldId: dto.fieldId,
         batchNo: dto.batchNo, cropName: dto.cropName,
         plantDate: new Date(dto.plantDate), expectedHarvest: new Date(dto.expectedHarvest),
         status: dto.status,
