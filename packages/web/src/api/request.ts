@@ -70,5 +70,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
 
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // 空响应体(如后端返回 null/undefined,Content-Length: 0)安全返回 null,避免 res.json() 抛 "Unexpected end of JSON input"
+  const text = await res.text();
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
 }

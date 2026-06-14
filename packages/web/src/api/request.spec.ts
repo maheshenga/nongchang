@@ -57,6 +57,13 @@ describe('request', () => {
       .rejects.toMatchObject({ status: 400, message: '字段校验失败' });
   });
 
+  it('returns null on empty 200 body (后端返回 null/Content-Length:0)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await request<unknown>('/integration-configs/wechat');
+    expect(data).toBeNull();
+  });
+
   it('concurrent 401s share a single refresh call', async () => {
     let refreshCalls = 0;
     const fetchMock = vi.fn().mockImplementation((url: string) => {
