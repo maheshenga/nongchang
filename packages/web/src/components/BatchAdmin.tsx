@@ -3,9 +3,10 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
-import { listBatches, createBatch, type Batch } from '../api/batches';
+import { listBatches, createBatch, getBatchLifecycle, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
 import { generateCodes } from '../api/trace';
+import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
 
@@ -21,6 +22,7 @@ interface ViewBatch {
   laborCost: number;
   sellPrice: number;
   generated: number;
+  scanTotal: number;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -43,6 +45,7 @@ function toViewBatch(b: Batch): ViewBatch {
     laborCost: b.laborCost,
     sellPrice: b.sellPrice,
     generated: b.codeCount,
+    scanTotal: b.scanTotal,
   };
 }
 
@@ -89,12 +92,22 @@ export default function BatchAdmin() {
   const [showAntiFakeLogo, setShowAntiFakeLogo] = useState<boolean>(true);
   
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  // 排版沙盒:纸张边距 / 标签行间距 / 二维码尺寸 + 三个元素投射开关,实时映射到右侧画布。
+  const [sheetMargin, setSheetMargin] = useState<number>(16);
+  const [sheetGap, setSheetGap] = useState<number>(12);
+  const [sheetQrSize, setSheetQrSize] = useState<number>(80);
+  const [showShield, setShowShield] = useState<boolean>(true);
+  const [showProductName, setShowProductName] = useState<boolean>(true);
+  const [showSerial, setShowSerial] = useState<boolean>(true);
   const [isScanningCompliance, setIsScanningCompliance] = useState(false);
   const [showComplianceReport, setShowComplianceReport] = useState<string | null>(null);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [isExportingReport, setIsExportingReport] = useState<string | null>(null);
 
   const [isExporting, setIsExporting] = useState<string | null>(null);
+
+  // 表头/行复选框选中的批次 id 集合;导出时若有选中则仅导出选中项,否则导出全部。
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [pendingAction, setPendingAction] = useState<{
     type: 'export' | 'generate' | 'report';
@@ -106,38 +119,71 @@ export default function BatchAdmin() {
     onConfirm: () => void;
   } | null>(null);
 
-  const handleScanCompliance = (id: string) => {
+  // 合规性探针:拉取批次真实生命周期数据,按四维度(农事记录/已签发码/溯源事件/扫码量)各 25 分计分。
+  const [complianceData, setComplianceData] = useState<{
+    score: number;
+    checks: { label: string; ok: boolean }[];
+  } | null>(null);
+
+  const handleScanCompliance = async (id: string) => {
     setIsScanningCompliance(true);
-    setTimeout(() => {
-      setIsScanningCompliance(false);
+    try {
+      const lc = await getBatchLifecycle(id);
+      const hasRecords = (lc.farmRecords?.length ?? 0) > 0;
+      const hasCodes = (lc.codeCount ?? 0) > 0;
+      const hasEvents = (lc.traceEvents?.length ?? 0) > 0;
+      const hasScans = (lc.scanTotal ?? 0) > 0;
+      const checks = [
+        { label: '农事记录已归档(种植/施肥/检测留痕)', ok: hasRecords },
+        { label: '防伪溯源码已签发并可供扫验', ok: hasCodes },
+        { label: '溯源链路事件节点完整可追', ok: hasEvents },
+        { label: '终端消费者已产生有效扫码核验', ok: hasScans },
+      ];
+      const score = checks.filter(c => c.ok).length * 25;
+      setComplianceData({ score, checks });
       setShowComplianceReport(id);
-    }, 1500);
+    } catch (e) {
+      showToast(e instanceof Error ? `合规探针失败:${e.message}` : '合规探针失败');
+    } finally {
+      setIsScanningCompliance(false);
+    }
+  };
+
+  // 计算批次毛利率文本,供 CSV 导出复用。
+  const marginText = (input: number, labor: number, sell: number) => {
+    if (sell === 0) return '待分销预测';
+    return `${(((sell - (input + labor)) / sell) * 100).toFixed(1)}%`;
   };
 
   const handleExport = (format: 'pdf' | 'excel') => {
     setExportDropdownOpen(false);
+    const targets = selectedIds.size > 0
+      ? batches.filter(b => selectedIds.has(b.id))
+      : batches;
     setPendingAction({
       type: 'export',
-      title: `导出全体批次数据 (${format.toUpperCase()})`,
-      description: `即将把当前系统中所有 ${batches.length} 个批次的生命周期、财务信息与合规状态导出为 ${format.toUpperCase()} 格式的合规报告。请确认数据范围。`,
-      affectedCount: batches.length,
+      title: `导出批次数据 (${format.toUpperCase()})`,
+      description: selectedIds.size > 0
+        ? `即将导出已选中的 ${targets.length} 个批次的生命周期、财务与合规数据为 ${format.toUpperCase()} 文件。`
+        : `即将导出当前系统中全部 ${targets.length} 个批次的生命周期、财务与合规数据为 ${format.toUpperCase()} 文件。`,
+      affectedCount: targets.length,
       format,
       onConfirm: () => {
         setPendingAction(null);
-        setIsExporting(format);
-        setTimeout(() => {
-            setIsExporting(null);
-            const data = batches.map(b => `${b.id},${b.type},${b.date},${b.stage}`).join('\n');
-            const blob = new Blob([data], { type: format === 'pdf' ? 'application/pdf' : 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `溯源批次清单明细_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'csv' : 'pdf'}`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }, 2000);
-      }
+        if (format === 'excel') {
+          const header = ['批次号', '品种', '种植日期', '地块', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
+          const rows = targets.map(b => [
+            b.code, b.type, b.date, b.house, b.stage,
+            b.generated, b.scanTotal, b.inputCost, b.laborCost, b.sellPrice,
+            marginText(b.inputCost, b.laborCost, b.sellPrice),
+          ]);
+          downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
+          showToast(`已导出 ${targets.length} 个批次的 Excel 数据报表`);
+        } else {
+          // PDF:走浏览器打印(用户可另存为 PDF)。
+          window.print();
+        }
+      },
     });
   };
 
@@ -149,32 +195,49 @@ export default function BatchAdmin() {
   };
 
   const handleExportBatchReport = (id: string) => {
+    const batch = batches.find(b => b.id === id);
     setPendingAction({
       type: 'report',
-      title: `一键生成溯源报告 -> ${id}`,
-      description: `系统将整合该批次的农事记录、检测报告及仓储物流数据，通过后端模板引擎为您输出高品质 PDF 溯源合规手册。`,
+      title: `一键生成溯源报告 -> ${batch?.code ?? id}`,
+      description: `系统将拉取该批次的农事记录与溯源链路明细,汇总导出为可用 Excel 打开的 CSV 溯源报告。`,
       affectedCount: 1,
       batchId: id,
-      onConfirm: () => {
+      onConfirm: async () => {
         setPendingAction(null);
         setIsExportingReport(id);
-        setTimeout(() => {
-            const batch = batches.find(b => b.id === id);
-            const content = `溯源报告 \n批次: ${id}\n品种: ${batch?.type}\n阶段: ${batch?.stage}\n日期: ${batch?.date}\n\n该批次数据由全息溯源系统自动整合生成，保证真实有效。`;
-            const blob = new Blob([content], { type: 'application/pdf' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Traceability_Report_${id}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            setIsExportingReport(null);
-            showToast(`批次 ${id} 的溯源合规手册 (PDF) 已成功生成并下载！`);
-        }, 2500);
-      }
+        try {
+          const lc = await getBatchLifecycle(id);
+          const rows: Array<Array<unknown>> = [];
+          rows.push(['溯源报告', batch?.code ?? id]);
+          rows.push(['品种', batch?.type ?? '']);
+          rows.push(['种植日期', batch?.date ?? '']);
+          rows.push(['当前阶段', batch?.stage ?? '']);
+          rows.push(['已签发码数', lc.codeCount ?? 0]);
+          rows.push(['累计扫码', lc.scanTotal ?? 0]);
+          rows.push([]);
+          rows.push(['农事记录明细']);
+          rows.push(['时间', '动作', '备注']);
+          for (const r of lc.farmRecords ?? []) {
+            const rec = r as Record<string, unknown>;
+            const when = rec.recordedAt ? String(rec.recordedAt).slice(0, 10) : '';
+            rows.push([when, rec.action ?? '', rec.note ?? '']);
+          }
+          rows.push([]);
+          rows.push(['溯源链路事件']);
+          rows.push(['时间', '事件', '描述']);
+          for (const ev of lc.traceEvents ?? []) {
+            const e = ev as Record<string, unknown>;
+            const when = e.occurredAt ? String(e.occurredAt).slice(0, 10) : '';
+            rows.push([when, e.eventType ?? '', e.description ?? '']);
+          }
+          downloadCSV(`溯源报告_${batch?.code ?? id}.csv`, rows);
+          showToast(`批次 ${batch?.code ?? id} 的溯源报告已生成并下载`);
+        } catch (e) {
+          showToast(e instanceof Error ? `生成报告失败:${e.message}` : '生成报告失败');
+        } finally {
+          setIsExportingReport(null);
+        }
+      },
     });
   };
 
@@ -228,7 +291,7 @@ export default function BatchAdmin() {
               className={`flex items-center gap-2 border bg-white hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isExporting ? 'opacity-50 cursor-not-allowed border-slate-200' : 'border-slate-200'} focus:ring-4 focus:ring-slate-100`}
             >
               {isExporting ? <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
-              {isExporting ? `正在安全生成 ${isExporting.toUpperCase()}...` : '数据报表下发'}
+              {isExporting ? `正在安全生成 ${isExporting.toUpperCase()}...` : selectedIds.size > 0 ? `数据报表下发 (已选 ${selectedIds.size})` : '数据报表下发'}
             </button>
             {exportDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20 animate-in fade-in slide-in-from-top-2">
@@ -355,7 +418,20 @@ export default function BatchAdmin() {
           <thead className="text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 sticky top-0 border-b border-slate-200 z-10 backdrop-blur-sm">
             <tr>
               <th className="px-6 py-4 font-bold border-l-2 border-transparent w-12">
-                 <input type="checkbox" className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500" />
+                 <input
+                   type="checkbox"
+                   className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                   checked={filteredData.length > 0 && filteredData.every(b => selectedIds.has(b.id))}
+                   ref={el => { if (el) el.indeterminate = filteredData.some(b => selectedIds.has(b.id)) && !filteredData.every(b => selectedIds.has(b.id)); }}
+                   onChange={(e) => {
+                     setSelectedIds(prev => {
+                       const next = new Set(prev);
+                       if (e.target.checked) filteredData.forEach(b => next.add(b.id));
+                       else filteredData.forEach(b => next.delete(b.id));
+                       return next;
+                     });
+                   }}
+                 />
               </th>
               <th className="px-6 py-4 font-bold">繁育序列及批次号</th>
               <th className="px-6 py-4 font-bold">关联名贵珍品系</th>
@@ -377,7 +453,19 @@ export default function BatchAdmin() {
                  className="hover:bg-emerald-50/20 transition-colors group"
               >
                 <td className="px-6 py-4 border-l-2 border-transparent group-hover:border-emerald-500">
-                    <input type="checkbox" className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500" />
+                    <input
+                      type="checkbox"
+                      className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                      checked={selectedIds.has(b.id)}
+                      onChange={(e) => {
+                        setSelectedIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(b.id);
+                          else next.delete(b.id);
+                          return next;
+                        });
+                      }}
+                    />
                 </td>
                 <td className="px-6 py-4 font-mono font-bold text-slate-700 text-sm tracking-wide">{b.id}</td>
                 <td className="px-6 py-4">
@@ -652,25 +740,25 @@ export default function BatchAdmin() {
                            <div>
                               <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
                                 <span>纸张边距 (X/Y)</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">16px</span>
+                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetMargin}px</span>
                               </label>
-                              <input type="range" min="0" max="40" defaultValue="16" className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
+                              <input type="range" min="0" max="40" value={sheetMargin} onChange={(e) => setSheetMargin(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
                            </div>
-                           
+
                            <div>
                               <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
                                 <span>标签行间距 (Gap)</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">12px</span>
+                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetGap}px</span>
                               </label>
-                              <input type="range" min="0" max="32" defaultValue="12" className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
+                              <input type="range" min="0" max="32" value={sheetGap} onChange={(e) => setSheetGap(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
                            </div>
 
                            <div>
                               <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
                                 <span>防伪溯源码尺寸比</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">80px</span>
+                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetQrSize}px</span>
                               </label>
-                              <input type="range" min="40" max="120" defaultValue="80" className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
+                              <input type="range" min="40" max="120" value={sheetQrSize} onChange={(e) => setSheetQrSize(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
                            </div>
                         </div>
                      </div>
@@ -683,15 +771,15 @@ export default function BatchAdmin() {
                         </h4>
                         <div className="space-y-3">
                            <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
+                              <input type="checkbox" checked={showShield} onChange={(e) => setShowShield(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
                               渲染机构防伪盾牌标志
                            </label>
                            <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
+                              <input type="checkbox" checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
                               映射关联商品品名
                            </label>
                            <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
+                              <input type="checkbox" checked={showSerial} onChange={(e) => setShowSerial(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
                               挂载动态流水号序列
                            </label>
                         </div>
@@ -732,16 +820,16 @@ export default function BatchAdmin() {
                         </div>
                      </div>
                      
-                     <div className="bg-white shadow-2xl ring-1 ring-slate-900/5 min-h-[842px] w-[595px] p-8 grid grid-cols-3 gap-4 pb-20 transform transition-transform hover:scale-[1.02] duration-500 ease-out origin-top border-t-8 border-indigo-600">
+                     <div style={{ padding: `${sheetMargin}px`, gap: `${sheetGap}px` }} className="print-sheet bg-white shadow-2xl ring-1 ring-slate-900/5 min-h-[842px] w-[595px] grid grid-cols-3 pb-20 transform transition-transform hover:scale-[1.02] duration-500 ease-out origin-top border-t-8 border-indigo-600">
                         {Array.from({length: Math.min(21, qrAmount)}).map((_, i) => (
                            <div key={i} className="border-2 border-dashed border-slate-300 rounded p-2 flex flex-col items-center justify-center relative hover:bg-slate-50 transition-colors cursor-pointer group">
                               <div className="absolute top-1 left-1 flex items-center gap-1">
-                                 <CheckCircle className="w-3 h-3 text-emerald-500" />
+                                 {showShield && <CheckCircle className="w-3 h-3 text-emerald-500" />}
                               </div>
-                              <div className="absolute top-1 right-1 text-[8px] text-slate-400 font-mono font-bold">{i+1}/{qrAmount}</div>
-                              <QRCodeSVG value={traceUrl(codeForIndex(i))} size={80} level="M" />
-                              <div className="mt-2 text-[10px] font-bold text-slate-800 text-center">{activeBatch?.type}</div>
-                              <div className="text-[8px] text-slate-500 font-mono">{codeForIndex(i)}</div>
+                              {showSerial && <div className="absolute top-1 right-1 text-[8px] text-slate-400 font-mono font-bold">{i+1}/{qrAmount}</div>}
+                              <QRCodeSVG value={traceUrl(codeForIndex(i))} size={sheetQrSize} level="M" />
+                              {showProductName && <div className="mt-2 text-[10px] font-bold text-slate-800 text-center">{activeBatch?.type}</div>}
+                              {showSerial && <div className="text-[8px] text-slate-500 font-mono">{codeForIndex(i)}</div>}
                               <div className="absolute inset-0 border-2 border-indigo-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"></div>
                            </div>
                         ))}
@@ -786,57 +874,48 @@ export default function BatchAdmin() {
                </div>
                <div className="p-8">
                   <div className="flex items-center gap-6 mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-inner">
-                     <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center border-4 border-white shadow-md relative shrink-0">
-                        <div className="absolute inset-0 border-4 border-emerald-500 rounded-full opacity-20 animate-ping"></div>
-                        <span className="text-2xl font-black">95<span className="text-sm">%</span></span>
+                     <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 border-white shadow-md relative shrink-0 ${(complianceData?.score ?? 0) >= 75 ? 'bg-emerald-100 text-emerald-600' : (complianceData?.score ?? 0) >= 50 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
+                        <div className={`absolute inset-0 border-4 rounded-full opacity-20 animate-ping ${(complianceData?.score ?? 0) >= 75 ? 'border-emerald-500' : (complianceData?.score ?? 0) >= 50 ? 'border-amber-500' : 'border-rose-500'}`}></div>
+                        <span className="text-2xl font-black">{complianceData?.score ?? 0}<span className="text-sm">%</span></span>
                      </div>
                      <div>
                         <div className="text-base font-black text-slate-800 mb-1.5 flex items-center gap-2">
-                          接近完全符合法定食品/花卉安全溯源配置规范
-                          <CheckCircle className="w-4 h-4 text-emerald-500" />
+                          {(complianceData?.score ?? 0) >= 75
+                            ? '接近完全符合法定花卉安全溯源配置规范'
+                            : (complianceData?.score ?? 0) >= 50
+                            ? '基本符合,仍有关键溯源要素待补齐'
+                            : '溯源配置严重不足,需尽快补全'}
+                          {(complianceData?.score ?? 0) >= 75 && <CheckCircle className="w-4 h-4 text-emerald-500" />}
                         </div>
                         <div className="text-xs text-slate-500 font-medium">当前挂载抽检批次号流水: <span className="font-mono font-bold bg-white text-slate-700 px-2 py-0.5 rounded shadow-sm border border-slate-200 ml-1">{showComplianceReport}</span></div>
                      </div>
                   </div>
-                  
+
                   <div className="space-y-3 relative before:absolute before:inset-y-4 before:left-[1.375rem] before:w-0.5 before:bg-slate-100">
-                     <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl relative z-10 shadow-sm hover:border-emerald-200 transition-colors">
-                        <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
-                           <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-emerald-200">
-                             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                           </div>
-                           国家安全预警与定期抽检质检报告集成
-                        </div>
-                        <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">已挂载</span>
-                     </div>
-                     <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl relative z-10 shadow-sm hover:border-emerald-200 transition-colors">
-                        <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
-                           <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-emerald-200">
-                             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                           </div>
-                           原产地地块确权及种植主体企业责任人映射
-                        </div>
-                        <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">已挂载</span>
-                     </div>
-                     <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl relative z-10 shadow-sm shadow-amber-100/50 overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
-                        <div className="flex items-center gap-3 text-sm text-amber-900 font-black">
-                           <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-amber-200">
-                             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                           </div>
-                           待补充：特定时段化肥农药用药残留合规抽查单据
-                        </div>
-                        <button className="text-[10px] uppercase tracking-widest font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded shadow-sm transition-all shadow-amber-500/20 hover:scale-105 active:scale-95">立刻处置填报</button>
-                     </div>
-                     <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl relative z-10 shadow-sm hover:border-emerald-200 transition-colors">
-                        <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
-                           <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-emerald-200">
-                             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                           </div>
-                           防异地串货地理坐标围栏与终端扫描地效验水印
-                        </div>
-                        <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">已挂载</span>
-                     </div>
+                     {(complianceData?.checks ?? []).map((c, i) => (
+                       c.ok ? (
+                         <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl relative z-10 shadow-sm hover:border-emerald-200 transition-colors">
+                            <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
+                               <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-emerald-200">
+                                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                               </div>
+                               {c.label}
+                            </div>
+                            <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">已挂载</span>
+                         </div>
+                       ) : (
+                         <div key={i} className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl relative z-10 shadow-sm shadow-amber-100/50 overflow-hidden group">
+                            <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                            <div className="flex items-center gap-3 text-sm text-amber-900 font-black">
+                               <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-amber-200">
+                                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                               </div>
+                               待补充:{c.label}
+                            </div>
+                            <span className="text-[10px] uppercase tracking-widest text-amber-700 font-bold bg-amber-100 px-2 py-1 rounded">未达标</span>
+                         </div>
+                       )
+                     ))}
                   </div>
                   
                   <div className="mt-8 flex justify-end">
