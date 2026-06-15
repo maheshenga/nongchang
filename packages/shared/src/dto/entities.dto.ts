@@ -38,6 +38,36 @@ export const createBatchSchema = z.object({
 });
 export type CreateBatchDto = z.infer<typeof createBatchSchema>;
 
+export const updateBatchStatusSchema = z.object({
+  status: z.enum([BatchStatus.PLANTING, BatchStatus.GROWING, BatchStatus.HARVESTED, BatchStatus.DISTRIBUTED]),
+});
+export type UpdateBatchStatusDto = z.infer<typeof updateBatchStatusSchema>;
+
+export const updateBatchCostSchema = z.object({
+  laborCost: z.number().min(0).optional(),
+  sellPrice: z.number().min(0).optional(),
+}).refine(d => d.laborCost != null || d.sellPrice != null, {
+  message: 'laborCost 与 sellPrice 至少提供一项', path: ['laborCost'],
+});
+export type UpdateBatchCostDto = z.infer<typeof updateBatchCostSchema>;
+
+// 批次列表项:基础批次 + 运行时聚合(防伪码数/累计扫码/投入成本)。
+export type BatchListItem = {
+  id: string; tenantId: string; ownerId: string; fieldId: string;
+  batchNo: string; cropName: string; plantDate: string; expectedHarvest: string;
+  status: string; laborCost: number; sellPrice: number; createdAt: string;
+  codeCount: number; scanTotal: number; inputCost: number;
+};
+
+// 单批次全生命周期下钻聚合。
+export type BatchLifecycle = {
+  batch: BatchListItem;
+  farmRecords: Array<Record<string, unknown>>;
+  traceEvents: Array<Record<string, unknown>>;
+  codeCount: number; scanTotal: number;
+  recentScans: Array<{ scannedAt: string }>;
+};
+
 export const createFarmRecordSchema = z.object({
   batchId: z.string().uuid(),
   fieldId: z.string().uuid(),
