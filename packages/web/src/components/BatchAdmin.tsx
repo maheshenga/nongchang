@@ -343,7 +343,7 @@ export default function BatchAdmin() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 overflow-hidden relative">
+    <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg overflow-visible relative">
       <div className="p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between bg-slate-50/50 shrink-0 gap-4">
         <div>
           <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
@@ -435,7 +435,7 @@ export default function BatchAdmin() {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-0 min-h-0 bg-slate-50/30">
+      <div className="p-0 bg-slate-50/30">
         {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
         {error && (
           <div className="p-8 text-center text-rose-500 text-sm">
