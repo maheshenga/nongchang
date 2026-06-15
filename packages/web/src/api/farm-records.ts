@@ -1,4 +1,4 @@
-import type { CreateFarmRecordDto, PaginatedFarmRecords } from '@nongchang/shared';
+import type { CreateFarmRecordDto, PaginatedFarmRecords, UpdateFarmRecordStatusDto } from '@nongchang/shared';
 import { request } from './request';
 
 export interface FarmRecord {
@@ -14,11 +14,14 @@ export interface FarmRecord {
   location: string | null;
   recordedAt: string;
   source: string;
+  status: string;
   createdAt: string;
 }
 
 export interface ListFarmRecordsQuery {
   batchId?: string;
+  action?: string;
+  status?: 'pending' | 'completed';
   page?: number;
   pageSize?: number;
 }
@@ -27,6 +30,8 @@ export interface ListFarmRecordsQuery {
 export function listFarmRecordsPaged(query: ListFarmRecordsQuery = {}): Promise<PaginatedFarmRecords<FarmRecord>> {
   const params = new URLSearchParams();
   if (query.batchId) params.set('batchId', query.batchId);
+  if (query.action) params.set('action', query.action);
+  if (query.status) params.set('status', query.status);
   if (query.page != null) params.set('page', String(query.page));
   if (query.pageSize != null) params.set('pageSize', String(query.pageSize));
   const qs = params.toString();
@@ -41,4 +46,9 @@ export async function listFarmRecords(query: ListFarmRecordsQuery = {}): Promise
 
 export function createFarmRecord(dto: CreateFarmRecordDto): Promise<FarmRecord> {
   return request<FarmRecord>('/farm-records', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+// 状态流转:待执行 → 已完成。PATCH /farm-records/:id/status。
+export function updateFarmRecordStatus(id: string, status: UpdateFarmRecordStatusDto['status']): Promise<FarmRecord> {
+  return request<FarmRecord>(`/farm-records/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 }

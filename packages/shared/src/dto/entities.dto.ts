@@ -77,6 +77,7 @@ export const createFarmRecordSchema = z.object({
   location: z.string().max(128).optional(),
   recordedAt: z.string().datetime(),
   source: z.enum([FarmRecordSource.WEB, FarmRecordSource.MINIAPP, FarmRecordSource.VOICE]),
+  status: z.enum(['pending', 'completed']).optional(),
   supplyId: z.string().uuid().optional(),
   supplyAmount: z.number().positive().optional(),
 }).refine(d => (d.supplyId == null) === (d.supplyAmount == null), {
@@ -85,13 +86,22 @@ export const createFarmRecordSchema = z.object({
 });
 export type CreateFarmRecordDto = z.infer<typeof createFarmRecordSchema>;
 
-// 农事记录列表查询:可选按批次过滤 + 分页。query string 全是字符串,用 coerce 转数字。
+// 农事记录列表查询:可选按批次过滤 + action 模糊 + status 精确 + 分页。
+// query string 全是字符串,用 coerce 转数字。
 export const farmRecordQuerySchema = z.object({
   batchId: z.string().uuid().optional(),
+  action: z.string().max(128).optional(),
+  status: z.enum(['pending', 'completed']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type FarmRecordQueryDto = z.infer<typeof farmRecordQuerySchema>;
+
+// 农事记录状态流转:待执行 → 已完成。
+export const updateFarmRecordStatusSchema = z.object({
+  status: z.enum(['pending', 'completed']),
+});
+export type UpdateFarmRecordStatusDto = z.infer<typeof updateFarmRecordStatusSchema>;
 
 export type PaginatedFarmRecords<T> = { items: T[]; total: number; page: number; pageSize: number };
 
@@ -162,3 +172,50 @@ export const agentListItemSchema = z.object({
   merchantCount: z.number(),
 });
 export type AgentListItem = z.infer<typeof agentListItemSchema>;
+
+// ---- 标准物候模型(CropPhenology):每作物各生长阶段的预设累计天数 ----
+export const createCropPhenologySchema = z.object({
+  cropName: z.string().min(1).max(128),
+  stage: z.string().min(1).max(64),
+  expectedDays: z.number().int().min(0),
+  sortOrder: z.number().int().min(0).default(0),
+});
+export type CreateCropPhenologyDto = z.infer<typeof createCropPhenologySchema>;
+
+export const updateCropPhenologySchema = z.object({
+  stage: z.string().min(1).max(64).optional(),
+  expectedDays: z.number().int().min(0).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+}).refine(d => d.stage != null || d.expectedDays != null || d.sortOrder != null, {
+  message: '至少提供一项更新字段', path: ['stage'],
+});
+export type UpdateCropPhenologyDto = z.infer<typeof updateCropPhenologySchema>;
+
+export const cropPhenologyItemSchema = z.object({
+  id: z.string(),
+  tenantId: z.string(),
+  cropName: z.string(),
+  stage: z.string(),
+  expectedDays: z.number(),
+  sortOrder: z.number(),
+  createdAt: z.string(),
+});
+export type CropPhenologyItem = z.infer<typeof cropPhenologyItemSchema>;
+
+// ---- 偏离预警:批次实际进度对比标准物候模型 ----
+// elapsedDays:自种植起累计天数;expectedTotalDays:当前批次状态对应阶段的标准累计天数。
+// deviationDays = elapsedDays - expectedTotalDays;为正且超阈值=滞后(预警)。
+export type BatchDeviation = {
+  batchId: string;
+  batchNo: string;
+  cropName: string;
+  status: string;
+  plantDate: string;
+  elapsedDays: number;
+  expectedTotalDays: number | null;
+  deviationDays: number | null;
+  // 物候模型缺失(该作物未配置)时为 true,无法计算偏离。
+  noBaseline: boolean;
+  // deviationDays 超过阈值(滞后),需要预警。
+  alert: boolean;
+};

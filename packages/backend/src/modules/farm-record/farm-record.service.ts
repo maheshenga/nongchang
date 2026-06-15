@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto } from '@nongchang/shared';
+import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto, UpdateFarmRecordStatusDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 
@@ -38,13 +38,14 @@ export class FarmRecordService {
         detail: (dto.detail ?? undefined) as Prisma.InputJsonValue | undefined,
         images: (dto.images ?? undefined) as Prisma.InputJsonValue | undefined,
         location: dto.location ?? null, recordedAt: new Date(dto.recordedAt), source: dto.source,
+        status: dto.status ?? 'completed',
         supplyId: dto.supplyId ?? undefined, supplyAmount: dto.supplyAmount ?? undefined,
       },
     });
   }
 
   async list(user: AuthUser, query: FarmRecordQueryDto) {
-    const { batchId, page, pageSize } = query;
+    const { batchId, action, status, page, pageSize } = query;
     const where: Prisma.FarmRecordWhereInput = { tenantId: user.tenantId };
     if (batchId) {
       // 指定批次:校验归属在调用方作用域内,fail-closed。
@@ -56,6 +57,9 @@ export class FarmRecordService {
       const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
       where.batchId = { in: batches.map(b => b.id) };
     }
+    // action 模糊匹配(不区分大小写),status 精确匹配。
+    if (action) where.action = { contains: action, mode: 'insensitive' };
+    if (status) where.status = status;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.farmRecord.findMany({
         where, orderBy: { recordedAt: 'desc' },
@@ -77,5 +81,15 @@ export class FarmRecordService {
     const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
     const withOwner = items.map(r => ({ ...r, ownerName: nameMap.get(batchOwner.get(r.batchId) as string) ?? null }));
     return { items: withOwner, total, page, pageSize };
+  }
+
+  // 状态流转:校验记录归属(经其 batchId 在调用方作用域内),再更新 status。
+  async updateStatus(user: AuthUser, id: string, dto: UpdateFarmRecordStatusDto) {
+    const rec = await this.prisma.farmRecord.findFirst({
+      where: { id, tenantId: user.tenantId }, select: { id: true, batchId: true },
+    });
+    if (!rec) throw new ForbiddenException('农事记录不在可操作范围内');
+    await this.scope.assertInScope(this.prisma, user, 'batch', rec.batchId);
+    return this.prisma.farmRecord.update({ where: { id }, data: { status: dto.status } });
   }
 }

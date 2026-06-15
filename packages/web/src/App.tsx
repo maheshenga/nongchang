@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck } from 'lucide-react';
+import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
@@ -22,6 +22,8 @@ const IntegrationSettings = lazy(() => import('./components/IntegrationSettings'
 const UserGroups = lazy(() => import('./components/UserGroups'));
 const PendingUsers = lazy(() => import('./components/PendingUsers'));
 const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
+const AiAssistant = lazy(() => import('./components/AiAssistant'));
+const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
 
 const ViewSkeleton = () => (
   <div className="animate-pulse space-y-6 w-full h-full p-4">
@@ -46,7 +48,7 @@ export default function App() {
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology'>('dashboard');
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
@@ -107,6 +109,7 @@ export default function App() {
       items: [
         { id: 'fields', label: '数字地块与 IoT', icon: Map },
         { id: 'records', label: '农事实操记录', icon: FileSpreadsheet },
+        { id: 'phenology', label: '标准物候模型', icon: Sprout },
         { id: 'batches', label: '全域批次追踪', icon: Layers },
         { id: 'warehouse', label: '智能仓储管理', icon: Database },
         { id: 'logistics', label: '现代物流与系统', icon: Truck },
@@ -116,6 +119,7 @@ export default function App() {
       category: '移动端与系统',
       items: [
         { id: 'mobile', label: '种植与检测小程序', icon: Smartphone },
+        { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
         { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
         { id: 'aiOssSettings', label: 'AI 与存储设置', icon: SettingsIcon },
         { id: 'integrations', label: '第三方集成', icon: Plug },
@@ -167,6 +171,7 @@ export default function App() {
       category: '系统',
       items: [
         { id: 'mobile', label: '商家移动端', icon: Smartphone },
+        { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
         { id: 'settings', label: '商家设置', icon: SettingsIcon },
       ]
     }
@@ -330,6 +335,8 @@ export default function App() {
               {mountedTabs.has('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
               {mountedTabs.has('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
               {mountedTabs.has('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
+              {mountedTabs.has('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
+              {mountedTabs.has('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
             </div>
           </Suspense>
         </section>

@@ -12,6 +12,7 @@ export {
   updateBatchCostSchema,
   createFarmRecordSchema,
   farmRecordQuerySchema,
+  updateFarmRecordStatusSchema,
   createTraceEventSchema,
   updateUserSchema,
   setUserStatusSchema,
@@ -20,6 +21,9 @@ export {
   updateAgentSchema,
   setAgentStatusSchema,
   agentListItemSchema,
+  createCropPhenologySchema,
+  updateCropPhenologySchema,
+  cropPhenologyItemSchema,
 } from './dto/entities.dto';
 export type {
   CreateUserDto,
@@ -32,6 +36,7 @@ export type {
   BatchLifecycle,
   CreateFarmRecordDto,
   FarmRecordQueryDto,
+  UpdateFarmRecordStatusDto,
   PaginatedFarmRecords,
   CreateTraceEventDto,
   UpdateUserDto,
@@ -41,6 +46,10 @@ export type {
   UpdateAgentDto,
   SetAgentStatusInput,
   AgentListItem,
+  CreateCropPhenologyDto,
+  UpdateCropPhenologyDto,
+  CropPhenologyItem,
+  BatchDeviation,
 } from './dto/entities.dto';
 
 export {

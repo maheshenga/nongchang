@@ -105,6 +105,7 @@ model FarmRecord {
   location   String?
   recordedAt DateTime @map("recorded_at")
   source     String
+  status     String   @default("completed")
   supplyId     String?  @map("supply_id")
   supplyAmount Float?   @map("supply_amount")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -112,6 +113,21 @@ model FarmRecord {
   @@index([tenantId])
   @@index([batchId])
   @@map("farm_records")
+}
+
+// 作物标准物候模型:每作物各生长阶段的预设累计天数,用于偏离预警对比基准。
+model CropPhenology {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  cropName    String   @map("crop_name")
+  stage       String
+  expectedDays Int     @map("expected_days")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, cropName])
+  @@map("crop_phenologies")
 }
 
 model TraceCode {
