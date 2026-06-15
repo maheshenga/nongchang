@@ -53,7 +53,7 @@ export type UpdateBatchCostDto = z.infer<typeof updateBatchCostSchema>;
 
 // 批次列表项:基础批次 + 运行时聚合(防伪码数/累计扫码/投入成本)。
 export type BatchListItem = {
-  id: string; tenantId: string; ownerId: string; fieldId: string;
+  id: string; tenantId: string; ownerId: string; ownerName: string | null; fieldId: string;
   batchNo: string; cropName: string; plantDate: string; expectedHarvest: string;
   status: string; laborCost: number; sellPrice: number; createdAt: string;
   codeCount: number; scanTotal: number; inputCost: number;

@@ -7,6 +7,7 @@ export interface FarmRecord {
   batchId: string;
   fieldId: string;
   operatorId: string;
+  ownerName: string | null;
   action: string;
   detail: Record<string, unknown> | null;
   images: string[] | null;

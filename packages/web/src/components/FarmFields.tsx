@@ -83,6 +83,7 @@ export default function FarmFields() {
                  <div className="flex justify-between items-start mb-1">
                     <span className="font-bold text-sm text-slate-800">{field.name}</span>
                  </div>
+                 <div className="text-xs text-slate-500 mt-1">归属商户: <span className="font-bold text-slate-700">{field.ownerName ?? '—'}</span></div>
                  <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
                     <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">{field.area} 亩</span>
                  </div>
@@ -152,7 +153,7 @@ export default function FarmFields() {
                               </li>
                               <li className="flex justify-between text-xs">
                                 <span className="text-slate-500">负责人</span>
-                                <span className="font-bold text-slate-700">—</span>
+                                <span className="font-bold text-slate-700">{activeField?.ownerName ?? '—'}</span>
                               </li>
                               <li className="flex justify-between text-xs">
                                 <span className="text-slate-500">规划面积</span>

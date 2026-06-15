@@ -5,6 +5,7 @@ export interface Field {
   id: string;
   tenantId: string;
   ownerId: string;
+  ownerName: string | null;
   name: string;
   area: number;
   iotDeviceId: string | null;

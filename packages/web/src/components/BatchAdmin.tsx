@@ -15,6 +15,7 @@ interface ViewBatch {
   type: string;
   date: string;
   house: string;
+  owner: string;
   stage: string;
   color: string;
   inputCost: number;
@@ -48,6 +49,7 @@ function toViewBatch(b: Batch): ViewBatch {
     type: b.cropName,
     date: b.plantDate.slice(0, 10),
     house: b.fieldId.slice(0, 8),
+    owner: b.ownerName ?? '—',
     stage: b.status,
     color: STATUS_COLOR[b.status] ?? 'slate',
     inputCost: b.inputCost,
@@ -202,9 +204,9 @@ export default function BatchAdmin() {
       onConfirm: () => {
         setPendingAction(null);
         if (format === 'excel') {
-          const header = ['批次号', '品种', '种植日期', '地块', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
+          const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
           const rows = targets.map(b => [
-            b.code, b.type, b.date, b.house, b.stage,
+            b.code, b.type, b.date, b.house, b.owner, b.stage,
             b.generated, b.scanTotal, b.inputCost, b.laborCost, b.sellPrice,
             marginText(b.inputCost, b.laborCost, b.sellPrice),
           ]);
@@ -490,6 +492,7 @@ export default function BatchAdmin() {
               <th className="px-6 py-4 font-bold">关联名贵珍品系</th>
               <th className="px-6 py-4 font-bold">创设时间档</th>
               <th className="px-6 py-4 font-bold">繁育基站/温室环境</th>
+              <th className="px-6 py-4 font-bold">归属商户</th>
               <th className="px-6 py-4 font-bold text-right">已签发防伪总数</th>
               <th className="px-6 py-4 font-bold">生长阶段监控</th>
               <th className="px-6 py-4 font-bold text-right">安全流转管理</th>
@@ -525,6 +528,7 @@ export default function BatchAdmin() {
                 </td>
                 <td className="px-6 py-4 text-slate-500 text-xs font-mono">{b.date}</td>
                 <td className="px-6 py-4 text-slate-600 font-medium text-sm">{b.house}</td>
+                <td className="px-6 py-4 text-slate-700 font-bold text-sm">{b.owner}</td>
                 <td className="px-6 py-4 font-mono font-black text-emerald-600 text-right text-base">{b.generated} <span className="text-xs text-slate-400 font-normal">张</span></td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 bg-${b.color}-50 text-${b.color}-700 border border-${b.color}-200/60 rounded-md text-xs font-bold inline-flex items-center gap-1.5 shadow-sm`}>

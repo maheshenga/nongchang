@@ -12,6 +12,7 @@ type RecordTask = {
   type: string;
   desc: string;
   person: string;
+  owner: string;
   status: 'pending' | 'completed';
   material?: string;
   labor?: number;
@@ -26,6 +27,7 @@ function toRecordTask(r: FarmRecord): RecordTask {
     type: r.action,
     desc: typeof detail.desc === 'string' ? detail.desc : r.action,
     person: r.operatorId.slice(0, 8),
+    owner: r.ownerName ?? '—',
     status: 'completed',
     material: typeof detail.material === 'string' ? detail.material : undefined,
     labor: typeof detail.labor === 'number' ? detail.labor : undefined,
@@ -306,6 +308,7 @@ export default function FarmRecords() {
                   </span>
                   <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{task.batch}</span>
                 </div>
+                <div className="mb-2 text-[10px] text-slate-500">归属商户: <span className="font-bold text-slate-700">{task.owner}</span></div>
                 <p className="text-xs text-slate-600 mb-2">{task.desc}</p>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mb-3 bg-slate-50 p-1.5 rounded">
                   <span className="font-medium">物资消耗: {task.material || '无'}</span>
@@ -346,6 +349,7 @@ export default function FarmRecords() {
                   </span>
                   <span className="text-xs font-mono font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">{task.batch}</span>
                 </div>
+                <div className="mb-2 text-[10px] text-slate-500">归属商户: <span className="font-bold text-slate-700">{task.owner}</span></div>
                 <p className="text-xs text-slate-500 mb-2">{task.desc}</p>
                 <div className="flex items-center gap-3 text-[10px] text-slate-500 mb-3 bg-white p-1.5 rounded border border-slate-100">
                   <span className="font-medium">物资消耗: {task.material || '无'}</span>

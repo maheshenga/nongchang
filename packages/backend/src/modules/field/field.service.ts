@@ -23,6 +23,13 @@ export class FieldService {
 
   async list(user: AuthUser) {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
-    return this.prisma.field.findMany({ where });
+    const fields = await this.prisma.field.findMany({ where });
+    if (fields.length === 0) return [];
+    const ownerIds = [...new Set(fields.map((f: any) => f.ownerId))];
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
+    });
+    const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
+    return fields.map((f: any) => ({ ...f, ownerName: nameMap.get(f.ownerId) ?? null }));
   }
 }

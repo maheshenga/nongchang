@@ -26,15 +26,19 @@ export class BatchService {
     const batches = await this.prisma.batch.findMany({ where });
     if (batches.length === 0) return [];
     const ids = batches.map((b: any) => b.id);
-    const [codeAgg, issues] = await Promise.all([
+    const ownerIds = [...new Set(batches.map((b: any) => b.ownerId))];
+    const [codeAgg, issues, owners] = await Promise.all([
       this.prisma.traceCode.groupBy({ by: ['batchId'], where: { batchId: { in: ids } }, _count: { _all: true }, _sum: { scanCount: true } }),
       this.prisma.supplyIssue.findMany({ where: { batchId: { in: ids } }, select: { batchId: true, amount: true, unitPrice: true } }),
+      this.prisma.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, displayName: true } }),
     ]);
     const codeMap = new Map(codeAgg.map((c: any) => [c.batchId, { codeCount: c._count._all, scanTotal: c._sum.scanCount ?? 0 }]));
+    const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
     const costMap = new Map<string, number>();
     for (const it of issues as any[]) costMap.set(it.batchId, (costMap.get(it.batchId) ?? 0) + it.amount * it.unitPrice);
     return batches.map((b: any) => ({
       ...b,
+      ownerName: nameMap.get(b.ownerId) ?? null,
       codeCount: codeMap.get(b.id)?.codeCount ?? 0,
       scanTotal: codeMap.get(b.id)?.scanTotal ?? 0,
       inputCost: costMap.get(b.id) ?? 0,

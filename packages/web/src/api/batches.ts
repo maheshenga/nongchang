@@ -5,6 +5,7 @@ export interface Batch {
   id: string;
   tenantId: string;
   ownerId: string;
+  ownerName: string | null;
   fieldId: string;
   batchNo: string;
   cropName: string;

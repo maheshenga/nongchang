@@ -63,6 +63,19 @@ export class FarmRecordService {
       }),
       this.prisma.farmRecord.count({ where }),
     ]);
-    return { items, total, page, pageSize };
+    if (items.length === 0) return { items, total, page, pageSize };
+    // 农事记录无 ownerId,经 batchId → Batch.ownerId → User.displayName 两跳解析归属商户名。
+    const batchIds = [...new Set(items.map(r => r.batchId))];
+    const batches = await this.prisma.batch.findMany({
+      where: { id: { in: batchIds } }, select: { id: true, ownerId: true },
+    });
+    const batchOwner = new Map(batches.map((b: any) => [b.id, b.ownerId]));
+    const ownerIds = [...new Set(batches.map((b: any) => b.ownerId))];
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
+    });
+    const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
+    const withOwner = items.map(r => ({ ...r, ownerName: nameMap.get(batchOwner.get(r.batchId) as string) ?? null }));
+    return { items: withOwner, total, page, pageSize };
   }
 }
