@@ -55,6 +55,16 @@ export const createFarmRecordSchema = z.object({
 });
 export type CreateFarmRecordDto = z.infer<typeof createFarmRecordSchema>;
 
+// 农事记录列表查询:可选按批次过滤 + 分页。query string 全是字符串,用 coerce 转数字。
+export const farmRecordQuerySchema = z.object({
+  batchId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type FarmRecordQueryDto = z.infer<typeof farmRecordQuerySchema>;
+
+export type PaginatedFarmRecords<T> = { items: T[]; total: number; page: number; pageSize: number };
+
 export const createTraceEventSchema = z.object({
   batchId: z.string().uuid(),
   type: z.enum([TraceEventType.ORIGIN, TraceEventType.FARM, TraceEventType.HARVEST, TraceEventType.WAREHOUSE, TraceEventType.LOGISTICS, TraceEventType.RETAIL]),

@@ -62,3 +62,58 @@ describe('FarmRecordService.create 核销', () => {
     expect(h.created).toBeUndefined();
   });
 });
+
+describe('FarmRecordService.list 分页/过滤/排序', () => {
+  function makeListService(overrides: any = {}) {
+    let findManyArgs: any;
+    let countArgs: any;
+    const prisma = {
+      batch: {
+        findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }),
+        findMany: async () => overrides.ownedBatches ?? [{ id: 'b1' }, { id: 'b2' }],
+      },
+      user: { findMany: async () => [] },
+      farmRecord: {
+        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1' }]; },
+        count: async (a: any) => { countArgs = a; return overrides.total ?? 1; },
+      },
+      $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+    };
+    return {
+      svc: new FarmRecordService(prisma as any, new ScopeService()),
+      get findManyArgs() { return findManyArgs; },
+      get countArgs() { return countArgs; },
+    };
+  }
+
+  it('默认查询:作用域内全部批次,按 recordedAt desc,skip/take 默认分页', async () => {
+    const h = makeListService();
+    const r = await h.svc.list(merchant, { page: 1, pageSize: 20 });
+    expect(r).toMatchObject({ total: 1, page: 1, pageSize: 20 });
+    expect(r.items).toHaveLength(1);
+    expect(h.findManyArgs.where.batchId).toEqual({ in: ['b1', 'b2'] });
+    expect(h.findManyArgs.orderBy).toEqual({ recordedAt: 'desc' });
+    expect(h.findManyArgs.skip).toBe(0);
+    expect(h.findManyArgs.take).toBe(20);
+  });
+
+  it('分页第2页:skip=(page-1)*pageSize', async () => {
+    const h = makeListService();
+    await h.svc.list(merchant, { page: 3, pageSize: 10 });
+    expect(h.findManyArgs.skip).toBe(20);
+    expect(h.findManyArgs.take).toBe(10);
+  });
+
+  it('指定 batchId:校验归属后精确过滤该批次', async () => {
+    const h = makeListService();
+    await h.svc.list(merchant, { batchId: BATCH, page: 1, pageSize: 20 });
+    expect(h.findManyArgs.where.batchId).toBe(BATCH);
+  });
+
+  it('指定 batchId 不在作用域内:抛 Forbidden(不查列表)', async () => {
+    const h = makeListService({ batchScoped: false });
+    await expect(h.svc.list(merchant, { batchId: BATCH, page: 1, pageSize: 20 }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.findManyArgs).toBeUndefined();
+  });
+});
