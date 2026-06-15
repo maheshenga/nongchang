@@ -64,6 +64,20 @@ export class BatchService {
     });
   }
 
+  /** 删除批次:已签发溯源码的批次禁止删除(防伪完整性),否则连带删除农事记录后删除批次。 */
+  async remove(user: AuthUser, id: string) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', id);
+    const codeCount = await this.prisma.traceCode.count({ where: { batchId: id } });
+    if (codeCount > 0) {
+      throw new BadRequestException('该批次已签发溯源码,不可删除');
+    }
+    await this.prisma.$transaction([
+      this.prisma.farmRecord.deleteMany({ where: { batchId: id } }),
+      this.prisma.batch.delete({ where: { id } }),
+    ]);
+    return { id };
+  }
+
   /** 生命周期下钻:批次本体 + 农事 + 溯源事件 + 码统计 + 近期扫码。 */
   async lifecycle(user: AuthUser, id: string) {
     await this.scope.assertInScope(this.prisma, user, 'batch', id);

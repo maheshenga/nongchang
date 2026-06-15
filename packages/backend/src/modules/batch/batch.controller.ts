@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { AuthUser, CreateBatchDto, createBatchSchema, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -43,5 +43,10 @@ export class BatchController {
     @Body(new ZodValidationPipe(updateBatchCostSchema)) dto: UpdateBatchCostDto,
   ) {
     return this.svc.updateCost(user, id, dto);
+  }
+
+  @Delete(':id') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.remove(user, id);
   }
 }

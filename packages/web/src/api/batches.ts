@@ -38,3 +38,7 @@ export function updateBatchCost(id: string, dto: { laborCost?: number; sellPrice
 export function getBatchLifecycle(id: string): Promise<BatchLifecycle> {
   return request<BatchLifecycle>(`/batches/${id}/lifecycle`);
 }
+
+export function deleteBatch(id: string): Promise<{ id: string }> {
+  return request<{ id: string }>(`/batches/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

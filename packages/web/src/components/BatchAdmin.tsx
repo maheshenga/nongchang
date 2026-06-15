@@ -1,8 +1,8 @@
-import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine } from 'lucide-react';
+import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
-import { listBatches, createBatch, getBatchLifecycle, type Batch } from '../api/batches';
+import { listBatches, createBatch, getBatchLifecycle, deleteBatch, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
 import { generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
@@ -101,6 +101,9 @@ export default function BatchAdmin() {
   const [codesBatchId, setCodesBatchId] = useState<string | null>(null);
   const [codesList, setCodesList] = useState<TraceCode[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
+  // 删除确认:存待删批次 {id, label};确认后调用 deleteBatch。
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [showProfitModal, setShowProfitModal] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
@@ -342,6 +345,23 @@ export default function BatchAdmin() {
     }
   };
 
+  // 删除批次:成功后刷新列表;已签发码的批次后端会拒绝。
+  const handleDeleteBatch = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteBatch(deleteTarget.id);
+      setSelectedIds(prev => { const n = new Set(prev); n.delete(deleteTarget.id); return n; });
+      showToast(`批次 ${deleteTarget.label} 已删除`);
+      setDeleteTarget(null);
+      void reload();
+    } catch (e) {
+      showToast(e instanceof Error ? `删除失败:${e.message}` : '删除失败');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg overflow-visible relative">
       <div className="p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between bg-slate-50/50 shrink-0 gap-4">
@@ -507,7 +527,8 @@ export default function BatchAdmin() {
                     {STATUS_LABEL[b.stage] ?? b.stage}
                   </span>
                 </td>
-                <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                <td className="px-6 py-4 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <div className="grid grid-cols-4 gap-2 w-[440px] ml-auto">
                   <button
                     onClick={() => openDetail(b.id)}
                     className="flex items-center justify-center gap-1.5 text-slate-600 hover:text-white hover:bg-slate-700 font-bold text-[10px] uppercase tracking-wider bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-all shadow-sm"
@@ -558,6 +579,14 @@ export default function BatchAdmin() {
                     {isExportingReport === b.id ? <Loader2 className="w-3 h-3 animate-spin text-white" /> : <FileText className="w-3 h-3" />}
                     极速出具报告
                   </button>
+                  <button
+                    onClick={() => setDeleteTarget({ id: b.id, label: b.code })}
+                    className="flex items-center justify-center gap-1.5 text-rose-600 hover:text-white hover:bg-rose-600 font-bold text-[10px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    删除批次
+                  </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1255,6 +1284,31 @@ export default function BatchAdmin() {
           </div>
         );
       })()}
+
+      {/* 删除批次确认弹窗 */}
+      {deleteTarget && (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-start gap-4">
+              <div className="p-3 rounded-full shrink-0 bg-rose-100 text-rose-600"><Trash2 className="w-6 h-6" /></div>
+              <div>
+                <h3 className="font-black text-slate-800 text-lg mb-1">删除批次</h3>
+                <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                  即将删除批次 <span className="font-mono font-bold text-rose-600">{deleteTarget.label}</span> 及其关联农事记录,此操作不可恢复。
+                  <br />已签发溯源码的批次不可删除。
+                </p>
+              </div>
+            </div>
+            <div className="p-5 flex justify-end gap-3 bg-white">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50">取消</button>
+              <button onClick={() => void handleDeleteBatch()} disabled={deleting} className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2">
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deleting ? '删除中…' : '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Toast Notification */}
       {toastMessage && (
