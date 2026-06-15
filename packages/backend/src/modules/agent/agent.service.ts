@@ -49,6 +49,9 @@ export class AgentService {
       if (!user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
       where.agentId = user.agentId;
     }
-    return this.prisma.user.findMany({ where });
+    return this.prisma.user.findMany({
+      where,
+      select: { id: true, username: true, role: true, agentId: true, displayName: true },
+    });
   }
 }

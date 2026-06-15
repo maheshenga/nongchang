@@ -13,6 +13,7 @@ describe('AgentService.listMerchants', () => {
     await svc.listMerchants(ctx({}));
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { tenantId: 't1', role: Role.MERCHANT, agentId: 'a1' },
+      select: { id: true, username: true, role: true, agentId: true, displayName: true },
     });
   });
   it('system_admin 查询全租户 merchant(不限 agentId)', async () => {
@@ -21,6 +22,7 @@ describe('AgentService.listMerchants', () => {
     await svc.listMerchants(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }));
     expect(prisma.user.findMany).toHaveBeenCalledWith({
       where: { tenantId: 't1', role: Role.MERCHANT },
+      select: { id: true, username: true, role: true, agentId: true, displayName: true },
     });
   });
   it('agent_admin 缺 agentId:抛 Forbidden(不查库)', () => {
