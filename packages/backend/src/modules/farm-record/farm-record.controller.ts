@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { AuthUser, CreateFarmRecordDto, createFarmRecordSchema, Role } from '@nongchang/shared';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { AuthUser, CreateFarmRecordDto, createFarmRecordSchema, FarmRecordQueryDto, farmRecordQuerySchema, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -15,5 +15,10 @@ export class FarmRecordController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser) { return this.svc.list(user); }
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query(new ZodValidationPipe(farmRecordQuerySchema)) query: FarmRecordQueryDto,
+  ) {
+    return this.svc.list(user, query);
+  }
 }

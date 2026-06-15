@@ -21,10 +21,12 @@ export function findBatchByCode(code: string): Promise<Batch> {
   return request<Batch>({ url: `/batches/by-code/${encodeURIComponent(code)}` });
 }
 
-// 后端 GET /api/farm-records 返回该 owner 全部记录,无 batchId 参数,客户端过滤。
+// 后端 GET /api/farm-records 支持 batchId 服务端过滤 + 分页,返回 {items,total,page,pageSize}。
 export async function listFarmRecords(batchId: string): Promise<FarmRecord[]> {
-  const all = await request<FarmRecord[]>({ url: '/farm-records' });
-  return all.filter(r => r.batchId === batchId);
+  const res = await request<{ items: FarmRecord[]; total: number; page: number; pageSize: number }>({
+    url: `/farm-records?batchId=${encodeURIComponent(batchId)}&pageSize=100`,
+  });
+  return res.items;
 }
 
 export function createFarmRecord(dto: CreateFarmRecordDto): Promise<FarmRecord> {

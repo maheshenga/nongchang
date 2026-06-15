@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { AuthUser, CreateBatchDto, createBatchSchema, Role } from '@nongchang/shared';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { AuthUser, CreateBatchDto, createBatchSchema, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -20,5 +20,28 @@ export class BatchController {
   @Get('by-code/:code')
   byCode(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.svc.findByTraceCode(user, code);
+  }
+
+  @Get(':id/lifecycle')
+  lifecycle(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.lifecycle(user, id);
+  }
+
+  @Patch(':id/status') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  updateStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateBatchStatusSchema)) dto: UpdateBatchStatusDto,
+  ) {
+    return this.svc.updateStatus(user, id, dto.status);
+  }
+
+  @Patch(':id') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  updateCost(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateBatchCostSchema)) dto: UpdateBatchCostDto,
+  ) {
+    return this.svc.updateCost(user, id, dto);
   }
 }

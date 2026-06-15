@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AuthUser, CreateFarmRecordDto } from '@nongchang/shared';
+import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 
@@ -43,11 +43,26 @@ export class FarmRecordService {
     });
   }
 
-  async list(user: AuthUser) {
-    const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
-    const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
-    return this.prisma.farmRecord.findMany({
-      where: { tenantId: user.tenantId, batchId: { in: batches.map(b => b.id) } },
-    });
+  async list(user: AuthUser, query: FarmRecordQueryDto) {
+    const { batchId, page, pageSize } = query;
+    const where: Prisma.FarmRecordWhereInput = { tenantId: user.tenantId };
+    if (batchId) {
+      // 指定批次:校验归属在调用方作用域内,fail-closed。
+      await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
+      where.batchId = batchId;
+    } else {
+      // 未指定:限定在调用方作用域内的全部批次。
+      const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+      const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
+      where.batchId = { in: batches.map(b => b.id) };
+    }
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.farmRecord.findMany({
+        where, orderBy: { recordedAt: 'desc' },
+        skip: (page - 1) * pageSize, take: pageSize,
+      }),
+      this.prisma.farmRecord.count({ where }),
+    ]);
+    return { items, total, page, pageSize };
   }
 }

@@ -22,6 +22,7 @@ export type CreateSupplyInput = z.infer<typeof createSupplyInputSchema>;
 export const issueSupplyInputSchema = z.object({
   batchId: z.string().uuid(),
   amount: z.number().positive(),
+  unitPrice: z.number().min(0).optional(),
 });
 export type IssueSupplyInput = z.infer<typeof issueSupplyInputSchema>;
 

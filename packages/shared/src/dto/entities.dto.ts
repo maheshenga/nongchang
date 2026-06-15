@@ -3,7 +3,7 @@ import { BatchStatus, FarmRecordSource, Role, TraceEventType } from '../enums';
 
 export const createUserSchema = z.object({
   username: z.string().min(3).max(64),
-  password: z.string().min(6).max(128),
+  password: z.string().min(6).max(128).optional(),
   role: z.enum([Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT]),
   agentId: z.string().uuid().nullable().optional(),
   phone: z.string().max(20).optional(),
@@ -38,6 +38,36 @@ export const createBatchSchema = z.object({
 });
 export type CreateBatchDto = z.infer<typeof createBatchSchema>;
 
+export const updateBatchStatusSchema = z.object({
+  status: z.enum([BatchStatus.PLANTING, BatchStatus.GROWING, BatchStatus.HARVESTED, BatchStatus.DISTRIBUTED]),
+});
+export type UpdateBatchStatusDto = z.infer<typeof updateBatchStatusSchema>;
+
+export const updateBatchCostSchema = z.object({
+  laborCost: z.number().min(0).optional(),
+  sellPrice: z.number().min(0).optional(),
+}).refine(d => d.laborCost != null || d.sellPrice != null, {
+  message: 'laborCost 与 sellPrice 至少提供一项', path: ['laborCost'],
+});
+export type UpdateBatchCostDto = z.infer<typeof updateBatchCostSchema>;
+
+// 批次列表项:基础批次 + 运行时聚合(防伪码数/累计扫码/投入成本)。
+export type BatchListItem = {
+  id: string; tenantId: string; ownerId: string; fieldId: string;
+  batchNo: string; cropName: string; plantDate: string; expectedHarvest: string;
+  status: string; laborCost: number; sellPrice: number; createdAt: string;
+  codeCount: number; scanTotal: number; inputCost: number;
+};
+
+// 单批次全生命周期下钻聚合。
+export type BatchLifecycle = {
+  batch: BatchListItem;
+  farmRecords: Array<Record<string, unknown>>;
+  traceEvents: Array<Record<string, unknown>>;
+  codeCount: number; scanTotal: number;
+  recentScans: Array<{ scannedAt: string }>;
+};
+
 export const createFarmRecordSchema = z.object({
   batchId: z.string().uuid(),
   fieldId: z.string().uuid(),
@@ -55,6 +85,16 @@ export const createFarmRecordSchema = z.object({
 });
 export type CreateFarmRecordDto = z.infer<typeof createFarmRecordSchema>;
 
+// 农事记录列表查询:可选按批次过滤 + 分页。query string 全是字符串,用 coerce 转数字。
+export const farmRecordQuerySchema = z.object({
+  batchId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type FarmRecordQueryDto = z.infer<typeof farmRecordQuerySchema>;
+
+export type PaginatedFarmRecords<T> = { items: T[]; total: number; page: number; pageSize: number };
+
 export const createTraceEventSchema = z.object({
   batchId: z.string().uuid(),
   type: z.enum([TraceEventType.ORIGIN, TraceEventType.FARM, TraceEventType.HARVEST, TraceEventType.WAREHOUSE, TraceEventType.LOGISTICS, TraceEventType.RETAIL]),
@@ -65,3 +105,60 @@ export const createTraceEventSchema = z.object({
   payload: z.record(z.unknown()).optional(),
 });
 export type CreateTraceEventDto = z.infer<typeof createTraceEventSchema>;
+
+// ---- 商户管理(User)更新/状态/列表视图 ----
+export const updateUserSchema = z.object({
+  displayName: z.string().min(2).max(64).optional(),
+  phone: z.string().max(20).nullable().optional(),
+});
+export type UpdateUserDto = z.infer<typeof updateUserSchema>;
+
+export const setUserStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+});
+export type SetUserStatusInput = z.infer<typeof setUserStatusSchema>;
+
+export const merchantListItemSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  displayName: z.string(),
+  phone: z.string().nullable(),
+  status: z.string(),
+  agentId: z.string().nullable(),
+  createdAt: z.string(),
+  fieldCount: z.number(),
+  totalArea: z.number(),
+});
+export type MerchantListItem = z.infer<typeof merchantListItemSchema>;
+
+export const createUserResponseSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  role: z.string(),
+  agentId: z.string().nullable(),
+  displayName: z.string(),
+  initialPassword: z.string(),
+});
+export type CreateUserResponse = z.infer<typeof createUserResponseSchema>;
+
+// ---- 代理商管理(Agent)更新/状态/列表视图 ----
+export const updateAgentSchema = z.object({
+  name: z.string().min(1).max(128).optional(),
+  region: z.string().max(64).optional(),
+});
+export type UpdateAgentDto = z.infer<typeof updateAgentSchema>;
+
+export const setAgentStatusSchema = z.object({
+  status: z.enum(['active', 'suspended']),
+});
+export type SetAgentStatusInput = z.infer<typeof setAgentStatusSchema>;
+
+export const agentListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  region: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+  merchantCount: z.number(),
+});
+export type AgentListItem = z.infer<typeof agentListItemSchema>;

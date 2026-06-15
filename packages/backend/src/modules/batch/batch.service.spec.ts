@@ -80,3 +80,153 @@ describe('BatchService.findByTraceCode #D④', () => {
     expect(prisma.batch.findUnique).not.toHaveBeenCalled();
   });
 });
+
+describe('BatchService.list 聚合 #全域批次追踪', () => {
+  it('聚合 codeCount/scanTotal/inputCost', async () => {
+    const prisma = {
+      batch: { findMany: vi.fn().mockResolvedValue([
+        { id: 'b1', tenantId: 't1', ownerId: 'm1', status: 'planting', laborCost: 0, sellPrice: 0 },
+      ]) },
+      traceCode: { groupBy: vi.fn().mockResolvedValue([
+        { batchId: 'b1', _count: { _all: 3 }, _sum: { scanCount: 12 } },
+      ]) },
+      supplyIssue: { findMany: vi.fn().mockResolvedValue([
+        { batchId: 'b1', amount: 10, unitPrice: 5 },
+        { batchId: 'b1', amount: 2, unitPrice: 3 },
+      ]) },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    const out = await svc.list(merchant);
+    expect(out).toHaveLength(1);
+    expect(out[0].codeCount).toBe(3);
+    expect(out[0].scanTotal).toBe(12);
+    expect(out[0].inputCost).toBe(56);
+  });
+
+  it('空集:不调用 groupBy/supplyIssue.findMany,返回 []', async () => {
+    const prisma = {
+      batch: { findMany: vi.fn().mockResolvedValue([]) },
+      traceCode: { groupBy: vi.fn() },
+      supplyIssue: { findMany: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    const out = await svc.list(merchant);
+    expect(out).toEqual([]);
+    expect(prisma.traceCode.groupBy).not.toHaveBeenCalled();
+    expect(prisma.supplyIssue.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('BatchService.updateStatus #全域批次追踪', () => {
+  function makeStatus(curStatus: string, inScope = true) {
+    const prisma = {
+      batch: {
+        findFirst: vi.fn().mockResolvedValue(inScope ? { id: 'b1' } : null),
+        findUnique: vi.fn().mockResolvedValue({ id: 'b1', status: curStatus }),
+        update: vi.fn().mockResolvedValue({ id: 'b1' }),
+      },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    return { prisma, svc: new BatchService(prisma, new ScopeService()) };
+  }
+
+  it('合法前进 PLANTING→GROWING', async () => {
+    const { prisma, svc } = makeStatus(BatchStatus.PLANTING);
+    await svc.updateStatus(merchant, 'b1', BatchStatus.GROWING);
+    expect(prisma.batch.update).toHaveBeenCalled();
+  });
+
+  it('跳级前进 PLANTING→HARVESTED 合法', async () => {
+    const { prisma, svc } = makeStatus(BatchStatus.PLANTING);
+    await svc.updateStatus(merchant, 'b1', BatchStatus.HARVESTED);
+    expect(prisma.batch.update).toHaveBeenCalled();
+  });
+
+  it('回退 HARVESTED→GROWING 非法', async () => {
+    const { prisma, svc } = makeStatus(BatchStatus.HARVESTED);
+    await expect(svc.updateStatus(merchant, 'b1', BatchStatus.GROWING)).rejects.toThrow();
+    expect(prisma.batch.update).not.toHaveBeenCalled();
+  });
+
+  it('同态 GROWING→GROWING 非法', async () => {
+    const { prisma, svc } = makeStatus(BatchStatus.GROWING);
+    await expect(svc.updateStatus(merchant, 'b1', BatchStatus.GROWING)).rejects.toThrow();
+    expect(prisma.batch.update).not.toHaveBeenCalled();
+  });
+
+  it('越权 → Forbidden 且不 update', async () => {
+    const { prisma, svc } = makeStatus(BatchStatus.PLANTING, false);
+    await expect(svc.updateStatus(merchant, 'b1', BatchStatus.GROWING)).rejects.toThrow();
+    expect(prisma.batch.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('BatchService.updateCost #全域批次追踪', () => {
+  it('正常:update data 含 laborCost/sellPrice', async () => {
+    const prisma = {
+      batch: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'b1' }),
+        update: vi.fn().mockResolvedValue({ id: 'b1' }),
+      },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await svc.updateCost(merchant, 'b1', { laborCost: 100, sellPrice: 200 });
+    expect(prisma.batch.update).toHaveBeenCalled();
+    const arg = prisma.batch.update.mock.calls[0][0];
+    expect(arg.data.laborCost).toBe(100);
+    expect(arg.data.sellPrice).toBe(200);
+  });
+
+  it('越权 → Forbidden', async () => {
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await expect(svc.updateCost(merchant, 'b1', { laborCost: 1 })).rejects.toThrow();
+    expect(prisma.batch.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('BatchService.lifecycle #全域批次追踪', () => {
+  it('正常:返回 batch/farmRecords/traceEvents/codeCount/scanTotal/recentScans', async () => {
+    const prisma = {
+      batch: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'b1' }),
+        findUnique: vi.fn().mockResolvedValue({ id: 'b1', status: 'growing' }),
+      },
+      farmRecord: { findMany: vi.fn().mockResolvedValue([{ id: 'fr1' }]) },
+      traceEvent: { findMany: vi.fn().mockResolvedValue([{ id: 'te1' }]) },
+      traceCode: { aggregate: vi.fn().mockResolvedValue({ _count: { _all: 5 }, _sum: { scanCount: 20 } }) },
+      traceScan: { findMany: vi.fn().mockResolvedValue([{ scannedAt: new Date('2026-06-01') }]) },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    const out = await svc.lifecycle(merchant, 'b1');
+    expect(out.batch).toEqual({ id: 'b1', status: 'growing' });
+    expect(out.farmRecords).toHaveLength(1);
+    expect(out.traceEvents).toHaveLength(1);
+    expect(out.codeCount).toBe(5);
+    expect(out.scanTotal).toBe(20);
+    expect(out.recentScans).toHaveLength(1);
+    expect(Object.keys(out.recentScans[0])).toEqual(['scannedAt']);
+    expect(prisma.traceScan.findMany.mock.calls[0][0].select).toEqual({ scannedAt: true });
+  });
+
+  it('越权 → Forbidden 且不查 farmRecord', async () => {
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue(null), findUnique: vi.fn() },
+      farmRecord: { findMany: vi.fn() },
+      traceEvent: { findMany: vi.fn() },
+      traceCode: { aggregate: vi.fn() },
+      traceScan: { findMany: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await expect(svc.lifecycle(merchant, 'b1')).rejects.toThrow();
+    expect(prisma.farmRecord.findMany).not.toHaveBeenCalled();
+  });
+});

@@ -13,7 +13,7 @@ const FarmRecords = lazy(() => import('./components/FarmRecords'));
 const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));
 const FarmFields = lazy(() => import('./components/FarmFields'));
 const Settings = lazy(() => import('./components/Settings'));
-const AgentPlatform = lazy(() => import('./components/AgentPlatform'));
+const AgentManagement = lazy(() => import('./components/AgentManagement'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
 const MerchantManagement = lazy(() => import('./components/MerchantManagement'));
 const AiProviders = lazy(() => import('./components/AiProviders'));
@@ -315,7 +315,7 @@ export default function App() {
             <div className="h-full relative">
               {mountedTabs.has('dashboard') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'dashboard' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Dashboard /></div>}
               {mountedTabs.has('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
-              {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentPlatform /></div>}
+              {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
               {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin /></div>}
               {mountedTabs.has('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
               {mountedTabs.has('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}

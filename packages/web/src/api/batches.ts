@@ -1,4 +1,4 @@
-import type { CreateBatchDto } from '@nongchang/shared';
+import type { CreateBatchDto, BatchLifecycle } from '@nongchang/shared';
 import { request } from './request';
 
 export interface Batch {
@@ -12,6 +12,11 @@ export interface Batch {
   expectedHarvest: string;
   status: string;
   createdAt: string;
+  laborCost: number;
+  sellPrice: number;
+  codeCount: number;
+  scanTotal: number;
+  inputCost: number;
 }
 
 export function listBatches(): Promise<Batch[]> {
@@ -20,4 +25,16 @@ export function listBatches(): Promise<Batch[]> {
 
 export function createBatch(dto: CreateBatchDto): Promise<Batch> {
   return request<Batch>('/batches', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export function updateBatchStatus(id: string, status: string): Promise<Batch> {
+  return request<Batch>(`/batches/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+}
+
+export function updateBatchCost(id: string, dto: { laborCost?: number; sellPrice?: number }): Promise<Batch> {
+  return request<Batch>(`/batches/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
+}
+
+export function getBatchLifecycle(id: string): Promise<BatchLifecycle> {
+  return request<BatchLifecycle>(`/batches/${id}/lifecycle`);
 }

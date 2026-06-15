@@ -24,6 +24,7 @@ model Agent {
   name     String
   region   String
   status   String @default("active")
+  createdAt DateTime @default(now())
   tenant   Tenant @relation(fields: [tenantId], references: [id])
   users    User[]
 
@@ -83,6 +84,8 @@ model Batch {
   plantDate       DateTime @map("plant_date")
   expectedHarvest DateTime @map("expected_harvest")
   status          String
+  laborCost       Float    @default(0) @map("labor_cost")
+  sellPrice       Float    @default(0) @map("sell_price")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -121,6 +124,7 @@ model TraceCode {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
+  @@index([batchId])
   @@map("trace_codes")
 }
 
@@ -195,6 +199,7 @@ model SupplyIssue {
   supplyId  String   @map("supply_id")
   batchId   String   @map("batch_id")
   amount    Float
+  unitPrice Float    @default(0) @map("unit_price")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
