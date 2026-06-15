@@ -1,4 +1,4 @@
-import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, Bookmark, ChevronDown, Save } from 'lucide-react';
+import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -59,7 +59,6 @@ export default function BatchAdmin() {
   const [filterType, setFilterType] = useState('all');
   const [filterHouse, setFilterHouse] = useState('all');
   const [filterDateRange, setFilterDateRange] = useState('all');
-  const [savedViews, setSavedViews] = useState([{id: 1, name: '春季大棚近两年批次'}]);
 
   // computed
   const filteredData = useMemo(() => {
@@ -323,40 +322,6 @@ export default function BatchAdmin() {
             <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${showAdvancedFilter ? 'rotate-180 text-slate-400' : 'text-slate-400'}`} />
           </button>
           <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block"></div>
-          <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors hidden md:flex">
-            <Bookmark className="w-4 h-4 text-emerald-600" />
-            <select className="bg-transparent border-none text-xs text-slate-600 font-bold focus:outline-none cursor-pointer tracking-wide appearance-none pr-4">
-              <option disabled>选择常用视图...</option>
-              {savedViews.map(v => <option key={v.id}>{v.name}</option>)}
-            </select>
-          </div>
-          <div className="relative">
-            <button 
-              onClick={() => {
-                const el = document.getElementById('csv-upload');
-                if (el) el.click();
-              }}
-              className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm"
-            >
-              <QrCode className="w-4 h-4 text-indigo-500" />
-              CSV 列表数据灌入
-            </button>
-            <input type="file" id="csv-upload" accept=".csv" className="hidden" onChange={(e) => {
-               if (e.target.files && e.target.files.length > 0) {
-                 const fileName = e.target.files[0].name;
-                 setPendingAction({
-                    type: 'generate',
-                    title: 'CSV 批量导入生码',
-                    description: `已加载 CSV 数据档: ${fileName}。系统将解析文件内容并为匹配的所有批次生成防伪溯源码。是否确认执行？`,
-                    affectedCount: 0, // mock count based on CSV
-                    onConfirm: () => {
-                       setPendingAction(null);
-                       setTimeout(() => setShowPdfPreview(true), 1000);
-                    }
-                 });
-               }
-            }} />
-          </div>
           <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shadow-emerald-600/20 focus:ring-4 focus:ring-emerald-500/30">
             <Plus className="w-4 h-4" />
             新建管理批次
@@ -395,15 +360,6 @@ export default function BatchAdmin() {
             </select>
           </div>
           <div className="flex-1"></div>
-          <button 
-            onClick={() => {
-              const newName = prompt('请输入新视图名称', '自定义过滤视图');
-              if (newName) setSavedViews([...savedViews, { id: Date.now(), name: newName }]);
-            }}
-            className="flex items-center gap-1.5 text-xs text-indigo-600 font-bold bg-indigo-50 hover:bg-indigo-100 px-4 py-1.5 rounded transition-colors border border-indigo-200 border-dashed"
-          >
-            <Save className="w-3.5 h-3.5" /> 保存条件为常用视图
-          </button>
         </div>
       )}
 
