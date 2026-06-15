@@ -39,10 +39,10 @@ function toViewBatch(b: Batch): ViewBatch {
     house: b.fieldId.slice(0, 8),
     stage: b.status,
     color: STATUS_COLOR[b.status] ?? 'slate',
-    inputCost: 0,
-    laborCost: 0,
-    sellPrice: 0,
-    generated: 0,
+    inputCost: b.inputCost,
+    laborCost: b.laborCost,
+    sellPrice: b.sellPrice,
+    generated: b.codeCount,
   };
 }
 
