@@ -52,7 +52,7 @@ export class SupplyService {
       });
       if (upd.count === 0) throw new BadRequestException('领用量超过剩余库存,超量熔断');
       await tx.supplyIssue.create({
-        data: { tenantId: user.tenantId, ownerId: sup.ownerId, supplyId: id, batchId: input.batchId, amount: input.amount },
+        data: { tenantId: user.tenantId, ownerId: sup.ownerId, supplyId: id, batchId: input.batchId, amount: input.amount, unitPrice: input.unitPrice ?? 0 },
       });
       return (await tx.supply.findUnique({ where: { id } })) as { total: number; used: number };
     });
