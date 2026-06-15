@@ -101,8 +101,9 @@ export default function BatchAdmin() {
   const [codesBatchId, setCodesBatchId] = useState<string | null>(null);
   const [codesList, setCodesList] = useState<TraceCode[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
-  // 删除确认:存待删批次 {id, label};确认后调用 deleteBatch。
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  // 删除确认:存待删批次 {id, label, generated};有码时需二次强制确认。
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; generated: number } | null>(null);
+  const [forceConfirm, setForceConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const [showProfitModal, setShowProfitModal] = useState<string | null>(null);
@@ -345,15 +346,17 @@ export default function BatchAdmin() {
     }
   };
 
-  // 删除批次:成功后刷新列表;已签发码的批次后端会拒绝。
+  // 删除批次:有码批次需 force=true 强制删除;成功后刷新列表。
   const handleDeleteBatch = async () => {
     if (!deleteTarget) return;
+    const force = deleteTarget.generated > 0;
     setDeleting(true);
     try {
-      await deleteBatch(deleteTarget.id);
+      await deleteBatch(deleteTarget.id, force);
       setSelectedIds(prev => { const n = new Set(prev); n.delete(deleteTarget.id); return n; });
       showToast(`批次 ${deleteTarget.label} 已删除`);
       setDeleteTarget(null);
+      setForceConfirm(false);
       void reload();
     } catch (e) {
       showToast(e instanceof Error ? `删除失败:${e.message}` : '删除失败');
@@ -361,6 +364,8 @@ export default function BatchAdmin() {
       setDeleting(false);
     }
   };
+
+  const closeDelete = () => { setDeleteTarget(null); setForceConfirm(false); };
 
   return (
     <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg overflow-visible relative">
@@ -580,7 +585,7 @@ export default function BatchAdmin() {
                     极速出具报告
                   </button>
                   <button
-                    onClick={() => setDeleteTarget({ id: b.id, label: b.code })}
+                    onClick={() => setDeleteTarget({ id: b.id, label: b.code, generated: b.generated })}
                     className="flex items-center justify-center gap-1.5 text-rose-600 hover:text-white hover:bg-rose-600 font-bold text-[10px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -1294,16 +1299,38 @@ export default function BatchAdmin() {
               <div>
                 <h3 className="font-black text-slate-800 text-lg mb-1">删除批次</h3>
                 <p className="text-sm text-slate-600 leading-relaxed font-medium">
-                  即将删除批次 <span className="font-mono font-bold text-rose-600">{deleteTarget.label}</span> 及其关联农事记录,此操作不可恢复。
-                  <br />已签发溯源码的批次不可删除。
+                  即将删除批次 <span className="font-mono font-bold text-rose-600">{deleteTarget.label}</span>,此操作不可恢复。
                 </p>
               </div>
             </div>
-            <div className="p-5 flex justify-end gap-3 bg-white">
-              <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50">取消</button>
-              <button onClick={() => void handleDeleteBatch()} disabled={deleting} className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2">
+            <div className="px-6 py-5">
+              {deleteTarget.generated > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-900">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      该批次已签发 <span className="font-black">{deleteTarget.generated}</span> 个溯源码。删除将
+                      <span className="font-black">连带清除全部溯源码、扫码记录、溯源事件、资质检测及农事记录</span>,消费者将无法再扫码验真。
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input type="checkbox" checked={forceConfirm} onChange={(e) => setForceConfirm(e.target.checked)} className="rounded text-rose-600 border-slate-300 focus:ring-rose-500 h-4 w-4" />
+                    <span className="text-sm font-bold text-slate-700">我已知晓风险,确认强制删除该批次及全部关联溯源数据</span>
+                  </label>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">该批次尚未签发溯源码,将连带删除其农事记录。</p>
+              )}
+            </div>
+            <div className="p-5 flex justify-end gap-3 bg-white border-t border-slate-100">
+              <button onClick={closeDelete} disabled={deleting} className="px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50">取消</button>
+              <button
+                onClick={() => void handleDeleteBatch()}
+                disabled={deleting || (deleteTarget.generated > 0 && !forceConfirm)}
+                className="px-5 py-2 rounded-lg text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
                 {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {deleting ? '删除中…' : '确认删除'}
+                {deleting ? '删除中…' : deleteTarget.generated > 0 ? '强制删除' : '确认删除'}
               </button>
             </div>
           </div>

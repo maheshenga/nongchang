@@ -237,7 +237,11 @@ describe('BatchService.remove 删除批次', () => {
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
       farmRecord: { deleteMany: vi.fn() },
-      traceCode: { count: vi.fn().mockResolvedValue(0) },
+      traceScan: { deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      traceCode: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
+      supplyIssue: { deleteMany: vi.fn() },
       user: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: tx,
     } as any;
@@ -248,7 +252,7 @@ describe('BatchService.remove 删除批次', () => {
     expect(tx).toHaveBeenCalled();
   });
 
-  it('已签发溯源码则拒绝删除(不进事务)', async () => {
+  it('已签发溯源码且非强制则拒绝删除(不进事务)', async () => {
     const tx = vi.fn();
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
@@ -260,6 +264,25 @@ describe('BatchService.remove 删除批次', () => {
     const svc = new BatchService(prisma, new ScopeService());
     await expect(svc.remove(merchant, 'b1')).rejects.toThrow();
     expect(tx).not.toHaveBeenCalled();
+  });
+
+  it('已签发溯源码但 force=true 则强制连带清理后删除', async () => {
+    const tx = vi.fn().mockResolvedValue([]);
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      traceScan: { deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      traceCode: { count: vi.fn().mockResolvedValue(5), deleteMany: vi.fn() },
+      supplyIssue: { deleteMany: vi.fn() },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: tx,
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    const out = await svc.remove(merchant, 'b1', true);
+    expect(out).toEqual({ id: 'b1' });
+    expect(tx).toHaveBeenCalled();
   });
 
   it('越权 → Forbidden 且不查码数', async () => {

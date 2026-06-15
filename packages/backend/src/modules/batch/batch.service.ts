@@ -64,14 +64,19 @@ export class BatchService {
     });
   }
 
-  /** 删除批次:已签发溯源码的批次禁止删除(防伪完整性),否则连带删除农事记录后删除批次。 */
-  async remove(user: AuthUser, id: string) {
+  /** 删除批次:默认禁止删除已签发溯源码的批次;force=true 时强制连带清理溯源码及全部关联数据。 */
+  async remove(user: AuthUser, id: string, force = false) {
     await this.scope.assertInScope(this.prisma, user, 'batch', id);
     const codeCount = await this.prisma.traceCode.count({ where: { batchId: id } });
-    if (codeCount > 0) {
+    if (codeCount > 0 && !force) {
       throw new BadRequestException('该批次已签发溯源码,不可删除');
     }
     await this.prisma.$transaction([
+      this.prisma.traceScan.deleteMany({ where: { batchId: id } }),
+      this.prisma.traceEvent.deleteMany({ where: { batchId: id } }),
+      this.prisma.traceCredential.deleteMany({ where: { batchId: id } }),
+      this.prisma.traceCode.deleteMany({ where: { batchId: id } }),
+      this.prisma.supplyIssue.deleteMany({ where: { batchId: id } }),
       this.prisma.farmRecord.deleteMany({ where: { batchId: id } }),
       this.prisma.batch.delete({ where: { id } }),
     ]);

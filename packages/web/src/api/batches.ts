@@ -39,6 +39,7 @@ export function getBatchLifecycle(id: string): Promise<BatchLifecycle> {
   return request<BatchLifecycle>(`/batches/${id}/lifecycle`);
 }
 
-export function deleteBatch(id: string): Promise<{ id: string }> {
-  return request<{ id: string }>(`/batches/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export function deleteBatch(id: string, force = false): Promise<{ id: string }> {
+  const qs = force ? '?force=true' : '';
+  return request<{ id: string }>(`/batches/${encodeURIComponent(id)}${qs}`, { method: 'DELETE' });
 }

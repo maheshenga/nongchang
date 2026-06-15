@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AuthUser, CreateBatchDto, createBatchSchema, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -46,7 +46,7 @@ export class BatchController {
   }
 
   @Delete(':id') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
-  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.svc.remove(user, id);
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('force') force?: string) {
+    return this.svc.remove(user, id, force === 'true');
   }
 }
