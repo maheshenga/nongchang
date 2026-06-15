@@ -23,6 +23,11 @@ export class TraceController {
     return this.svc.addEvent(user, dto);
   }
 
+  @Get('codes/:batchId') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  listCodes(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string) {
+    return this.svc.listCodes(user, batchId);
+  }
+
   @Get('events/:batchId')
   list(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string) {
     return this.svc.listEvents(user, batchId);

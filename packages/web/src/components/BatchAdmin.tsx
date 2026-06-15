@@ -1,11 +1,10 @@
-import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
 import { listBatches, createBatch, getBatchLifecycle, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
-import { generateCodes } from '../api/trace';
+import { generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
@@ -31,6 +30,16 @@ const STATUS_COLOR: Record<string, string> = {
   [BatchStatus.HARVESTED]: 'amber',
   [BatchStatus.DISTRIBUTED]: 'indigo',
 };
+
+// 生长阶段中文展示。
+const STATUS_LABEL: Record<string, string> = {
+  [BatchStatus.PLANTING]: '种植中',
+  [BatchStatus.GROWING]: '生长中',
+  [BatchStatus.HARVESTED]: '已收获',
+  [BatchStatus.DISTRIBUTED]: '已分销',
+};
+
+const PAGE_SIZE = 10;
 
 function toViewBatch(b: Batch): ViewBatch {
   return {
@@ -74,6 +83,25 @@ export default function BatchAdmin() {
       return matchCode && matchType && matchHouse && matchDate;
     });
   }, [searchCode, filterType, filterHouse, filterDateRange, batches]);
+
+  // 客户端分页:数据已全量拉取,仅在前端切片。
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
+  useEffect(() => { setPage(1); }, [searchCode, filterType, filterHouse, filterDateRange]);
+  const pagedData = useMemo(
+    () => filteredData.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filteredData, page],
+  );
+
+  // 批次详情弹窗:存批次 id,打开时拉取生命周期。
+  const [detailBatchId, setDetailBatchId] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<Awaited<ReturnType<typeof getBatchLifecycle>> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  // 已生成码列表弹窗:存批次 id,打开时拉取该批次全部溯源码。
+  const [codesBatchId, setCodesBatchId] = useState<string | null>(null);
+  const [codesList, setCodesList] = useState<TraceCode[]>([]);
+  const [codesLoading, setCodesLoading] = useState(false);
+
   const [showProfitModal, setShowProfitModal] = useState<string | null>(null);
   const [showQrModal, setShowQrModal] = useState<string | null>(null);
   // 资质/检测管理弹窗:存当前批次 {id, label}。
@@ -249,6 +277,10 @@ export default function BatchAdmin() {
 
   const activeBatch = batches.find(b => b.id === showQrModal);
 
+  // 生码数量校验:须为 1~10000 的整数(与后端 MAX_CODES_PER_BATCH 一致)。
+  const MAX_CODES = 10000;
+  const qrAmountValid = Number.isInteger(qrAmount) && qrAmount >= 1 && qrAmount <= MAX_CODES;
+
   // 消费者扫码访问的真实溯源页 URL(hash 路由 H5)。
   const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
   // 标签按索引取真实码;未生成时回退到批次号占位(仅预览,导出前会真实生成)。
@@ -267,6 +299,46 @@ export default function BatchAdmin() {
       return false;
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // 打开批次详情:拉取生命周期(农事记录/溯源事件/码统计/近期扫码)。
+  const openDetail = async (id: string) => {
+    setDetailBatchId(id);
+    setDetailData(null);
+    setDetailLoading(true);
+    try {
+      setDetailData(await getBatchLifecycle(id));
+    } catch (e) {
+      showToast(e instanceof Error ? `加载批次详情失败:${e.message}` : '加载批次详情失败');
+      setDetailBatchId(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  // 打开已生成码列表:拉取该批次全部溯源码(含各自扫码次数)。
+  const openCodes = async (id: string) => {
+    setCodesBatchId(id);
+    setCodesList([]);
+    setCodesLoading(true);
+    try {
+      setCodesList(await listCodes(id));
+    } catch (e) {
+      showToast(e instanceof Error ? `加载溯源码失败:${e.message}` : '加载溯源码失败');
+      setCodesBatchId(null);
+    } finally {
+      setCodesLoading(false);
+    }
+  };
+
+  // 复制溯源链接到剪贴板。
+  const copyLink = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(traceUrl(code));
+      showToast('溯源链接已复制到剪贴板');
+    } catch {
+      showToast('复制失败,请手动复制');
     }
   };
 
@@ -399,13 +471,9 @@ export default function BatchAdmin() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100/80">
-            <AnimatePresence>
-            {filteredData.map((b, i) => (
-              <motion.tr 
-                 initial={{ opacity: 0, y: 10 }}
-                 animate={{ opacity: 1, y: 0 }}
-                 transition={{ delay: i * 0.05 }}
-                 key={b.id} 
+            {pagedData.map((b) => (
+              <tr
+                 key={b.id}
                  className="hover:bg-emerald-50/20 transition-colors group"
               >
                 <td className="px-6 py-4 border-l-2 border-transparent group-hover:border-emerald-500">
@@ -423,7 +491,7 @@ export default function BatchAdmin() {
                       }}
                     />
                 </td>
-                <td className="px-6 py-4 font-mono font-bold text-slate-700 text-sm tracking-wide">{b.id}</td>
+                <td className="px-6 py-4 font-mono font-bold text-slate-700 text-sm tracking-wide" title={b.code}>{b.code.slice(0, 5)}</td>
                 <td className="px-6 py-4">
                   <div className="font-bold text-slate-800 flex items-center gap-2">
                      <div className="w-2 h-2 rounded-full hidden sm:block bg-slate-300 group-hover:bg-emerald-500 transition-colors"></div>
@@ -434,20 +502,34 @@ export default function BatchAdmin() {
                 <td className="px-6 py-4 text-slate-600 font-medium text-sm">{b.house}</td>
                 <td className="px-6 py-4 font-mono font-black text-emerald-600 text-right text-base">{b.generated} <span className="text-xs text-slate-400 font-normal">张</span></td>
                 <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 bg-${b.color}-50 text-${b.color}-700 border border-${b.color}-200/60 rounded-md text-[10px] font-bold uppercase tracking-widest inline-flex items-center gap-1.5 shadow-sm`}>
+                  <span className={`px-2.5 py-1 bg-${b.color}-50 text-${b.color}-700 border border-${b.color}-200/60 rounded-md text-xs font-bold inline-flex items-center gap-1.5 shadow-sm`}>
                     <span className={`w-1.5 h-1.5 rounded-full bg-${b.color}-500 flex-shrink-0 animate-pulse`}></span>
-                    {b.stage}
+                    {STATUS_LABEL[b.stage] ?? b.stage}
                   </span>
                 </td>
                 <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
-                  <button 
+                  <button
+                    onClick={() => openDetail(b.id)}
+                    className="flex items-center justify-center gap-1.5 text-slate-600 hover:text-white hover:bg-slate-700 font-bold text-[10px] uppercase tracking-wider bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                  >
+                    <Eye className="w-3 h-3" />
+                    批次详情
+                  </button>
+                  <button
                     onClick={() => setShowQrModal(b.id)}
                     className="flex items-center justify-center gap-1.5 text-blue-600 hover:text-white hover:bg-blue-600 font-bold text-[10px] uppercase tracking-wider bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-lg transition-all shadow-sm group/btn"
                   >
                     <QrCode className="w-3 h-3 group-hover/btn:scale-110 transition-transform" />
                     生码溯源
                   </button>
-                  <button 
+                  <button
+                    onClick={() => openCodes(b.id)}
+                    className="flex items-center justify-center gap-1.5 text-violet-600 hover:text-white hover:bg-violet-600 font-bold text-[10px] uppercase tracking-wider bg-violet-50 border border-violet-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                  >
+                    <ScanLine className="w-3 h-3" />
+                    已生成码
+                  </button>
+                  <button
                     onClick={() => handleScanCompliance(b.id)}
                     className="flex items-center justify-center gap-1.5 text-emerald-600 hover:text-white hover:bg-emerald-600 font-bold text-[10px] uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
                   >
@@ -461,14 +543,14 @@ export default function BatchAdmin() {
                     <ShieldCheck className="w-3 h-3" />
                     资质 / 检测
                   </button>
-                  <button 
+                  <button
                     onClick={() => setShowProfitModal(b.id)}
                     className="flex items-center justify-center gap-1.5 text-amber-600 hover:text-white hover:bg-amber-600 font-bold text-[10px] uppercase tracking-wider bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
                   >
                     <Calculator className="w-3 h-3" />
                     利润大盘
                   </button>
-                  <button 
+                  <button
                     onClick={() => handleExportBatchReport(b.id)}
                     disabled={isExportingReport === b.id}
                     className="flex items-center justify-center gap-1.5 text-indigo-600 hover:text-white hover:bg-indigo-600 font-bold text-[10px] uppercase tracking-wider bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg transition-all shadow-sm disabled:opacity-50"
@@ -477,12 +559,48 @@ export default function BatchAdmin() {
                     极速出具报告
                   </button>
                 </td>
-              </motion.tr>
+              </tr>
             ))}
-            </AnimatePresence>
+            {!loading && filteredData.length === 0 && (
+              <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-400 text-sm">暂无符合条件的批次</td></tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* 分页器 */}
+      {filteredData.length > 0 && (
+        <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-3 flex items-center justify-between">
+          <div className="text-xs text-slate-500 font-medium">
+            共 <span className="font-bold text-slate-700">{filteredData.length}</span> 个批次,第 {page} / {totalPages} 页
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> 上一页
+            </button>
+            {Array.from({ length: totalPages }).map((_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={`min-w-[32px] px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${p === page ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 border border-slate-200 bg-white hover:bg-slate-50'}`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              下一页 <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* QR Generation Modal */}
       {showQrModal && activeBatch && (
@@ -527,16 +645,23 @@ export default function BatchAdmin() {
                       </div>
 
                       <div className="col-span-2">
-                         <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">预设批量衍生总数 <span className="text-[10px] text-slate-400 font-normal ml-2 tracking-normal">(基于本批次产量基数)</span></label>
+                         <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">预设批量衍生总数 <span className="text-[10px] text-slate-400 font-normal ml-2 tracking-normal">(单批次 1 ~ {MAX_CODES} 张)</span></label>
                          <div className="relative">
-                           <input 
-                              type="number" 
+                           <input
+                              type="number"
+                              min={1}
+                              max={MAX_CODES}
                               value={qrAmount}
-                              onChange={(e) => setQrAmount(Number(e.target.value))}
-                              className="w-full pl-4 pr-12 py-3 bg-white border border-slate-200 rounded-xl text-lg font-black text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono transition-all"
+                              onChange={(e) => setQrAmount(Math.floor(Number(e.target.value)))}
+                              className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl text-lg font-black text-slate-800 shadow-sm focus:outline-none focus:ring-2 font-mono transition-all ${qrAmountValid ? 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500' : 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'}`}
                            />
                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">张</span>
                          </div>
+                         {!qrAmountValid && (
+                           <p className="mt-2 text-xs font-bold text-rose-500 flex items-center gap-1.5">
+                             <AlertTriangle className="w-3.5 h-3.5" /> 生成数量须为 1 ~ {MAX_CODES} 的整数
+                           </p>
+                         )}
                       </div>
                     </div>
                     
@@ -590,7 +715,7 @@ export default function BatchAdmin() {
                              if (ok) setShowPdfPreview(true);
                           }
                         });
-                    }} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30">
+                    }} disabled={!qrAmountValid} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed">
                        进入排版沙盒与输出
                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                     </button>
@@ -1018,6 +1143,118 @@ export default function BatchAdmin() {
           onClose={() => setCredentialBatch(null)}
         />
       )}
+
+      {/* 批次详情弹窗 */}
+      {detailBatchId && (() => {
+        const b = batches.find(x => x.id === detailBatchId);
+        const recs = (detailData?.farmRecords ?? []) as Array<Record<string, unknown>>;
+        const evts = (detailData?.traceEvents ?? []) as Array<Record<string, unknown>>;
+        const scans = (detailData?.recentScans ?? []) as Array<Record<string, unknown>>;
+        return (
+          <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
+                  <div className="p-2 bg-slate-200 text-slate-700 rounded-lg shadow-sm"><Eye className="w-5 h-5" /></div>
+                  批次详情 · <span className="font-mono text-slate-600">{b?.code}</span>
+                  {b && <span className={`px-2 py-0.5 rounded-md text-xs font-bold bg-${b.color}-50 text-${b.color}-700 border border-${b.color}-200/60`}>{STATUS_LABEL[b.stage] ?? b.stage}</span>}
+                </h3>
+                <button onClick={() => setDetailBatchId(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {detailLoading && <div className="py-12 text-center text-slate-400 text-sm">加载中…</div>}
+                {!detailLoading && detailData && (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">品种</div><div className="text-sm font-black text-slate-800">{b?.type}</div></div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">种植日期</div><div className="text-sm font-black text-slate-800 font-mono">{b?.date}</div></div>
+                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4"><div className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">已签发码数</div><div className="text-sm font-black text-emerald-700 font-mono">{detailData.codeCount ?? 0}</div></div>
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4"><div className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1">累计扫码</div><div className="text-sm font-black text-blue-700 font-mono">{detailData.scanTotal ?? 0}</div></div>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">农事记录 ({recs.length})</h4>
+                      {recs.length === 0 ? <p className="text-xs text-slate-400">暂无农事记录</p> : (
+                        <div className="space-y-2">
+                          {recs.map((r, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-white border border-slate-100 rounded-lg px-4 py-2.5 text-sm shadow-sm">
+                              <span className="font-mono text-xs text-slate-400 shrink-0">{r.recordedAt ? String(r.recordedAt).slice(0, 10) : ''}</span>
+                              <span className="font-bold text-slate-700">{String(r.action ?? '')}</span>
+                              <span className="text-slate-500 text-xs truncate">{String(r.note ?? '')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">溯源链路事件 ({evts.length})</h4>
+                      {evts.length === 0 ? <p className="text-xs text-slate-400">暂无溯源事件</p> : (
+                        <div className="space-y-2">
+                          {evts.map((e, i) => (
+                            <div key={i} className="flex items-center gap-3 bg-white border border-slate-100 rounded-lg px-4 py-2.5 text-sm shadow-sm">
+                              <span className="font-mono text-xs text-slate-400 shrink-0">{e.occurredAt ? String(e.occurredAt).slice(0, 10) : ''}</span>
+                              <span className="font-bold text-slate-700">{String(e.eventType ?? '')}</span>
+                              <span className="text-slate-500 text-xs truncate">{String(e.description ?? '')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">近期扫码 ({scans.length})</h4>
+                      {scans.length === 0 ? <p className="text-xs text-slate-400">暂无扫码记录</p> : (
+                        <div className="flex flex-wrap gap-2">
+                          {scans.map((s, i) => (
+                            <span key={i} className="font-mono text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md border border-slate-200">{s.scannedAt ? String(s.scannedAt).slice(0, 16).replace('T', ' ') : ''}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 已生成码列表弹窗 */}
+      {codesBatchId && (() => {
+        const b = batches.find(x => x.id === codesBatchId);
+        return (
+          <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+              <div className="p-6 border-b border-slate-100 bg-violet-50 flex justify-between items-center shrink-0">
+                <h3 className="font-bold text-violet-900 text-lg flex items-center gap-3">
+                  <div className="p-2 bg-violet-200 text-violet-700 rounded-lg shadow-sm"><ScanLine className="w-5 h-5" /></div>
+                  已生成溯源码 · <span className="font-mono text-violet-700">{b?.code}</span>
+                  <span className="text-xs font-mono bg-white text-violet-600 px-2 py-0.5 rounded border border-violet-200">{codesList.length} 个</span>
+                </h3>
+                <button onClick={() => setCodesBatchId(null)} className="text-violet-400 hover:text-violet-700 hover:bg-violet-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6">
+                {codesLoading && <div className="py-12 text-center text-slate-400 text-sm">加载中…</div>}
+                {!codesLoading && codesList.length === 0 && <p className="py-12 text-center text-slate-400 text-sm">该批次尚未生成任何溯源码</p>}
+                {!codesLoading && codesList.length > 0 && (
+                  <div className="space-y-2">
+                    {codesList.map(c => (
+                      <div key={c.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm hover:border-violet-200 transition-colors">
+                        <span className="font-mono font-bold text-slate-800 text-sm flex-1 truncate">{c.code}</span>
+                        <span className="text-xs text-slate-400 shrink-0">扫码 <span className="font-bold text-blue-600 font-mono">{c.scanCount}</span> 次</span>
+                        <button onClick={() => copyLink(c.code)} title="复制溯源链接" className="flex items-center gap-1 text-violet-600 hover:text-white hover:bg-violet-600 text-xs font-bold border border-violet-100 bg-violet-50 px-2.5 py-1.5 rounded-lg transition-all">
+                          <Copy className="w-3 h-3" /> 复制链接
+                        </button>
+                        <a href={traceUrl(c.code)} target="_blank" rel="noreferrer" title="新窗口打开溯源页" className="flex items-center gap-1 text-blue-600 hover:text-white hover:bg-blue-600 text-xs font-bold border border-blue-100 bg-blue-50 px-2.5 py-1.5 rounded-lg transition-all">
+                          <ExternalLink className="w-3 h-3" /> 打开
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Action Toast Notification */}
       {toastMessage && (

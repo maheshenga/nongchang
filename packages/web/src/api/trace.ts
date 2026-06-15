@@ -41,6 +41,11 @@ export function listEvents(batchId: string): Promise<TraceEvent[]> {
   return request<TraceEvent[]>(`/trace/events/${encodeURIComponent(batchId)}`);
 }
 
+// 列出批次已生成的全部溯源码(含各自扫码次数)。
+export function listCodes(batchId: string): Promise<TraceCode[]> {
+  return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}`);
+}
+
 export function createEvent(dto: CreateTraceEventDto): Promise<TraceEvent> {
   return request<TraceEvent>('/trace/events', { method: 'POST', body: JSON.stringify(dto) });
 }

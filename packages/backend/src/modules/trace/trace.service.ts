@@ -47,4 +47,12 @@ export class TraceService {
       where: { tenantId: user.tenantId, batchId }, orderBy: { occurredAt: 'asc' },
     });
   }
+
+  /** 列出批次已生成的全部溯源码(含各自扫码次数),最新在前。 */
+  async listCodes(user: AuthUser, batchId: string) {
+    await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
+    return this.prisma.traceCode.findMany({
+      where: { tenantId: user.tenantId, batchId }, orderBy: { createdAt: 'desc' },
+    });
+  }
 }
