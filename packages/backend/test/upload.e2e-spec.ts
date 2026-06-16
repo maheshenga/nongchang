@@ -9,7 +9,7 @@ let app: INestApplication;
 
 async function token(username: string) {
   const res = await request(app.getHttpServer())
-    .post('/api/auth/login').send({ username, password: 'password123' });
+    .post('/api/auth/login').send({ tenantCode: 'DEMO', username, password: 'password123' });
   return res.body.accessToken as string;
 }
 

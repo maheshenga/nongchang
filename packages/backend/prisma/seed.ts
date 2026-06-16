@@ -9,10 +9,13 @@ const prisma = new PrismaClient();
 async function main() {
   const pwd = await bcrypt.hash('password123', 10);
 
-  // 租户:按名复用,避免每次执行新建。
+  // 租户:按名复用,避免每次执行新建。code='DEMO' 作为登录机构编码锚点。
   const tenant =
     (await prisma.tenant.findFirst({ where: { name: 'Demo Tenant' } })) ??
-    (await prisma.tenant.create({ data: { name: 'Demo Tenant' } }));
+    (await prisma.tenant.create({ data: { name: 'Demo Tenant', code: 'DEMO' } }));
+  if (tenant.code !== 'DEMO') {
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { code: 'DEMO' } });
+  }
 
   // 代理商:无唯一约束,按 租户+名 复用。
   async function ensureAgent(name: string, region: string) {
@@ -24,11 +27,11 @@ async function main() {
   const agentA = await ensureAgent('西南大区代理', '云南');
   const agentB = await ensureAgent('华东大区代理', '上海');
 
-  // 用户:username 全局唯一,upsert 幂等。
+  // 用户:username 现为租户内唯一,upsert 用 (tenantId, username) 复合键幂等。
   async function ensureUser(username: string, data: { role: Role; displayName: string; agentId?: string }) {
     return prisma.user.upsert({
-      where: { username },
-      update: { tenantId: tenant.id, role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },
+      where: { tenantId_username: { tenantId: tenant.id, username } },
+      update: { role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },
       create: { tenantId: tenant.id, username, passwordHash: pwd, role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },
     });
   }

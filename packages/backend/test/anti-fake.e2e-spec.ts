@@ -9,7 +9,7 @@ let app: INestApplication;
 async function login(username: string, password = 'password123'): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
-    .send({ username, password })
+    .send({ tenantCode: 'DEMO', username, password })
     .expect(201);
   return res.body.accessToken;
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Lock, User, QrCode } from 'lucide-react';
+import { Lock, User, QrCode, Building2 } from 'lucide-react';
 import { useAuth } from '../auth/auth-context';
 
 export default function AppLogin() {
   const { login } = useAuth();
+  const [tenantCode, setTenantCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +15,7 @@ export default function AppLogin() {
     setError(null);
     setSubmitting(true);
     try {
-      await login({ username, password });
+      await login({ tenantCode, username, password });
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
@@ -38,6 +39,22 @@ export default function AppLogin() {
             <span className="text-sm font-bold text-white border-b-2 border-emerald-400 pb-2">系统登录</span>
           </div>
           <form className="space-y-5" onSubmit={handleSubmit}>
+            <div>
+              <label htmlFor="login-tenant" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">机构编码</label>
+              <div className="relative">
+                <input
+                  id="login-tenant"
+                  type="text"
+                  autoComplete="organization"
+                  value={tenantCode}
+                  onChange={(e) => setTenantCode(e.target.value)}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
+                  placeholder="请输入机构编码"
+                  required
+                />
+                <Building2 className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
             <div>
               <label htmlFor="login-username" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">登录账号</label>
               <div className="relative">

@@ -10,6 +10,9 @@ datasource db {
 model Tenant {
   id        String   @id @default(uuid())
   name      String
+  // 机构编码:登录时定位租户的稳定锚点(全局唯一)。username 仅在租户内唯一,
+  // 故密码登录需 (tenantCode + username) 共同定位用户。
+  code      String   @unique
   status    String   @default("active")
   createdAt DateTime @default(now()) @map("created_at")
   users     User[]
@@ -37,7 +40,7 @@ model User {
   tenantId     String   @map("tenant_id")
   role         Role
   agentId      String?  @map("agent_id")
-  username     String   @unique
+  username     String
   passwordHash String   @map("password_hash")
   phone        String?
   wxOpenid     String?  @unique @map("wx_openid")
@@ -55,6 +58,7 @@ model User {
   ownedSupplies Supply[]
   supplyIssues SupplyIssue[]
 
+  @@unique([tenantId, username])
   @@index([tenantId])
   @@index([agentId])
   @@index([groupId])

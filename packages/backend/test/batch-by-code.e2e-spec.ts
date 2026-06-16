@@ -7,7 +7,7 @@ import { AppModule } from '../src/app.module';
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
-    .send({ username, password: 'password123' })
+    .send({ tenantCode: 'DEMO', username, password: 'password123' })
     .expect(201);
   return res.body.accessToken;
 }

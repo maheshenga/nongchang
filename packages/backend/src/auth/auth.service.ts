@@ -28,9 +28,14 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto): Promise<TokenPair> {
+    // username 仅租户内唯一,故先用机构编码(全局唯一)定位租户,再按 (tenantId, username) 复合键查用户。
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { code: dto.tenantCode },
+      select: { id: true, status: true },
+    });
+    if (!tenant) throw new UnauthorizedException('账号或密码错误');
     const user = await this.prisma.user.findUnique({
-      where: { username: dto.username },
-      include: { tenant: { select: { status: true } } },
+      where: { tenantId_username: { tenantId: tenant.id, username: dto.username } },
     });
     if (!user) throw new UnauthorizedException('账号或密码错误');
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
@@ -39,7 +44,7 @@ export class AuthService {
     const roles = Object.values(Role) as string[];
     if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
     if (user.status !== 'active') throw new ForbiddenException('账号待审核或已停用');
-    if (user.tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
+    if (tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
 
     return this.issueTokens(this.toAuthUser(user));
   }
