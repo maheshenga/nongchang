@@ -305,3 +305,56 @@ model QuickTemplate {
   @@index([tenantId])
   @@map("quick_templates")
 }
+
+enum CreditOwnerType {
+  PLATFORM
+  AGENT
+  MERCHANT
+}
+
+enum CreditResource {
+  AI
+  CODE
+}
+
+enum LedgerReason {
+  RECHARGE
+  ALLOCATE_IN
+  ALLOCATE_OUT
+  CONSUME
+  REFUND
+}
+
+model CreditAccount {
+  id          String          @id @default(uuid())
+  ownerType   CreditOwnerType @map("owner_type")
+  ownerId     String          @map("owner_id")
+  tenantId    String          @map("tenant_id")
+  aiBalance   Int             @default(0) @map("ai_balance")
+  codeBalance Int             @default(0) @map("code_balance")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  ledgers     CreditLedger[]
+
+  @@unique([ownerType, ownerId])
+  @@index([tenantId])
+  @@map("credit_accounts")
+}
+
+model CreditLedger {
+  id           String         @id @default(uuid())
+  accountId    String         @map("account_id")
+  account      CreditAccount  @relation(fields: [accountId], references: [id])
+  resource     CreditResource
+  delta        Int
+  balanceAfter Int            @map("balance_after")
+  reason       LedgerReason
+  refType      String?        @map("ref_type")
+  refId        String?        @map("ref_id")
+  operatorId   String?        @map("operator_id")
+  note         String?
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@index([accountId, createdAt])
+  @@map("credit_ledgers")
+}
