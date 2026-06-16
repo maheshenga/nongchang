@@ -128,3 +128,13 @@ export type {
   CreateTraceCredentialInput,
   PublicTraceCredential,
 } from './dto/trace-credential.dto';
+export {
+  creditOwnerTypeSchema, creditResourceSchema, ledgerReasonSchema,
+  billingSummarySchema, creditAccountItemSchema, creditLedgerItemSchema,
+  ledgerQuerySchema, paginatedLedgerSchema, allocateSchema, rechargeSchema,
+} from './dto/billing.dto';
+export type {
+  CreditOwnerType, CreditResource, LedgerReason, BillingSummary,
+  CreditAccountItem, CreditLedgerItem, LedgerQuery, PaginatedLedger,
+  AllocateInput, RechargeInput,
+} from './dto/billing.dto';
