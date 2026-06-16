@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -25,7 +25,7 @@ async function main() {
   const agentB = await ensureAgent('华东大区代理', '上海');
 
   // 用户:username 全局唯一,upsert 幂等。
-  async function ensureUser(username: string, data: { role: string; displayName: string; agentId?: string }) {
+  async function ensureUser(username: string, data: { role: Role; displayName: string; agentId?: string }) {
     return prisma.user.upsert({
       where: { username },
       update: { tenantId: tenant.id, role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },

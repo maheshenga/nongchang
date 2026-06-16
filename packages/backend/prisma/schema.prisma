@@ -35,7 +35,7 @@ model Agent {
 model User {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
-  role         String
+  role         Role
   agentId      String?  @map("agent_id")
   username     String   @unique
   passwordHash String   @map("password_hash")
@@ -304,6 +304,14 @@ model QuickTemplate {
 
   @@index([tenantId])
   @@map("quick_templates")
+}
+
+// 组织三层角色:与 @nongchang/shared 的 Role 常量(system_admin/agent_admin/merchant)对齐。
+// DB 枚举把非法 role 写入挡在数据库层(此前为裸 String)。
+enum Role {
+  system_admin
+  agent_admin
+  merchant
 }
 
 enum CreditOwnerType {
