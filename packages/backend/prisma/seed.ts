@@ -68,6 +68,27 @@ async function main() {
     }});
   }
 
+  // ── 计费额度预置(演示用)──
+  await prisma.creditAccount.upsert({
+    where: { ownerType_ownerId: { ownerType: 'PLATFORM', ownerId: 'PLATFORM' } },
+    update: {},
+    create: { ownerType: 'PLATFORM', ownerId: 'PLATFORM', tenantId: tenant.id, aiBalance: 100000, codeBalance: 1000000 },
+  });
+  for (const ag of [agentA, agentB]) {
+    await prisma.creditAccount.upsert({
+      where: { ownerType_ownerId: { ownerType: 'AGENT', ownerId: ag.id } },
+      update: {},
+      create: { ownerType: 'AGENT', ownerId: ag.id, tenantId: tenant.id, aiBalance: 5000, codeBalance: 50000 },
+    });
+  }
+  for (const m of [merchantA, merchantB]) {
+    await prisma.creditAccount.upsert({
+      where: { ownerType_ownerId: { ownerType: 'MERCHANT', ownerId: m.id } },
+      update: {},
+      create: { ownerType: 'MERCHANT', ownerId: m.id, tenantId: tenant.id, aiBalance: 1000, codeBalance: 10000 },
+    });
+  }
+
   console.log('Seed done:', { agentA: agentA.id, agentB: agentB.id, merchantA: merchantA.id, merchantB: merchantB.id, traceCode: traceCode.code });
 }
 
