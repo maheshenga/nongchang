@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout } from 'lucide-react';
+import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
@@ -24,6 +24,7 @@ const PendingUsers = lazy(() => import('./components/PendingUsers'));
 const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
 const AiAssistant = lazy(() => import('./components/AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
+const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
 
 const ViewSkeleton = () => (
   <div className="animate-pulse space-y-6 w-full h-full p-4">
@@ -48,7 +49,7 @@ export default function App() {
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology' | 'billing'>('dashboard');
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dashboard']));
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export default function App() {
         { id: 'mobile', label: '种植与检测小程序', icon: Smartphone },
         { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
         { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
+        { id: 'billing', label: '算力与额度', icon: Wallet },
         { id: 'aiOssSettings', label: 'AI 与存储设置', icon: SettingsIcon },
         { id: 'integrations', label: '第三方集成', icon: Plug },
         { id: 'userGroups', label: '用户组与权限', icon: UserCog },
@@ -143,6 +145,7 @@ export default function App() {
       category: '业务与系统',
       items: [
         { id: 'batches', label: '辖区批次追踪', icon: Layers },
+        { id: 'billing', label: '算力与额度', icon: Wallet },
         { id: 'userGroups', label: '用户组与权限', icon: UserCog },
         { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
         { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
@@ -337,6 +340,7 @@ export default function App() {
               {mountedTabs.has('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
               {mountedTabs.has('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
               {mountedTabs.has('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
+              {mountedTabs.has('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
             </div>
           </Suspense>
         </section>
