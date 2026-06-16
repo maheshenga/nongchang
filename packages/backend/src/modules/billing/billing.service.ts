@@ -28,7 +28,7 @@ export class BillingService {
   }
 
   async ensureAccount(ownerType: CreditOwnerType, ownerId: string, tenantId: string) {
-    const found = await this.prisma.creditAccount.findUnique({ where: { ownerType_ownerId: { ownerType, ownerId } } });
+    const found = await this.prisma.creditAccount.findFirst({ where: { ownerType, ownerId } });
     if (found) return found;
     return this.prisma.creditAccount.create({ data: { ownerType, ownerId, tenantId } });
   }
@@ -57,6 +57,57 @@ export class BillingService {
         },
       });
       return { balanceAfter };
+    });
+  }
+
+  // 校验 target 下级在调用方范围内
+  private async resolveTarget(user: AuthUser, targetOwnerType: 'AGENT' | 'MERCHANT', targetOwnerId: string) {
+    if (user.role === Role.SYSTEM_ADMIN) {
+      if (targetOwnerType !== 'AGENT') throw new ForbiddenException('平台仅可分配给代理商');
+      const agent = await this.prisma.agent.findFirst({ where: { id: targetOwnerId, tenantId: user.tenantId }, select: { id: true } });
+      if (!agent) throw new ForbiddenException('目标代理商不存在');
+      return { ownerType: 'AGENT' as const, ownerId: targetOwnerId };
+    }
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
+      if (targetOwnerType !== 'MERCHANT') throw new ForbiddenException('代理商仅可分配给旗下商户');
+      const m = await this.prisma.user.findFirst({ where: { id: targetOwnerId, tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId }, select: { id: true } });
+      if (!m) throw new ForbiddenException('目标商户不在管理范围');
+      return { ownerType: 'MERCHANT' as const, ownerId: targetOwnerId };
+    }
+    throw new ForbiddenException('无分配权限');
+  }
+
+  async allocate(user: AuthUser, dto: AllocateInput) {
+    const from = this.resolveConsumer(user);
+    const fromAcct = await this.ensureAccount(from.ownerType, from.ownerId, user.tenantId);
+    const target = await this.resolveTarget(user, dto.targetOwnerType, dto.targetOwnerId);
+    const toAcct = await this.ensureAccount(target.ownerType, target.ownerId, user.tenantId);
+    const field = BALANCE_FIELD[dto.resource];
+    return this.prisma.$transaction(async (tx) => {
+      const out = await tx.creditAccount.updateMany({
+        where: { id: fromAcct.id, [field]: { gte: dto.amount } },
+        data: { [field]: { decrement: dto.amount } },
+      });
+      if (out.count === 0) throw new ForbiddenException('可分配额度不足');
+      const fromAfter = await tx.creditAccount.findUnique({ where: { id: fromAcct.id } });
+      await tx.creditLedger.create({ data: { accountId: fromAcct.id, resource: dto.resource, delta: -dto.amount, balanceAfter: (fromAfter as any)[field], reason: 'ALLOCATE_OUT', operatorId: user.userId, refType: 'allocate', refId: toAcct.id } });
+      await tx.creditAccount.updateMany({ where: { id: toAcct.id }, data: { [field]: { increment: dto.amount } } });
+      const toAfter = await tx.creditAccount.findUnique({ where: { id: toAcct.id } });
+      await tx.creditLedger.create({ data: { accountId: toAcct.id, resource: dto.resource, delta: dto.amount, balanceAfter: (toAfter as any)[field], reason: 'ALLOCATE_IN', operatorId: user.userId, refType: 'allocate', refId: fromAcct.id } });
+      return { ok: true };
+    });
+  }
+
+  async recharge(user: AuthUser, dto: RechargeInput) {
+    if (user.role !== Role.SYSTEM_ADMIN) throw new ForbiddenException('仅平台管理员可充值');
+    const acct = await this.ensureAccount('PLATFORM', PLATFORM_OWNER_ID, user.tenantId);
+    const field = BALANCE_FIELD[dto.resource];
+    return this.prisma.$transaction(async (tx) => {
+      await tx.creditAccount.updateMany({ where: { id: acct.id }, data: { [field]: { increment: dto.amount } } });
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      await tx.creditLedger.create({ data: { accountId: acct.id, resource: dto.resource, delta: dto.amount, balanceAfter: (after as any)[field], reason: 'RECHARGE', operatorId: user.userId } });
+      return { ok: true };
     });
   }
 }
