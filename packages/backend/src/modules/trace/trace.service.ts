@@ -4,12 +4,13 @@ import { Prisma } from '@prisma/client';
 import { AuthUser, CreateTraceEventDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { BillingService } from '../billing/billing.service';
 
 const MAX_CODES_PER_BATCH = 10000;
 
 @Injectable()
 export class TraceService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(private prisma: PrismaService, private scope: ScopeService, private billing: BillingService) {}
 
   async generateCode(user: AuthUser, batchId: string) {
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
@@ -23,6 +24,7 @@ export class TraceService {
       throw new ForbiddenException(`生成数量须为 1~${MAX_CODES_PER_BATCH} 的整数`);
     }
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
+    await this.billing.consume(user, 'CODE', count, { refType: 'trace.generate', refId: batchId });
     const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
     await this.prisma.traceCode.createMany({
       data: codes.map((code) => ({ tenantId: user.tenantId, batchId, code })),

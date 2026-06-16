@@ -11,6 +11,7 @@ const evt: CreateTraceEventDto = {
 
 function make(batchInScope = true) {
   const created: any[] = [];
+  const billing = { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }) };
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
     traceCode: {
@@ -23,7 +24,7 @@ function make(batchInScope = true) {
       findMany: vi.fn().mockResolvedValue([]),
     },
   };
-  return { svc: new TraceService(prisma as any, new ScopeService()), prisma, created };
+  return { svc: new TraceService(prisma as any, new ScopeService(), billing as any), prisma, created, billing };
 }
 
 describe('TraceService #24 batch 归属校验', () => {
@@ -88,5 +89,24 @@ describe('TraceService.listCodes 已生成码列表', () => {
     const h = make(false);
     await expect(h.svc.listCodes(merchant, 'b1')).rejects.toThrow();
     expect(h.prisma.traceCode.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('TraceService.generateCodes 扣费插桩', () => {
+  it('生成成功后扣 CODE = count', async () => {
+    const h = make(true);
+    await h.svc.generateCodes(merchant, 'b1', 5);
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 5, { refType: 'trace.generate', refId: 'b1' });
+  });
+  it('余额不足则不创建码', async () => {
+    const h = make(true);
+    h.billing.consume.mockRejectedValueOnce(new Error('insufficient'));
+    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+  });
+  it('batch 不在范围则不扣费', async () => {
+    const h = make(false);
+    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    expect(h.billing.consume).not.toHaveBeenCalled();
   });
 });
