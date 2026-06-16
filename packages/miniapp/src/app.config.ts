@@ -5,6 +5,7 @@ export default {
     'pages/work/index',
     'pages/trace/index',
     'pages/me/index',
+    'pages/usage/index',
     'pages/batch/index',
   ],
   window: {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 're
 import { View, Text, Textarea, Input, Button, Image } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { createFarmRecord, uploadImage, listSupplies, findBatchByCode, type Batch } from '../../api/farm';
-import { transcribeVoice, normalizeAiError } from '../../api/ai';
+import { transcribeVoice, normalizeAiError, aiAdvice } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
 import type { SupplyItem, QuickTemplateView } from '@nongchang/shared';
@@ -31,6 +31,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [supplyAmount, setSupplyAmount] = useState('');
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [advising, setAdvising] = useState(false);
   // 扫码定位到、但 props.batches 未包含的批次(范围内补充)。
   const [scannedBatches, setScannedBatches] = useState<Batch[]>([]);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
@@ -94,6 +95,19 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   // props 批次 + 扫码补充批次,去重。
   const allBatches = [...batches, ...scannedBatches.filter((s) => !batches.some((b) => b.id === s.id))];
   const selectedBatch = allBatches.find((b) => b.id === batchId);
+
+  async function getAdvice() {
+    if (!selectedBatch) { Taro.showToast({ title: '请先选择批次', icon: 'none' }); return; }
+    setAdvising(true);
+    try {
+      const text = await aiAdvice({ batchId: selectedBatch.id });
+      if (text) setNote((prev) => (prev ? prev + '\n【AI建议】' + text : '【AI建议】' + text));
+    } catch (e) {
+      Taro.showToast({ title: normalizeAiError(e), icon: 'none' });
+    } finally {
+      setAdvising(false);
+    }
+  }
 
   async function scan() {
     let result: string;
@@ -190,6 +204,9 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       </View>
       <View className="rec-form__scan" onClick={scan}>
         <Icon name="trace" size={20} /><Text className="rec-form__scan-text">扫描批次码</Text>
+      </View>
+      <View className="rec-form__scan" onClick={getAdvice}>
+        <Icon name="sparkles" size={20} /><Text className="rec-form__scan-text">{advising ? 'AI 分析中…' : 'AI 推荐农事建议'}</Text>
       </View>
 
       <View className="rec-form__row">

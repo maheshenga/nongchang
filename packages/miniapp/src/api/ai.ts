@@ -1,12 +1,17 @@
 import Taro from '@tarojs/taro';
 import { request, BASE_URL } from './request';
 import { getToken } from '../store/auth';
-import type { AiChatResponse, AiDiagnoseResponse, AiTranscribeResponse } from '@nongchang/shared';
+import type { AiChatResponse, AiDiagnoseResponse, AiTranscribeResponse, AiAdviceInput } from '@nongchang/shared';
 
 export async function aiChat(message: string): Promise<string> {
   const res = await request<AiChatResponse>({
     url: '/ai/chat', method: 'POST', data: { message },
   });
+  return res.answer;
+}
+
+export async function aiAdvice(input: AiAdviceInput): Promise<string> {
+  const res = await request<AiChatResponse>({ url: '/ai/advice', method: 'POST', data: { batchId: input.batchId } });
   return res.answer;
 }
 

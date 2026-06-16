@@ -101,6 +101,10 @@ export default function Me() {
             ))}
           </View>
         )}
+        <View className="me__item" onClick={() => Taro.navigateTo({ url: '/pages/usage/index' })}>
+          <Text className="me__item-text">算力与额度用量</Text>
+          <Text className="me__item-arrow">›</Text>
+        </View>
         <View className="me__item me__item--reserved" onClick={comingSoon}>
           <Text className="me__item-text">区块链存证</Text>
           <Text className="me__item-badge">即将开放</Text>

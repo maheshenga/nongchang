@@ -102,7 +102,13 @@ export default function AiPanel({ mode, onClose }: Props) {
             <Button className="ai-panel__btn" loading={diagLoading} onClick={diagnose}>
               {diagLoading ? '识别中…' : '开始诊断'}
             </Button>
-            {result && <View className="ai-panel__result"><Text>{result}</Text></View>}
+            {result && (
+              <View className="ai-panel__result">
+                {result.split('\n').filter((ln) => ln.trim()).map((ln, i) => (
+                  <Text key={i} className="ai-panel__result-line">{ln}</Text>
+                ))}
+              </View>
+            )}
           </View>
         )}
       </View>

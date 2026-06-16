@@ -101,4 +101,10 @@
     color: $c-text;
     white-space: pre-wrap;
   }
+
+  &__result-line {
+    display: block;
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
 }
