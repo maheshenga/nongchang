@@ -48,6 +48,12 @@ model User {
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
   agent        Agent?   @relation(fields: [agentId], references: [id])
   group        UserGroup? @relation(fields: [groupId], references: [id])
+  // 反向引用:支撑 owner/operator 外键(onDelete 默认 Restrict,挡住删除仍被引用的用户)。
+  ownedFields  Field[]
+  ownedBatches Batch[]
+  farmRecords  FarmRecord[]
+  ownedSupplies Supply[]
+  supplyIssues SupplyIssue[]
 
   @@index([tenantId])
   @@index([agentId])
@@ -68,6 +74,9 @@ model Field {
   // DROP INDEX —— 切勿接受;生产/CI 统一用 `prisma migrate deploy`(不会提示)。
   location    Unsupported("geography(Point, 4326)")?
   createdAt   DateTime                               @default(now()) @map("created_at")
+  owner       User     @relation(fields: [ownerId], references: [id])
+  batches     Batch[]
+  farmRecords FarmRecord[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -87,6 +96,13 @@ model Batch {
   laborCost       Float    @default(0) @map("labor_cost")
   sellPrice       Float    @default(0) @map("sell_price")
   createdAt       DateTime @default(now()) @map("created_at")
+  owner            User     @relation(fields: [ownerId], references: [id])
+  field            Field    @relation(fields: [fieldId], references: [id])
+  farmRecords      FarmRecord[]
+  traceCodes       TraceCode[]
+  traceEvents      TraceEvent[]
+  traceCredentials TraceCredential[]
+  supplyIssues     SupplyIssue[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -109,6 +125,9 @@ model FarmRecord {
   supplyId     String?  @map("supply_id")
   supplyAmount Float?   @map("supply_amount")
   createdAt  DateTime @default(now()) @map("created_at")
+  batch      Batch    @relation(fields: [batchId], references: [id])
+  field      Field    @relation(fields: [fieldId], references: [id])
+  operator   User     @relation(fields: [operatorId], references: [id])
 
   @@index([tenantId])
   @@index([batchId])
@@ -138,6 +157,7 @@ model TraceCode {
   scanCount Int      @default(0) @map("scan_count")
   status    String   @default("active") @map("status")
   createdAt DateTime @default(now()) @map("created_at")
+  batch     Batch    @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
   @@index([batchId])
@@ -155,6 +175,7 @@ model TraceEvent {
   occurredAt DateTime @map("occurred_at")
   payload    Json?
   createdAt  DateTime @default(now()) @map("created_at")
+  batch      Batch    @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
   @@index([batchId])
@@ -187,6 +208,7 @@ model TraceCredential {
   issuedAt  DateTime? @map("issued_at")
   fileUrl   String    @map("file_url")
   createdAt DateTime  @default(now()) @map("created_at")
+  batch     Batch     @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
   @@index([batchId])
@@ -202,6 +224,8 @@ model Supply {
   total     Float    @default(0)
   used      Float    @default(0)
   createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id])
+  issues    SupplyIssue[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -217,6 +241,9 @@ model SupplyIssue {
   amount    Float
   unitPrice Float    @default(0) @map("unit_price")
   createdAt DateTime @default(now()) @map("created_at")
+  owner     User     @relation(fields: [ownerId], references: [id])
+  supply    Supply   @relation(fields: [supplyId], references: [id])
+  batch     Batch    @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
   @@index([ownerId])

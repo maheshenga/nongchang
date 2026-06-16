@@ -61,6 +61,10 @@ export class SupplyService {
 
   async remove(user: AuthUser, id: string): Promise<{ id: string }> {
     await this.scopedSupply(user, id);
+    // 有领用台账的农资禁止删除:supply_issues.supply_id 外键为 Restrict,
+    // 直删会被 DB 拒(P2003)。此处提前拦截给出友好提示,且保留消耗历史可追溯。
+    const issueCount = await this.prisma.supplyIssue.count({ where: { supplyId: id } });
+    if (issueCount > 0) throw new BadRequestException('该农资已有领用记录,不可删除');
     await this.prisma.supply.delete({ where: { id } });
     return { id };
   }

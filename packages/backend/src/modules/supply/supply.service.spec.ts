@@ -19,6 +19,10 @@ function makeService(overrides: any = {}) {
       delete: async () => ({}),
       ...(overrides.supply ?? {}),
     },
+    supplyIssue: {
+      count: async () => 0,
+      ...(overrides.supplyIssue ?? {}),
+    },
     $transaction: async (fn: any) => fn({
       supply: {
         updateMany: async (a: any) => {
@@ -96,13 +100,23 @@ describe('SupplyService.issue', () => {
 });
 
 describe('SupplyService.remove', () => {
-  it('作用域内删除成功', async () => {
+  it('作用域内且无领用记录删除成功', async () => {
     let deleted: any;
     const { svc } = makeService({
       supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1' }), delete: async (a: any) => { deleted = a; return {}; } },
+      supplyIssue: { count: async () => 0 },
     });
     await svc.remove(merchant, 's1');
     expect(deleted.where).toEqual({ id: 's1' });
+  });
+  it('有领用记录时禁止删除抛 BadRequest', async () => {
+    let deleted = false;
+    const { svc } = makeService({
+      supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1' }), delete: async () => { deleted = true; return {}; } },
+      supplyIssue: { count: async () => 3 },
+    });
+    await expect(svc.remove(merchant, 's1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(deleted).toBe(false);
   });
   it('越权删除抛 Forbidden', async () => {
     const { svc } = makeService({ supply: { findFirst: async () => null } });
