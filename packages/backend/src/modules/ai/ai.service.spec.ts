@@ -2,64 +2,66 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AiService } from './ai.service';
 import { BadRequestException, BadGatewayException } from '@nestjs/common';
 import type { AuthUser } from '@nongchang/shared';
+import { AI_WEIGHT } from '../billing/billing.constants';
 
 const user = { userId: 'u1', tenantId: 't1', role: 'merchant' } as AuthUser;
 function providerSvc(enabled: any) { return { getEnabled: async () => enabled } as any; }
 function integrationSvc(xfyun: any = null) { return { getEnabledXfyun: async () => xfyun } as any; }
+function billingSvc() { return { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }) } as any; }
 const noProv = providerSvc(null);
 
 describe('AiService', () => {
   beforeEach(() => vi.unstubAllGlobals());
 
   it('无 provider 抛业务错误', async () => {
-    const svc = new AiService(providerSvc(null), integrationSvc());
+    const svc = new AiService(providerSvc(null), integrationSvc(), billingSvc());
     await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('chat 返回模型回答', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '你好' } }] }) })));
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc());
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc(), billingSvc());
     const r = await svc.chat(user, 'hi');
     expect(r.answer).toBe('你好');
   });
 
   it('diagnose 无 visionModel 抛错', async () => {
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc());
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc(), billingSvc());
     await expect(svc.diagnose(user, { imageUrl: 'https://x.com/a.jpg' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('diagnose 用 visionModel 返回结果', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '叶片缺氮' } }] }) })));
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: 'vm' }), integrationSvc());
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: 'vm' }), integrationSvc(), billingSvc());
     const r = await svc.diagnose(user, { imageBase64: 'AAAA' });
     expect(r.result).toBe('叶片缺氮');
   });
 
   it('调用返回非 2xx 时抛 BadGatewayException 且不泄露 apiKey', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) })));
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }), integrationSvc());
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }), integrationSvc(), billingSvc());
     await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadGatewayException);
     await expect(svc.chat(user, 'hi')).rejects.not.toThrow(/sk-secret-1/);
   });
 
   it('网络错误（fetch reject）时抛 BadGatewayException', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network down'); }));
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }), integrationSvc());
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-secret-1', textModel: 'm', visionModel: null }), integrationSvc(), billingSvc());
     await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadGatewayException);
   });
 
   it('transcribe 未配置讯飞抛业务错误', async () => {
-    const svc = new AiService(noProv, integrationSvc(null));
+    const svc = new AiService(noProv, integrationSvc(null), billingSvc());
     await expect(svc.transcribe(user, Buffer.from('abc'))).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('transcribe 空音频抛业务错误', async () => {
-    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }));
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billingSvc());
     await expect(svc.transcribe(user, Buffer.alloc(0))).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('transcribe 经 WS 拼接识别文字', async () => {
-    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }));
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billingSvc());
     const factory = makeWsFactory([
       { code: 0, data: { status: 1, result: { ws: [{ cw: [{ w: '浇' }] }, { cw: [{ w: '水' }] }] } } },
       { code: 0, data: { status: 2, result: { ws: [{ cw: [{ w: '完成' }] }] } } },
@@ -69,9 +71,29 @@ describe('AiService', () => {
   });
 
   it('transcribe 讯飞错误码时降级为 BadGatewayException', async () => {
-    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }));
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billingSvc());
     const factory = makeWsFactory([{ code: 10001, message: 'bad' }]);
     await expect(svc.transcribe(user, Buffer.from('1234'), factory)).rejects.toBeInstanceOf(BadGatewayException);
+  });
+});
+
+describe('AiService 扣费插桩', () => {
+  it('chat 成功后扣 AI 1', async () => {
+    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+    const billing: any = { consume };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '答' } }] }) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing);
+    const res = await svc.chat(user, '你好');
+    expect(res.answer).toBe('答');
+    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
+  });
+  it('chat 外部失败则不扣费', async () => {
+    const consume = vi.fn();
+    const billing: any = { consume };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing);
+    await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
+    expect(consume).not.toHaveBeenCalled();
   });
 });
 

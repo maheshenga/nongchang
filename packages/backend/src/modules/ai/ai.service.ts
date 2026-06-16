@@ -2,6 +2,8 @@ import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/co
 import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser } from '@nongchang/shared';
 import { AiProviderService, EnabledAiProvider } from '../ai-provider/ai-provider.service';
 import { IntegrationConfigService } from '../integration/integration-config.service';
+import { BillingService } from '../billing/billing.service';
+import { AI_WEIGHT } from '../billing/billing.constants';
 import { transcribeWithXfyun, WebSocketFactory } from './xfyun-transcribe';
 
 @Injectable()
@@ -9,6 +11,7 @@ export class AiService {
   constructor(
     private providers: AiProviderService,
     private integrations: IntegrationConfigService,
+    private billing: BillingService,
   ) {}
 
   async chat(user: AuthUser, message: string): Promise<AiChatResponse> {
@@ -19,6 +22,7 @@ export class AiService {
       messages: [{ role: 'user', content: message }],
     };
     const answer = await this.callChatCompletions(p, body);
+    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
     return { answer };
   }
 
@@ -40,6 +44,7 @@ export class AiService {
       ],
     };
     const result = await this.callChatCompletions(p, body);
+    await this.billing.consume(user, 'AI', AI_WEIGHT.diagnose, { refType: 'ai.diagnose' });
     return { result };
   }
 
@@ -49,6 +54,7 @@ export class AiService {
     if (!creds) throw new BadRequestException('未配置讯飞语音');
     try {
       const text = await transcribeWithXfyun(creds, audio, factory);
+      await this.billing.consume(user, 'AI', AI_WEIGHT.transcribe, { refType: 'ai.transcribe' });
       return { text };
     } catch {
       // 不泄露凭证:统一降级
