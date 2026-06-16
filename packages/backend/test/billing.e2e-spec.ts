@@ -70,6 +70,12 @@ describe('Billing e2e', () => {
     }
     if (createdBatchId) await prisma.batch.deleteMany({ where: { id: createdBatchId } });
     if (createdFieldId) await prisma.field.deleteMany({ where: { id: createdFieldId } });
+    // 本套用例会把 merchantA 的 CODE 余额压到 2(熔断用例),恢复到种子额度,
+    // 避免后续 e2e(如 trace-codes)因余额不足被计费硬熔断而误报 403。
+    await prisma.creditAccount.updateMany({
+      where: { ownerType: 'MERCHANT', ownerId: merchantUserId },
+      data: { codeBalance: 10000 },
+    });
     await app.close();
   });
 

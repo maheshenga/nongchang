@@ -29,8 +29,9 @@ describe('溯源码批量生成 POST /trace/codes/:batchId e2e', () => {
     prisma = app.get(PrismaService);
     merchantAToken = await login(app, 'merchantA');
     merchantBToken = await login(app, 'merchantB');
-    // merchantA 名下的种子批次。
-    const batch = await prisma.batch.findFirst({ where: { batchNo: { not: '' } }, orderBy: { createdAt: 'asc' } });
+    // merchantA 名下的种子批次(按归属过滤,避免选中其它 e2e 残留批次导致越权 403)。
+    const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
+    const batch = await prisma.batch.findFirst({ where: { ownerId: userA!.id }, orderBy: { createdAt: 'asc' } });
     batchAId = batch!.id;
   });
 
