@@ -28,7 +28,10 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto): Promise<TokenPair> {
-    const user = await this.prisma.user.findUnique({ where: { username: dto.username } });
+    const user = await this.prisma.user.findUnique({
+      where: { username: dto.username },
+      include: { tenant: { select: { status: true } } },
+    });
     if (!user) throw new UnauthorizedException('账号或密码错误');
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('账号或密码错误');
@@ -36,6 +39,7 @@ export class AuthService {
     const roles = Object.values(Role) as string[];
     if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
     if (user.status !== 'active') throw new ForbiddenException('账号待审核或已停用');
+    if (user.tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
 
     return this.issueTokens(this.toAuthUser(user));
   }
@@ -51,9 +55,11 @@ export class AuthService {
     // 3. 按 (tenantId, wxOpenid) 查用户;未注册→引导注册,待审核→拒绝
     const user = await this.prisma.user.findFirst({
       where: { tenantId: lookup.tenantId, wxOpenid: openid },
+      include: { tenant: { select: { status: true } } },
     });
     if (!user) throw new NotFoundException('账号未注册');
     if (user.status !== 'active') throw new ForbiddenException('账号审核中');
+    if (user.tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
     return this.issueTokens(this.toAuthUser(user));
   }
 
@@ -107,37 +113,25 @@ export class AuthService {
     return data.openid;
   }
 
-  private async registerWechatUser(tenantId: string, openid: string) {
-    const group = await this.groups.ensureDefault(tenantId);
-    // 随机密码哈希,禁止该账号走密码登录
-    const randomHash = await bcrypt.hash(randomBytes(24).toString('hex'), 10);
-    const username = `wx_${openid.slice(0, 12)}_${randomBytes(3).toString('hex')}`;
-    return this.prisma.user.create({
-      data: {
-        tenantId,
-        role: Role.MERCHANT,
-        username,
-        passwordHash: randomHash,
-        wxOpenid: openid,
-        displayName: '微信用户',
-        groupId: group.id,
-      },
-    });
-  }
-
   async refresh(refreshToken: string): Promise<TokenPair> {
+    let payload: AuthUser;
     try {
-      const payload = await this.jwt.verifyAsync<AuthUser>(refreshToken, {
+      payload = await this.jwt.verifyAsync<AuthUser>(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
-      const authUser: AuthUser = {
-        userId: payload.userId, tenantId: payload.tenantId, role: payload.role,
-        agentId: payload.agentId ?? null, ownerId: payload.ownerId ?? null,
-      };
-      return this.issueTokens(authUser);
     } catch {
       throw new UnauthorizedException('刷新令牌无效');
     }
+    // 查库吊销 + 刷新:用户被停用/删除或租户停用则拒绝;
+    // 命中则以 DB 最新 role/agentId/status 重建 AuthUser(角色/归属变更立即生效)。
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.userId },
+      include: { tenant: { select: { status: true } } },
+    });
+    if (!user || user.status !== 'active' || user.tenant.status !== 'active') {
+      throw new UnauthorizedException('刷新令牌无效');
+    }
+    return this.issueTokens(this.toAuthUser(user));
   }
 
   private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null }): AuthUser {

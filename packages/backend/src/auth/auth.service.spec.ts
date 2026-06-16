@@ -13,19 +13,22 @@ const makeService = (user: any, integrations = stubIntegrations(), groups = stub
   return new AuthService(prisma, jwt, integrations, groups);
 };
 
+// 默认带 active 租户;按需覆盖 tenant.status 测试机构停用。
+const activeTenant = { status: 'active' };
+
 beforeEach(() => { process.env.JWT_SECRET = 'test'; process.env.JWT_REFRESH_SECRET = 'test'; });
 
 describe('AuthService.login', () => {
   it('密码正确且 active 时返回 token 对', async () => {
     const hash = await bcrypt.hash('password123', 10);
-    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: 'a1', status: 'active', passwordHash: hash });
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: 'a1', status: 'active', passwordHash: hash, tenant: activeTenant });
     const res = await svc.login({ username: 'merchantA', password: 'password123' });
     expect(res.accessToken).toBeTypeOf('string');
     expect(res.refreshToken).toBeTypeOf('string');
   });
   it('密码错误时抛 Unauthorized', async () => {
     const hash = await bcrypt.hash('password123', 10);
-    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash });
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash, tenant: activeTenant });
     await expect(svc.login({ username: 'x', password: 'wrong' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
   it('用户不存在时抛 Unauthorized', async () => {
@@ -34,28 +37,49 @@ describe('AuthService.login', () => {
   });
   it('status 非 active(待审核)时抛 Forbidden', async () => {
     const hash = await bcrypt.hash('password123', 10);
-    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'pending', passwordHash: hash });
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'pending', passwordHash: hash, tenant: activeTenant });
+    await expect(svc.login({ username: 'p', password: 'password123' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('所属租户停用时抛 Forbidden(#26)', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash, tenant: { status: 'suspended' } });
     await expect(svc.login({ username: 'p', password: 'password123' })).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 
 describe('AuthService.refresh', () => {
-  it('有效 refresh token 重新签发 token 对', async () => {
+  // refresh 现在查库:构造带 user.findUnique 的 prisma。
+  const makeRefreshSvc = (user: any) => {
     const jwt = new JwtService({ secret: 'test' });
-    const prisma = { user: { findUnique: vi.fn() } } as any;
-    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
-    const rt = await jwt.signAsync(
-      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
-      { secret: 'test', expiresIn: '7d' },
-    );
-    const res = await svc.refresh(rt);
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue(user) } } as any;
+    return { svc: new AuthService(prisma, jwt, stubIntegrations(), stubGroups()), jwt };
+  };
+  const signRt = (jwt: JwtService) => jwt.signAsync(
+    { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
+    { secret: 'test', expiresIn: '7d' },
+  );
+
+  it('有效 refresh + 用户 active + 租户 active → 重新签发', async () => {
+    const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', tenant: activeTenant });
+    const res = await svc.refresh(await signRt(jwt));
     expect(res.accessToken).toBeTypeOf('string');
     expect(res.refreshToken).toBeTypeOf('string');
   });
   it('无效 refresh token 抛 Unauthorized', async () => {
-    const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService({ user: { findUnique: vi.fn() } } as any, jwt, stubIntegrations(), stubGroups());
+    const { svc } = makeRefreshSvc(null);
     await expect(svc.refresh('garbage.token.value')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('用户已被删除(查库为空)抛 Unauthorized(#22 吊销)', async () => {
+    const { svc, jwt } = makeRefreshSvc(null);
+    await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('用户被停用(status!=active)抛 Unauthorized(#22 吊销)', async () => {
+    const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'suspended', tenant: activeTenant });
+    await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('租户停用抛 Unauthorized(#22 吊销)', async () => {
+    const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', tenant: { status: 'suspended' } });
+    await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
 
@@ -94,7 +118,7 @@ describe('AuthService.loginWechat', () => {
     vi.stubGlobal('fetch', wxFetch({ openid: 'OPENID123' }));
     const { svc, prisma } = makeWechatService({
       lookup: { tenantId: 't1', secret: 's' },
-      existingUser: { id: 'u9', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'OPENID123' },
+      existingUser: { id: 'u9', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'OPENID123', tenant: activeTenant },
     });
     const res = await svc.loginWechat({ code: 'c', appId: 'wxX' });
     expect(res.accessToken).toBeTypeOf('string');
@@ -112,7 +136,16 @@ describe('AuthService.loginWechat', () => {
     vi.stubGlobal('fetch', wxFetch({ openid: 'PENDOPENID' }));
     const { svc } = makeWechatService({
       lookup: { tenantId: 't1', secret: 's' },
-      existingUser: { id: 'u8', tenantId: 't1', role: 'merchant', agentId: null, status: 'pending', wxOpenid: 'PENDOPENID' },
+      existingUser: { id: 'u8', tenantId: 't1', role: 'merchant', agentId: null, status: 'pending', wxOpenid: 'PENDOPENID', tenant: activeTenant },
+    });
+    await expect(svc.loginWechat({ code: 'c', appId: 'wxX' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('所属租户停用时抛 Forbidden(#26)', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'SUSPOPENID' }));
+    const { svc } = makeWechatService({
+      lookup: { tenantId: 't1', secret: 's' },
+      existingUser: { id: 'u7', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SUSPOPENID', tenant: { status: 'suspended' } },
     });
     await expect(svc.loginWechat({ code: 'c', appId: 'wxX' })).rejects.toBeInstanceOf(ForbiddenException);
   });
