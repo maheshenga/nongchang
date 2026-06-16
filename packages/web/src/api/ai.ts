@@ -1,4 +1,4 @@
-import type { AiChatResponse, AiDiagnoseResponse, AiDiagnoseInput } from '@nongchang/shared';
+import type { AiChatResponse, AiDiagnoseResponse, AiDiagnoseInput, AiAdviceInput, AiAskInput } from '@nongchang/shared';
 import { request } from './request';
 
 export function aiChat(message: string): Promise<AiChatResponse> {
@@ -6,4 +6,10 @@ export function aiChat(message: string): Promise<AiChatResponse> {
 }
 export function aiDiagnose(input: AiDiagnoseInput): Promise<AiDiagnoseResponse> {
   return request<AiDiagnoseResponse>('/ai/diagnose', { method: 'POST', body: JSON.stringify(input) });
+}
+export function aiAdvice(dto: AiAdviceInput): Promise<AiChatResponse> {
+  return request<AiChatResponse>('/ai/advice', { method: 'POST', body: JSON.stringify(dto) });
+}
+export function aiAsk(dto: AiAskInput): Promise<AiChatResponse> {
+  return request<AiChatResponse>('/ai/ask', { method: 'POST', body: JSON.stringify(dto) });
 }
