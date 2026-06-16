@@ -27,7 +27,6 @@ import { BillingModule } from './modules/billing/billing.module';
 import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
-import { PermissionGuard } from './common/guards/permission.guard';
 
 @Module({
   imports: [
@@ -62,7 +61,6 @@ import { PermissionGuard } from './common/guards/permission.guard';
     ScopeService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: PermissionGuard },
   ],
 })
 export class AppModule {}
