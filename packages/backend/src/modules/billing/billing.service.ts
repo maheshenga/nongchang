@@ -110,4 +110,46 @@ export class BillingService {
       return { ok: true };
     });
   }
+
+  async summary(user: AuthUser): Promise<BillingSummary> {
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    return { ownerType, ownerId, aiBalance: acct.aiBalance, codeBalance: acct.codeBalance };
+  }
+
+  // 下级账户列表:平台看代理商;代理商看旗下商户;商户无下级返回空。
+  async listAccounts(user: AuthUser): Promise<CreditAccountItem[]> {
+    if (user.role === Role.SYSTEM_ADMIN) {
+      const agents = await this.prisma.agent.findMany({ where: { tenantId: user.tenantId }, select: { id: true, name: true } });
+      return Promise.all(agents.map(async (a) => {
+        const acc = await this.ensureAccount('AGENT', a.id, user.tenantId);
+        return { id: acc.id, ownerType: 'AGENT' as const, ownerId: a.id, ownerName: a.name, aiBalance: acc.aiBalance, codeBalance: acc.codeBalance };
+      }));
+    }
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
+      const merchants = await this.prisma.user.findMany({ where: { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId }, select: { id: true, displayName: true } });
+      return Promise.all(merchants.map(async (m) => {
+        const acc = await this.ensureAccount('MERCHANT', m.id, user.tenantId);
+        return { id: acc.id, ownerType: 'MERCHANT' as const, ownerId: m.id, ownerName: m.displayName ?? m.id, aiBalance: acc.aiBalance, codeBalance: acc.codeBalance };
+      }));
+    }
+    return [];
+  }
+
+  async ledger(user: AuthUser, query: LedgerQuery): Promise<PaginatedLedger> {
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const where: any = { accountId: acct.id };
+    if (query.resource) where.resource = query.resource;
+    if (query.reason) where.reason = query.reason;
+    const [rows, total] = await Promise.all([
+      this.prisma.creditLedger.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
+      this.prisma.creditLedger.count({ where }),
+    ]);
+    return {
+      items: rows.map((r) => ({ id: r.id, resource: r.resource, delta: r.delta, balanceAfter: r.balanceAfter, reason: r.reason, refType: r.refType, refId: r.refId, note: r.note, createdAt: r.createdAt.toISOString() })),
+      total, page: query.page, pageSize: query.pageSize,
+    };
+  }
 }

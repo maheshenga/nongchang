@@ -101,3 +101,19 @@ describe('BillingService.allocate', () => {
     expect(out.delta + inn.delta).toBe(0);
   });
 });
+
+describe('BillingService.summary', () => {
+  it('返回当前用户账户余额', async () => {
+    const prisma: any = {
+      creditAccount: {
+        findFirst: async () => ({ id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 }),
+        findUnique: async () => ({ id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 }),
+        create: async () => ({}),
+      },
+    };
+    const { BillingService } = await import('./billing.service');
+    const svc = new BillingService(prisma);
+    const s = await svc.summary(merchant);
+    expect(s).toEqual({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 });
+  });
+});
