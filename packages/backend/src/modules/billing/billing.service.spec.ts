@@ -1,0 +1,59 @@
+import { describe, it, expect } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
+import { BillingService } from './billing.service';
+import { Role, type AuthUser } from '@nongchang/shared';
+
+const sysadmin: AuthUser = { userId: 'u1', tenantId: 't1', role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null };
+const agent: AuthUser = { userId: 'u2', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null };
+const merchant: AuthUser = { userId: 'u3', tenantId: 't1', role: Role.MERCHANT, agentId: null, ownerId: 'm1' };
+
+function makeService(opts: { aiBalance?: number; codeBalance?: number; account?: any } = {}) {
+  const state: any = { aiBalance: opts.aiBalance ?? 0, codeBalance: opts.codeBalance ?? 0 };
+  const ledgers: any[] = [];
+  const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
+  const tx = {
+    creditAccount: {
+      updateMany: async (a: any) => {
+        const field = a.data.aiBalance ? 'aiBalance' : 'codeBalance';
+        const dec = (a.data.aiBalance ?? a.data.codeBalance).decrement;
+        const min = field === 'aiBalance' ? a.where.aiBalance.gte : a.where.codeBalance.gte;
+        if (state[field] >= min) { state[field] -= dec; return { count: 1 }; }
+        return { count: 0 };
+      },
+      update: async (a: any) => {
+        const field = a.data.aiBalance ? 'aiBalance' : 'codeBalance';
+        state[field] += (a.data.aiBalance ?? a.data.codeBalance).increment;
+        return { ...accountRow, ...state };
+      },
+      findFirst: async () => ({ ...accountRow, ...state }),
+      findUnique: async () => ({ ...accountRow, ...state }),
+    },
+    creditLedger: { create: async (a: any) => { ledgers.push(a.data); return a.data; } },
+  };
+  const prisma: any = {
+    ...tx,
+    $transaction: async (fn: any) => fn(tx),
+  };
+  const svc = new BillingService(prisma);
+  return { svc, state, ledgers, prisma };
+}
+
+describe('BillingService.consume', () => {
+  it('余额充足:AI 扣减并写 CONSUME 流水', async () => {
+    const { svc, state, ledgers } = makeService({ aiBalance: 10 });
+    await svc.consume(merchant, 'AI', 3, { refType: 'ai.diagnose' });
+    expect(state.aiBalance).toBe(7);
+    expect(ledgers[0]).toMatchObject({ resource: 'AI', delta: -3, balanceAfter: 7, reason: 'CONSUME', refType: 'ai.diagnose' });
+  });
+  it('余额不足:抛 Forbidden 且余额不变、无流水', async () => {
+    const { svc, state, ledgers } = makeService({ aiBalance: 2 });
+    await expect(svc.consume(merchant, 'AI', 3, { refType: 'ai.diagnose' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(state.aiBalance).toBe(2);
+    expect(ledgers).toHaveLength(0);
+  });
+  it('merchant 缺 ownerId fail-closed', async () => {
+    const { svc } = makeService({ aiBalance: 10 });
+    const bad = { ...merchant, ownerId: null } as AuthUser;
+    await expect(svc.consume(bad, 'AI', 1, {})).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
