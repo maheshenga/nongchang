@@ -1,9 +1,11 @@
 import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
-import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser } from '@nongchang/shared';
+import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser, AiAdviceInput, AiAskInput } from '@nongchang/shared';
 import { AiProviderService, EnabledAiProvider } from '../ai-provider/ai-provider.service';
 import { IntegrationConfigService } from '../integration/integration-config.service';
 import { BillingService } from '../billing/billing.service';
 import { AI_WEIGHT } from '../billing/billing.constants';
+import { PrismaService } from '../../prisma/prisma.service';
+import { ScopeService } from '../../common/scope/scope.service';
 import { transcribeWithXfyun, WebSocketFactory } from './xfyun-transcribe';
 
 @Injectable()
@@ -12,6 +14,8 @@ export class AiService {
     private providers: AiProviderService,
     private integrations: IntegrationConfigService,
     private billing: BillingService,
+    private prisma: PrismaService,
+    private scope: ScopeService,
   ) {}
 
   async chat(user: AuthUser, message: string): Promise<AiChatResponse> {
@@ -23,6 +27,33 @@ export class AiService {
     };
     const answer = await this.callChatCompletions(p, body);
     await this.billing.consume(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
+    return { answer };
+  }
+
+  async advice(user: AuthUser, input: AiAdviceInput): Promise<AiChatResponse> {
+    await this.scope.assertInScope(this.prisma, user, 'batch', input.batchId);
+    const batch = await this.prisma.batch.findFirst({ where: { id: input.batchId }, select: { cropName: true, status: true, plantDate: true } });
+    const records = await this.prisma.farmRecord.findMany({ where: { batchId: input.batchId }, orderBy: { createdAt: 'desc' }, take: 10, select: { action: true } });
+    const phen = await this.prisma.cropPhenology.findMany({ where: { tenantId: user.tenantId, cropName: batch?.cropName }, select: { expectedDays: true } });
+    const totalDays = phen.reduce((s, p) => s + p.expectedDays, 0);
+    const elapsed = batch ? Math.floor((Date.now() - new Date(batch.plantDate).getTime()) / 86400000) : 0;
+    const prompt = `你是农技专家。作物:${batch?.cropName};当前状态:${batch?.status};已种植${elapsed}天;标准全周期${totalDays || '未知'}天。近期农事:${records.map((r) => r.action).join('、') || '无'}。请给出未来一周的浇水、施肥、病虫害防治建议,简明分点。`;
+    const p = await this.providers.getEnabled(user);
+    if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
+    const answer = await this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] });
+    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.advice', refId: input.batchId });
+    return { answer };
+  }
+
+  async ask(user: AuthUser, input: AiAskInput): Promise<AiChatResponse> {
+    const where = await this.scope.ownedScopeWhere(this.prisma, user);
+    const batches = await this.prisma.batch.findMany({ where, select: { batchNo: true, cropName: true, status: true, plantDate: true }, take: 50 });
+    const ctx = batches.map((b) => `${b.batchNo}(${b.cropName},${b.status},种植${Math.floor((Date.now() - new Date(b.plantDate).getTime()) / 86400000)}天)`).join(';');
+    const prompt = `以下是用户可见的批次数据:${ctx || '无数据'}。请根据数据回答问题:${input.question}`;
+    const p = await this.providers.getEnabled(user);
+    if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
+    const answer = await this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] });
+    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.ask' });
     return { answer };
   }
 

@@ -6,6 +6,10 @@ import {
   AiDiagnoseInput,
   aiChatSchema,
   aiDiagnoseSchema,
+  aiAdviceSchema,
+  aiAskSchema,
+  AiAdviceInput,
+  AiAskInput,
 } from '@nongchang/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -25,6 +29,16 @@ export class AiController {
   @Post('diagnose')
   diagnose(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(aiDiagnoseSchema)) dto: AiDiagnoseInput) {
     return this.svc.diagnose(user, dto);
+  }
+
+  @Post('advice')
+  advice(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(aiAdviceSchema)) dto: AiAdviceInput) {
+    return this.svc.advice(user, dto);
+  }
+
+  @Post('ask')
+  ask(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(aiAskSchema)) dto: AiAskInput) {
+    return this.svc.ask(user, dto);
   }
 
   @Post('transcribe')

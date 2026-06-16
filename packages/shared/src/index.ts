@@ -94,11 +94,13 @@ export type { AuthUser, TokenPair } from './types';
 export {
   createAiProviderSchema, updateAiProviderSchema, aiProviderViewSchema,
   aiChatSchema, aiDiagnoseSchema, ossConfigSchema, ossConfigViewSchema,
+  aiAdviceSchema, aiAskSchema,
 } from './dto/ai.dto';
 export type {
   CreateAiProviderInput, UpdateAiProviderInput, AiProviderView,
   AiChatInput, AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse,
   OssConfigInput, OssConfigView, AiTestResponse,
+  AiAdviceInput, AiAskInput,
 } from './dto/ai.dto';
 
 export {

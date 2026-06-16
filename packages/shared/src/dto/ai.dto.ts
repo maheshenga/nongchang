@@ -33,6 +33,11 @@ export const aiChatSchema = z.object({ message: z.string().min(1).max(2000) });
 export type AiChatInput = z.infer<typeof aiChatSchema>;
 export type AiChatResponse = { answer: string };
 
+export const aiAdviceSchema = z.object({ batchId: z.string().min(1) });
+export type AiAdviceInput = z.infer<typeof aiAdviceSchema>;
+export const aiAskSchema = z.object({ question: z.string().min(1).max(500) });
+export type AiAskInput = z.infer<typeof aiAskSchema>;
+
 export const aiDiagnoseSchema = z.object({
   imageUrl: z.string().url().optional(),
   imageBase64: z.string().optional(),
