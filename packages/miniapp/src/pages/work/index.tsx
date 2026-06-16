@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
 import { listBatches, type Batch, type FarmRecord } from '../../api/farm';
 import { listQuickTemplates } from '../../api/quickTemplate';
+import { getBillingSummary } from '../../api/billing';
 import { request } from '../../api/request';
 import { sortByRecentDesc } from '../../utils/stats';
 import Sensors from '../../components/Sensors';
@@ -15,6 +16,8 @@ import './index.scss';
 
 type AiMode = 'chat' | 'diagnose' | null;
 
+const LOW_BALANCE = 100;
+
 export default function Work() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [records, setRecords] = useState<FarmRecord[]>([]);
@@ -23,6 +26,7 @@ export default function Work() {
   const [err, setErr] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [aiMode, setAiMode] = useState<AiMode>(null);
+  const [summary, setSummary] = useState<{ aiBalance: number; codeBalance: number } | null>(null);
   const formRef = useRef<RecordFormHandle>(null);
 
   useDidShow(() => {
@@ -50,6 +54,10 @@ export default function Work() {
     }
     // 模板失败不影响主流程
     listQuickTemplates().then(setTemplates).catch(() => setTemplates([]));
+    // 额度失败不影响主流程
+    getBillingSummary()
+      .then((s) => setSummary({ aiBalance: s.aiBalance, codeBalance: s.codeBalance }))
+      .catch(() => {});
   }
 
   const subtitle = batches[0]?.cropName
@@ -71,6 +79,22 @@ export default function Work() {
             <Text className="work__net-text">{isOffline ? '离线' : '在线'}</Text>
           </View>
         </View>
+        {summary && (
+          <View className="work__balance">
+            <Text
+              className={`work__balance-text${
+                summary.aiBalance < LOW_BALANCE || summary.codeBalance < LOW_BALANCE
+                  ? ' work__balance-text--low'
+                  : ''
+              }`}
+            >
+              AI 算力:{summary.aiBalance} 次 · 二维码:{summary.codeBalance} 个
+              {summary.aiBalance < LOW_BALANCE || summary.codeBalance < LOW_BALANCE
+                ? ' · 余额偏低'
+                : ''}
+            </Text>
+          </View>
+        )}
       </View>
 
       <View className="work__body">
@@ -100,10 +124,28 @@ export default function Work() {
         </View>
 
         <ScrollView scrollX className="work__quick">
-          <View className="work__quick-item" onClick={() => setAiMode('chat')}>
+          <View
+            className={`work__quick-item${summary && summary.aiBalance <= 0 ? ' work__quick-item--disabled' : ''}`}
+            onClick={() => {
+              if (summary && summary.aiBalance <= 0) {
+                Taro.showToast({ title: 'AI 算力不足,请联系管理员', icon: 'none' });
+                return;
+              }
+              setAiMode('chat');
+            }}
+          >
             <Icon name="sparkles" size={22} /><Text className="work__quick-text">AI 助手</Text>
           </View>
-          <View className="work__quick-item" onClick={() => setAiMode('diagnose')}>
+          <View
+            className={`work__quick-item${summary && summary.aiBalance <= 0 ? ' work__quick-item--disabled' : ''}`}
+            onClick={() => {
+              if (summary && summary.aiBalance <= 0) {
+                Taro.showToast({ title: 'AI 算力不足,请联系管理员', icon: 'none' });
+                return;
+              }
+              setAiMode('diagnose');
+            }}
+          >
             <Icon name="camera" size={22} /><Text className="work__quick-text">AI 诊断</Text>
           </View>
           <View className="work__quick-item work__quick-item--reserved" onClick={() => comingSoon('区块链定位即将开放')}>

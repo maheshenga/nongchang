@@ -41,6 +41,22 @@
     margin-top: 4px;
   }
 
+  &__balance {
+    display: flex;
+    align-items: center;
+    margin-top: 16px;
+  }
+
+  &__balance-text {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.9);
+
+    &--low {
+      color: #fbbf24;
+      font-weight: bold;
+    }
+  }
+
   &__body {
     padding: 24px 24px 0;
     margin-top: -20px;
@@ -127,6 +143,7 @@
     border: 1px solid $c-border;
 
     &--reserved { opacity: 0.55; }
+    &--disabled { opacity: 0.45; }
   }
 
   &__quick-text {
