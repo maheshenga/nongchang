@@ -62,7 +62,10 @@ export default function App() {
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash.startsWith('#/trace/')) {
-        const code = hash.replace('#/trace/', '');
+        // 取 #/trace/ 之后的首段,裁掉可能的尾部查询串/多余路径;与 fetchPublicTrace 的 encodeURIComponent 对称 decode。
+        const raw = hash.slice('#/trace/'.length).split(/[/?#]/)[0];
+        let code = raw;
+        try { code = decodeURIComponent(raw); } catch { /* 非法编码则按原样 */ }
         setTraceCode(code);
       } else {
         setTraceCode(null);
