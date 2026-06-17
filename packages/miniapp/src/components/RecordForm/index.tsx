@@ -33,6 +33,9 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [advising, setAdvising] = useState(false);
+  // 作业地点经纬度(可选):提交时写入 location 字段供溯源核验。
+  const [location, setLocation] = useState('');
+  const [locating, setLocating] = useState(false);
   // 扫码定位到、但 props.batches 未包含的批次(范围内补充)。
   const [scannedBatches, setScannedBatches] = useState<Batch[]>([]);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
@@ -154,6 +157,22 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     }
   }
 
+  async function captureLocation() {
+    if (locating) return;
+    if (location) { setLocation(''); return; } // 再次点击清除
+    setLocating(true);
+    try {
+      const r = await Taro.getLocation({ type: 'gcj02' });
+      // 经度,纬度,保留 6 位小数,与后端 location(string,≤128)对齐
+      setLocation(`${r.longitude.toFixed(6)},${r.latitude.toFixed(6)}`);
+      Taro.showToast({ title: '已记录当前位置', icon: 'none' });
+    } catch {
+      Taro.showToast({ title: '定位失败,请检查授权', icon: 'none' });
+    } finally {
+      setLocating(false);
+    }
+  }
+
   async function submit() {
     if (!selectedBatch) {
       Taro.showToast({ title: '请选择批次', icon: 'none' });
@@ -175,13 +194,14 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         action,
         detail: Object.keys(detail).length ? detail : undefined,
         images: images.length ? images : undefined,
+        location: location || undefined,
         recordedAt: new Date().toISOString(),
         source: FarmRecordSource.MINIAPP,
         ...(supplyId ? { supplyId, supplyAmount: Number(supplyAmount) || 0 } : {}),
       });
       Taro.showToast({ title: '已提交', icon: 'success' });
       setNote(''); setCost(''); setLabor(''); setImages([]);
-      setSupplyId(''); setSupplyAmount(''); setAction('');
+      setSupplyId(''); setSupplyAmount(''); setAction(''); setLocation('');
       onSaved();
     } catch (e: any) {
       Taro.showToast({ title: e.message || '提交失败', icon: 'none' });
@@ -212,6 +232,12 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       </View>
       <View className="rec-form__scan" onClick={getAdvice}>
         <Icon name="sparkles" size={20} /><Text className="rec-form__scan-text">{advising ? 'AI 分析中…' : 'AI 推荐农事建议'}</Text>
+      </View>
+      <View className={`rec-form__scan ${location ? 'rec-form__scan--on' : ''}`} onClick={captureLocation}>
+        <Icon name="trace" size={20} />
+        <Text className="rec-form__scan-text">
+          {locating ? '定位中…' : location ? `已记录位置:${location}(点击清除)` : '记录作业地点'}
+        </Text>
       </View>
 
       <View className="rec-form__row">

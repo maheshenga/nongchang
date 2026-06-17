@@ -30,6 +30,18 @@ export class FieldService {
       where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
     });
     const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
-    return fields.map((f: any) => ({ ...f, ownerName: nameMap.get(f.ownerId) ?? null }));
+    // 经纬度存 PostGIS geography 列,用 ST_X/ST_Y 从 location 提取(转 geometry 后取坐标)。
+    const ids = fields.map((f: any) => f.id);
+    const coords = await this.prisma.$queryRawUnsafe<Array<{ id: string; lng: number | null; lat: number | null }>>(
+      `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id = ANY($1::uuid[])`,
+      ids,
+    );
+    const coordMap = new Map(coords.map((c) => [c.id, c]));
+    return fields.map((f: any) => ({
+      ...f,
+      ownerName: nameMap.get(f.ownerId) ?? null,
+      lng: coordMap.get(f.id)?.lng ?? null,
+      lat: coordMap.get(f.id)?.lat ?? null,
+    }));
   }
 }

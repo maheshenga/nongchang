@@ -3,6 +3,8 @@ import { ShieldCheck, MapPin, Calendar, Sprout, Truck, Store, Leaf, ArrowLeft, H
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchPublicTrace, TraceNotFoundError } from '../api/trace';
 import type { PublicTraceResult, TraceEventType } from '@nongchang/shared';
+import TiandituMap from './TiandituMap';
+import type { Field } from '../api/fields';
 
 const ICON_BY_TYPE: Record<TraceEventType, typeof Sprout> = {
   origin: Sprout, farm: Leaf, harvest: Sun, warehouse: Hexagon, logistics: Truck, retail: Store,
@@ -72,6 +74,16 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
   const { batch, events, scanCount } = data;
   const credentials = data.credentials ?? [];
   const origin = batch.region ?? batch.fieldName;
+  // 地块有经纬度且租户启用天地图时,构造一个合成 Field 供底图打点
+  const originField: Field | null =
+    batch.fieldLng != null && batch.fieldLat != null
+      ? {
+          id: 'origin', tenantId: '', ownerId: '', ownerName: null,
+          name: batch.fieldName || '产地', area: 0,
+          lng: batch.fieldLng, lat: batch.fieldLat,
+          iotDeviceId: null, createdAt: '',
+        }
+      : null;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-emerald-100 selection:text-emerald-900 pb-12">
@@ -155,6 +167,21 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
         <AnimatePresence mode="wait">
           {activeTab === 'journey' && (
             <motion.div key="journey" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+              {originField && data.tiandituKey && (
+                <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700 mb-2 px-1">
+                    <MapPin className="w-4 h-4 text-emerald-600" /> 产地位置
+                  </div>
+                  <div className="relative h-56 rounded-xl overflow-hidden bg-slate-100">
+                    <TiandituMap
+                      fields={[originField]}
+                      activeFieldId="origin"
+                      onSelect={() => {}}
+                      apiKey={data.tiandituKey}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="relative pl-8 before:absolute before:inset-0 before:ml-[1.18rem] before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-200 before:via-emerald-400/50 before:to-emerald-200/20">
                 {events.map((ev, idx) => {
                   const Icon = ICON_BY_TYPE[ev.type];

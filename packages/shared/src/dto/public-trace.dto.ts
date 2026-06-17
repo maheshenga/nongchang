@@ -25,6 +25,8 @@ export const publicTraceBatchSchema = z.object({
   ]),
   fieldName: z.string(),
   region: z.string().nullable(),
+  fieldLng: z.number().nullable(),
+  fieldLat: z.number().nullable(),
 });
 export type PublicTraceBatch = z.infer<typeof publicTraceBatchSchema>;
 
@@ -32,6 +34,7 @@ export const publicTraceResponseSchema = z.object({
   code: z.string(),
   frozen: z.literal(false),
   scanCount: z.number(),
+  tiandituKey: z.string().nullable(),
   batch: publicTraceBatchSchema,
   events: z.array(publicTraceEventSchema),
   credentials: z.array(publicTraceCredentialSchema).default([]),

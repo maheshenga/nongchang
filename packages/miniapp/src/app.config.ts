@@ -25,4 +25,10 @@ export default {
       { pagePath: 'pages/me/index', text: '我的' },
     ],
   },
+  permission: {
+    'scope.userLocation': {
+      desc: '用于在农事记录中标记作业地点,便于溯源核验',
+    },
+  },
+  requiredPrivateInfos: ['getLocation'],
 };

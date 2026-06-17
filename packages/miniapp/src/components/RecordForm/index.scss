@@ -53,6 +53,12 @@
     border: 1px dashed $c-border;
     border-radius: 14px;
     justify-content: center;
+
+    &--on {
+      border-style: solid;
+      border-color: $c-primary;
+      background: rgba(5, 150, 105, 0.06);
+    }
   }
 
   &__scan-text { font-size: 26px; color: $c-primary; }

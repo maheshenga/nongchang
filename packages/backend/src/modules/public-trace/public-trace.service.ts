@@ -18,6 +18,17 @@ export class PublicTraceService {
     if (!batch) throw new NotFoundException('批次不存在');
 
     const field = await this.prisma.field.findUnique({ where: { id: batch.fieldId } });
+    // 经纬度存 PostGIS geography 列,用 ST_X/ST_Y 提取(无坐标则为 null)。
+    let fieldLng: number | null = null;
+    let fieldLat: number | null = null;
+    if (field) {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ lng: number | null; lat: number | null }>>(
+        `SELECT ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id = $1`,
+        field.id,
+      );
+      fieldLng = rows[0]?.lng ?? null;
+      fieldLat = rows[0]?.lat ?? null;
+    }
     const owner = await this.prisma.user.findUnique({ where: { id: batch.ownerId } });
     const agent = owner?.agentId
       ? await this.prisma.agent.findUnique({ where: { id: owner.agentId } })
@@ -32,6 +43,15 @@ export class PublicTraceService {
       where: { tenantId: traceCode.tenantId, batchId: batch.id },
       orderBy: { createdAt: 'desc' },
     });
+
+    // 天地图浏览器端 key(明文存 appId 字段,靠域名白名单防盗用):仅在地块有经纬度且配置启用时返回,供公开溯源页加载底图。
+    let tiandituKey: string | null = null;
+    if (fieldLng != null && fieldLat != null) {
+      const tdt = await this.prisma.integrationConfig.findUnique({
+        where: { tenantId_provider: { tenantId: traceCode.tenantId, provider: 'tianditu' } },
+      });
+      if (tdt?.enabled && tdt.appId) tiandituKey = tdt.appId;
+    }
 
     const updated = await this.prisma.traceCode.update({
       where: { code },
@@ -53,6 +73,7 @@ export class PublicTraceService {
       code: traceCode.code,
       frozen: false,
       scanCount: updated.scanCount,
+      tiandituKey,
       batch: {
         cropName: batch.cropName,
         batchNo: batch.batchNo,
@@ -61,6 +82,8 @@ export class PublicTraceService {
         status: batch.status as Extract<PublicTraceResult, { frozen: false }>['batch']['status'],
         fieldName: field?.name ?? '',
         region: agent?.region ?? null,
+        fieldLng,
+        fieldLat,
       },
       events: events.map((e) => ({
         type: e.type as Extract<PublicTraceResult, { frozen: false }>['events'][number]['type'],

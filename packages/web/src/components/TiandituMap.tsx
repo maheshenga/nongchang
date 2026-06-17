@@ -7,10 +7,11 @@ interface Props {
   fields: Field[];
   activeFieldId: string | null;
   onSelect: (id: string) => void;
+  apiKey?: string; // 显式 key(公开溯源页用);不传则走已登录的租户配置接口
 }
 
 // 用天地图真实底图按经纬度展示地块标注。无 key / 加载失败时回退到「去配置」提示。
-export default function TiandituMap({ fields, activeFieldId, onSelect }: Props) {
+export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
@@ -23,7 +24,7 @@ export default function TiandituMap({ fields, activeFieldId, onSelect }: Props) 
   // 初始化地图(仅一次)
   useEffect(() => {
     let disposed = false;
-    loadTianditu()
+    loadTianditu(apiKey)
       .then((T) => {
         if (disposed || !containerRef.current) return;
         const center = located[0]

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, Map } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken, clearToken } from '../../store/auth';
 import { request } from '../../api/request';
@@ -103,6 +103,30 @@ export default function Me() {
         {fields && (
           <View className="me__fields">
             {fields.length === 0 && <Text className="me__field-empty">暂无地块</Text>}
+            {(() => {
+              const located = fields.filter((f) => f.lng != null && f.lat != null);
+              if (located.length === 0) return null;
+              const markers = located.map((f, i) => ({
+                id: i,
+                latitude: f.lat,
+                longitude: f.lng,
+                title: `${f.name} · ${f.area} 亩`,
+                iconPath: '',
+                width: 24,
+                height: 24,
+              }));
+              return (
+                <Map
+                  className="me__field-map"
+                  longitude={located[0].lng}
+                  latitude={located[0].lat}
+                  scale={12}
+                  markers={markers}
+                  showLocation
+                  onError={() => Taro.showToast({ title: '地图加载失败', icon: 'none' })}
+                />
+              );
+            })()}
             {fields.map((f) => (
               <Text className="me__field" key={f.id}>{f.name} · {f.area} 亩</Text>
             ))}

@@ -8,15 +8,16 @@ declare global {
   }
 }
 
-// 动态加载天地图脚本(按租户配置的 key)。多次调用共享同一 Promise,避免重复注入。
+// 动态加载天地图脚本。多次调用共享同一 Promise,避免重复注入。
+// 可显式传入 key(如公开溯源页,key 随响应下发);不传时按租户配置接口拉取(后台已登录场景)。
 // 无 key 或未启用时 reject,调用方据此回退到占位地图。
-export function loadTianditu(): Promise<any> {
+export function loadTianditu(explicitKey?: string): Promise<any> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
   if (window.T) return Promise.resolve(window.T);
   if (window.__tdtReady) return window.__tdtReady;
 
   window.__tdtReady = (async () => {
-    const { key } = await getTiandituKey();
+    const key = explicitKey ?? (await getTiandituKey()).key;
     if (!key) {
       window.__tdtReady = null;
       throw new Error('未配置天地图 key');

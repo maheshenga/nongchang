@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { PublicTraceService } from './public-trace.service';
 
 function makePrisma(overrides: any = {}) {
+  const { coords, ...rest } = overrides;
   return {
     traceCode: {
       findUnique: vi.fn().mockResolvedValue({ id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-X', scanCount: 4 }),
@@ -18,6 +19,8 @@ function makePrisma(overrides: any = {}) {
     field: { findUnique: vi.fn().mockResolvedValue({ id: 'f1', name: 'A区露地', ownerId: 'm1' }) },
     user: { findUnique: vi.fn().mockResolvedValue({ id: 'm1', agentId: 'a1' }) },
     agent: { findUnique: vi.fn().mockResolvedValue({ id: 'a1', region: '云南' }) },
+    // 经纬度通过 ST_X/ST_Y 原生查询提取,默认无坐标。
+    $queryRawUnsafe: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
     traceEvent: {
       findMany: vi.fn().mockResolvedValue([
         { type: 'origin', title: '种苗', actor: '李', location: '大理', occurredAt: new Date('2023-04-12T09:30:00Z'), payload: { desc: 'x' } },
@@ -29,7 +32,7 @@ function makePrisma(overrides: any = {}) {
         { id: 'cr1', batchId: 'b1', type: 'certificate', title: '有机认证', issuer: '认证中心', serialNo: 'OC-1', issuedAt: new Date('2026-06-01T00:00:00Z'), fileUrl: 'https://oss/cert.pdf', createdAt: new Date() },
       ]),
     },
-    ...overrides,
+    ...rest,
   } as any;
 }
 
@@ -94,5 +97,39 @@ describe('PublicTraceService.getByCode', () => {
     expect(json).not.toContain('m1');
     expect(json).not.toContain('fieldId');
     expect(json).not.toContain('batchId');
+  });
+
+  it('地块有经纬度且天地图启用时返回 key 与坐标', async () => {
+    const prisma = makePrisma({
+      coords: [{ lng: 100.25, lat: 25.6 }],
+      integrationConfig: { findUnique: vi.fn().mockResolvedValue({ provider: 'tianditu', enabled: true, appId: 'TDT_KEY' }) },
+    });
+    const svc = new PublicTraceService(prisma);
+    const res = await svc.getByCode('ORC-X');
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
+    expect(res.batch.fieldLng).toBe(100.25);
+    expect(res.batch.fieldLat).toBe(25.6);
+    expect(res.tiandituKey).toBe('TDT_KEY');
+  });
+
+  it('天地图未启用时 key 为 null', async () => {
+    const prisma = makePrisma({
+      coords: [{ lng: 100.25, lat: 25.6 }],
+      integrationConfig: { findUnique: vi.fn().mockResolvedValue({ provider: 'tianditu', enabled: false, appId: 'TDT_KEY' }) },
+    });
+    const svc = new PublicTraceService(prisma);
+    const res = await svc.getByCode('ORC-X');
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
+    expect(res.tiandituKey).toBeNull();
+  });
+
+  it('地块无经纬度时不查询集成配置且 key 为 null', async () => {
+    const prisma = makePrisma();
+    const svc = new PublicTraceService(prisma);
+    const res = await svc.getByCode('ORC-X');
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
+    expect(res.tiandituKey).toBeNull();
+    expect(res.batch.fieldLng).toBeNull();
+    expect(prisma.integrationConfig?.findUnique).toBeUndefined();
   });
 });
