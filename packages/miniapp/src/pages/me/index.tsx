@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { View, Text, Image } from '@tarojs/components';
+import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken, clearToken } from '../../store/auth';
 import { request } from '../../api/request';
-import { listFields, type Field, type FarmRecord } from '../../api/farm';
+import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
 import './index.scss';
@@ -12,6 +12,8 @@ export default function Me() {
   const [username, setUsername] = useState('农技员');
   const [role, setRole] = useState('农技员');
   const [monthCount, setMonthCount] = useState<number | null>(null);
+  const [batchCount, setBatchCount] = useState<number | null>(null);
+  const [fieldCount, setFieldCount] = useState<number | null>(null);
   const [fields, setFields] = useState<Field[] | null>(null);
 
   useDidShow(() => {
@@ -34,6 +36,8 @@ export default function Me() {
     } catch {
       setMonthCount(null);
     }
+    listBatches().then((bs) => setBatchCount(bs.length)).catch(() => setBatchCount(null));
+    listFields().then((fs) => setFieldCount(fs.length)).catch(() => setFieldCount(null));
   }
 
   const comingSoon = () => Taro.showToast({ title: '功能即将开放', icon: 'none' });
@@ -63,7 +67,9 @@ export default function Me() {
   return (
     <View className="me">
       <View className="me__header">
-        <Image className="me__avatar" src="https://api.dicebear.com/7.x/notionists/svg?seed=Admin" />
+        <View className="me__avatar">
+          <Text className="me__avatar-text">{username.slice(0, 1)}</Text>
+        </View>
         <View>
           <Text className="me__name">{username}</Text>
           <Text className="me__role">{role}</Text>
@@ -76,12 +82,12 @@ export default function Me() {
           <Text className="me__stat-label">本月记录</Text>
         </View>
         <View className="me__stat">
-          <Text className="me__stat-num">98%</Text>
-          <Text className="me__stat-label">合规率（示例）</Text>
+          <Text className="me__stat-num">{batchCount ?? '—'}</Text>
+          <Text className="me__stat-label">在管批次</Text>
         </View>
         <View className="me__stat">
-          <Text className="me__stat-num">A</Text>
-          <Text className="me__stat-label">绩效（示例）</Text>
+          <Text className="me__stat-num">{fieldCount ?? '—'}</Text>
+          <Text className="me__stat-label">承包地块</Text>
         </View>
       </View>
 

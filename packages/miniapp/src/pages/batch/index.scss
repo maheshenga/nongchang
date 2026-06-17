@@ -1,0 +1,106 @@
+@import '../../styles/theme.scss';
+
+.batch {
+  min-height: 100vh;
+  background: $c-bg;
+  padding-bottom: 140px;
+
+  &__header {
+    @include gradient-header;
+    padding: 40px 28px 36px;
+  }
+
+  &__crop {
+    font-size: 40px;
+    font-weight: bold;
+    color: #fff;
+  }
+
+  &__no {
+    display: block;
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 8px;
+  }
+
+  &__body {
+    padding: 24px 24px 0;
+    margin-top: -20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  &__section-title {
+    font-size: 30px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__hint {
+    display: block;
+    font-size: 24px;
+    color: $c-text-sub;
+    margin-top: 8px;
+
+    &--err { color: $c-rose; }
+  }
+
+  &__rec {
+    @include card;
+    padding: 28px 24px;
+  }
+
+  &__rec-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__rec-action {
+    font-size: 26px;
+    font-weight: bold;
+    color: $c-primary;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 4px 16px;
+    border-radius: 999px;
+  }
+
+  &__rec-time {
+    font-size: 22px;
+    color: $c-text-sub;
+  }
+
+  &__rec-note {
+    display: block;
+    font-size: 26px;
+    color: $c-text;
+    margin-top: 12px;
+  }
+
+  &__rec-img {
+    width: 100%;
+    border-radius: 14px;
+    margin-top: 12px;
+  }
+
+  &__fab {
+    position: fixed;
+    left: 24px;
+    right: 24px;
+    bottom: 32px;
+    height: 88px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, $c-primary 0%, $c-primary-dark 100%);
+    box-shadow: 0 10px 24px rgba(5, 150, 105, 0.35);
+  }
+
+  &__fab-text {
+    font-size: 30px;
+    font-weight: bold;
+    color: #fff;
+  }
+}
