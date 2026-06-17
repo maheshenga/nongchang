@@ -28,12 +28,16 @@ export default function Work() {
   const [aiMode, setAiMode] = useState<AiMode>(null);
   const [summary, setSummary] = useState<{ aiBalance: number; codeBalance: number } | null>(null);
   const formRef = useRef<RecordFormHandle>(null);
+  // 上次成功加载时间戳:切 tab 回来若在节流窗口内则跳过全量重载。
+  const lastLoadRef = useRef(0);
+  const LOAD_TTL = 30000;
 
   useDidShow(() => {
     if (!getToken()) {
       Taro.redirectTo({ url: '/pages/login/index' });
       return;
     }
+    if (Date.now() - lastLoadRef.current < LOAD_TTL) return;
     void load();
   });
 
@@ -58,6 +62,7 @@ export default function Work() {
       ]);
       setBatches(bs);
       setRecords(sortByRecentDesc(recsPage.items).slice(0, 5));
+      lastLoadRef.current = Date.now();
     } catch (e: any) {
       setErr(e?.message || '加载失败');
     } finally {
