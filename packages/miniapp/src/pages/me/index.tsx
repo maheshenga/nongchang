@@ -28,8 +28,9 @@ export default function Me() {
 
   async function loadStats() {
     try {
-      const recs = await request<FarmRecord[]>({ url: '/farm-records' });
-      setMonthCount(countThisMonth(recs as any, new Date()));
+      // /farm-records 返回分页对象 {items,total,page,pageSize},取 items 统计本月记录数
+      const res = await request<{ items: FarmRecord[] }>({ url: '/farm-records' });
+      setMonthCount(countThisMonth(res.items as any, new Date()));
     } catch {
       setMonthCount(null);
     }

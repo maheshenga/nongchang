@@ -67,6 +67,11 @@ export default function Work() {
 
   const comingSoon = (title: string) => Taro.showToast({ title, icon: 'none' });
 
+  function openBatch(b: Batch) {
+    const q = `id=${b.id}&cropName=${encodeURIComponent(b.cropName)}&batchNo=${encodeURIComponent(b.batchNo)}`;
+    Taro.navigateTo({ url: `/pages/batch/index?${q}` });
+  }
+
   return (
     <View className="work">
       <View className="work__header">
@@ -100,6 +105,23 @@ export default function Work() {
 
       <View className="work__body">
         <Sensors />
+
+        <View className="work__card">
+          <Text className="work__section-title">我的批次</Text>
+          {batches.length === 0 ? (
+            <Text className="work__hint">暂无批次</Text>
+          ) : (
+            <ScrollView scrollX className="work__batches">
+              {batches.map((b) => (
+                <View className="work__batch" key={b.id} onClick={() => openBatch(b)}>
+                  <Text className="work__batch-no">{b.batchNo}</Text>
+                  <Text className="work__batch-crop">{b.cropName}</Text>
+                  <Text className="work__batch-arrow">查看详情 ›</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
 
         <View className="work__card">
           <Text className="work__section-title">近期农事</Text>

@@ -151,4 +151,38 @@
     color: $c-text;
     margin-top: 6px;
   }
+
+  &__batches {
+    white-space: nowrap;
+    margin-top: 16px;
+  }
+
+  &__batch {
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 200px;
+    padding: 20px 24px;
+    margin-right: 16px;
+    border-radius: 18px;
+    background: $c-card;
+    border: 1px solid $c-border;
+  }
+
+  &__batch-no {
+    font-size: 26px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__batch-crop {
+    font-size: 24px;
+    color: $c-text-sub;
+    margin-top: 6px;
+  }
+
+  &__batch-arrow {
+    font-size: 22px;
+    color: $c-primary;
+    margin-top: 12px;
+  }
 }
