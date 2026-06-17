@@ -26,6 +26,10 @@ export default function AiPanel({ mode, onClose }: Props) {
 
   if (!mode) return null;
 
+  function copy(text: string) {
+    Taro.setClipboardData({ data: text });
+  }
+
   async function send() {
     const text = msg.trim();
     if (!text) return;
@@ -90,7 +94,12 @@ export default function AiPanel({ mode, onClose }: Props) {
             <Button className="ai-panel__btn" loading={chatLoading} onClick={send}>
               {chatLoading ? '分析中…' : '发送'}
             </Button>
-            {answer && <View className="ai-panel__result"><Text>{answer}</Text></View>}
+            {answer && (
+              <View className="ai-panel__result">
+                <Text>{answer}</Text>
+                <Text className="ai-panel__copy" onClick={() => copy(answer)}>复制结果</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -112,6 +121,7 @@ export default function AiPanel({ mode, onClose }: Props) {
                 {result.split('\n').filter((ln) => ln.trim()).map((ln, i) => (
                   <Text key={i} className="ai-panel__result-line">{ln}</Text>
                 ))}
+                <Text className="ai-panel__copy" onClick={() => copy(result)}>复制结果</Text>
               </View>
             )}
           </View>

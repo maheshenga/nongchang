@@ -107,4 +107,12 @@
     margin-bottom: 8px;
     line-height: 1.5;
   }
+
+  &__copy {
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 24px;
+    color: $c-primary;
+    font-weight: bold;
+  }
 }

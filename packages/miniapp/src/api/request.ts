@@ -13,12 +13,16 @@ interface RequestOptions {
   data?: Record<string, unknown>;
 }
 
+// 默认请求超时(ms)。弱网下避免请求长时间挂起无反馈。
+const TIMEOUT = 20000;
+
 export async function request<T>({ url, method = 'GET', data }: RequestOptions): Promise<T> {
   const token = getToken();
   const res = await Taro.request({
     url: `${BASE_URL}${url}`,
     method,
     data,
+    timeout: TIMEOUT,
     header: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -43,6 +47,7 @@ export async function uploadFile(filePath: string): Promise<string> {
     url: `${BASE_URL}/uploads`,
     filePath,
     name: 'file',
+    timeout: TIMEOUT,
     header: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.statusCode < 200 || res.statusCode >= 300) {
