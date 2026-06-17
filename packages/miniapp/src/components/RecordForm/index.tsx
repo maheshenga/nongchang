@@ -247,7 +247,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       </View>
 
       <Button className="rec-form__submit" loading={submitting} onClick={submit}>
-        提交上报并上链
+        提交上报
       </Button>
     </View>
   );
