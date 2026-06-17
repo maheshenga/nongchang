@@ -898,7 +898,7 @@ export default function Dashboard() {
         </div>
 
         <div key="lifecycle-sandbox" className="h-full flex flex-col pt-1">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] drag-handle cursor-move">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full drag-handle cursor-move">
             <div className="p-4 border-b border-slate-200 bg-white/90 backdrop-blur-sm sticky top-0 z-20 flex justify-between items-center rounded-t-xl">
                <div>
                  <h3 className="font-bold text-slate-800 flex items-center gap-2">

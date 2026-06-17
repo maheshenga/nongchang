@@ -506,7 +506,7 @@ export default function MerchantAdmin() {
                            </div>
                         ) : block.id === 'brand_video' ? (
                            <div className="w-full h-32 bg-slate-800 rounded-lg relative flex items-center justify-center shadow-inner overflow-hidden">
-                              <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1590459526702-8a9d1d6a89c3?auto=format&fit=crop&q=80&w=400')] bg-cover bg-center opacity-60"></div>
+                              <div className="absolute inset-0 opacity-60 bg-cover bg-center" style={{ backgroundImage: 'radial-gradient(circle at 30% 30%, rgba(16,185,129,0.5), transparent 60%), linear-gradient(135deg, #1e293b, #334155)' }}></div>
                               <div className="w-8 h-8 rounded-full bg-white/30 backdrop-blur border border-white/50 flex items-center justify-center z-10">
                                 <div className="w-0 h-0 border-l-[10px] border-l-white border-y-[6px] border-y-transparent ml-1"></div>
                               </div>
@@ -715,7 +715,6 @@ export default function MerchantAdmin() {
                      </div>
                    </div>
                    <div className="flex-1 bg-slate-50 rounded-xl relative overflow-hidden flex items-center justify-center flex-col border border-slate-100 shadow-inner group-hover:bg-slate-100 transition-colors duration-500">
-                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] mix-blend-multiply pointer-events-none"></div>
                       <MapPin className="w-16 h-16 text-blue-200 mb-4 drop-shadow-md transform group-hover:scale-110 transition-transform duration-700" />
                       <p className="font-bold text-slate-400 z-10 text-center tracking-wide leading-relaxed">系统已检测到主产区外高活跃度终端：<br/><span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">上海市</span> 、 <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">江苏省</span> 、 <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">广东省</span></p>
                       

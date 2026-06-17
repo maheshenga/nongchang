@@ -760,7 +760,7 @@ export default function BatchAdmin() {
                  </div>
               </div>
 
-              <div className="w-full md:w-[45%] p-8 flex flex-col items-center justify-center bg-[#f1f5f9] relative overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-opacity-30 border-t md:border-t-0 border-slate-200">
+              <div className="w-full md:w-[45%] p-8 flex flex-col items-center justify-center bg-[#f1f5f9] relative overflow-hidden border-t md:border-t-0 border-slate-200">
                  <button onClick={() => setShowQrModal(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg p-2 transition-colors z-20 md:hidden">
                     <X className="w-6 h-6" />
                  </button>
@@ -1086,7 +1086,6 @@ export default function BatchAdmin() {
                            </div>
                         </div>
                         <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/60 p-6 rounded-2xl flex items-center justify-between shadow-sm relative overflow-hidden">
-                           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 Mix-blend-overlay mix-blend-overlay"></div>
                            <div className="relative z-10">
                              <div className="text-[10px] uppercase tracking-widest font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
                                {batch.sellPrice > 0 ? (

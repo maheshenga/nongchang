@@ -219,7 +219,6 @@ export default function LogisticsTracker() {
             <div className="flex flex-col">
               <h4 className="font-bold text-slate-700 text-sm mb-4">实时地图轨迹可视化</h4>
               <div className="relative w-full h-[300px] md:h-full min-h-[300px] bg-slate-100 rounded-xl border border-slate-200 overflow-hidden shadow-inner">
-                 <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] mix-blend-multiply"></div>
                  {/* Decorative elements to simulate map routes */}
                  <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                     <path d="M 15 85 Q 40 40, 60 45 T 85 15" fill="none" stroke="#e2e8f0" strokeWidth="4" strokeLinecap="round" />
@@ -357,7 +356,7 @@ export default function LogisticsTracker() {
 
             <div className="flex-1 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden relative flex items-center justify-center">
                {/* Map Mockup Area */}
-               <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] mix-blend-multiply"></div>
+               <div className="absolute inset-0 opacity-20 mix-blend-multiply"></div>
                
                {isOptimizing ? (
                  <div className="flex flex-col items-center z-10 text-emerald-700">
