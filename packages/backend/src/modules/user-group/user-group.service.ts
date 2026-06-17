@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser, UserGroupInput, UserGroupView, AssignUserGroupInput } from '@nongchang/shared';
+import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 
 interface UserGroupRow {
@@ -95,8 +96,14 @@ export class UserGroupService {
   }
 
   async assignUserGroup(user: AuthUser, dto: AssignUserGroupInput): Promise<void> {
+    // 范围收敛:agent_admin 仅可给本代理商旗下用户改组,防止跨范围越权。
+    const scope: Record<string, string> = { tenantId: user.tenantId };
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝操作');
+      scope.agentId = user.agentId;
+    }
     const target = await this.prisma.user.findFirst({
-      where: { id: dto.userId, tenantId: user.tenantId },
+      where: { ...scope, id: dto.userId },
     });
     if (!target) throw new NotFoundException('用户不存在');
     if (dto.groupId) {

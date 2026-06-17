@@ -123,8 +123,8 @@ describe('Billing e2e', () => {
   });
 
   it('余额耗尽:CODE 不足时生码返回 403,不产码', async () => {
-    await prisma.creditAccount.update({
-      where: { ownerType_ownerId: { ownerType: 'MERCHANT', ownerId: merchantUserId } },
+    await prisma.creditAccount.updateMany({
+      where: { ownerType: 'MERCHANT', ownerId: merchantUserId },
       data: { codeBalance: 2 },
     });
 
@@ -135,5 +135,37 @@ describe('Billing e2e', () => {
 
     const after = await prisma.traceCode.count({ where: { batchId } });
     expect(after).toBe(before);
+  });
+
+  it('平台账户租户隔离:PLATFORM 账户按 tenantId 区分,不跨租户串账', async () => {
+    // BUG1 回归:ensureAccount 漏 tenantId + PLATFORM 固定 ownerId 曾导致全库共用一行平台账户。
+    // 为 DEMO 租户充值后,另建一个独立租户的 PLATFORM 账户,二者余额必须互不影响。
+    await request(app.getHttpServer())
+      .post('/api/billing/recharge').set('Authorization', `Bearer ${sysToken}`)
+      .send({ resource: 'AI', amount: 777 });
+
+    const demoTenant = await prisma.tenant.findFirst({ where: { code: 'DEMO' } });
+    const otherTenant = await prisma.tenant.upsert({
+      where: { code: 'BILLISO' },
+      update: {},
+      create: { name: '计费隔离测试租户', code: 'BILLISO' },
+    });
+
+    const demoPlatform = await prisma.creditAccount.findFirst({
+      where: { tenantId: demoTenant!.id, ownerType: 'PLATFORM', ownerId: 'PLATFORM' },
+    });
+    expect(demoPlatform).toBeTruthy();
+
+    // 另租户的 PLATFORM 账户独立存在(此前会命中同一行)
+    const otherPlatform = await prisma.creditAccount.create({
+      data: { tenantId: otherTenant.id, ownerType: 'PLATFORM', ownerId: 'PLATFORM', aiBalance: 0, codeBalance: 0 },
+    });
+    expect(otherPlatform.id).not.toBe(demoPlatform!.id);
+    expect(otherPlatform.aiBalance).toBe(0);
+    expect(demoPlatform!.aiBalance).toBeGreaterThanOrEqual(777);
+
+    // 清理
+    await prisma.creditAccount.deleteMany({ where: { tenantId: otherTenant.id } });
+    await prisma.tenant.deleteMany({ where: { id: otherTenant.id } });
   });
 });

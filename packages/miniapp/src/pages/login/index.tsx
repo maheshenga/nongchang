@@ -7,19 +7,20 @@ import Icon from '../../components/Icon';
 import './index.scss';
 
 export default function Login() {
+  const [tenantCode, setTenantCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [wxLoading, setWxLoading] = useState(false);
 
   async function onSubmit() {
-    if (!username || !password) {
-      Taro.showToast({ title: '请输入账号和密码', icon: 'none' });
+    if (!tenantCode || !username || !password) {
+      Taro.showToast({ title: '请输入机构编码、账号和密码', icon: 'none' });
       return;
     }
     setLoading(true);
     try {
-      await login(username, password);
+      await login(tenantCode, username, password);
       // work 为 tabBar 页，必须用 switchTab 跳转
       Taro.switchTab({ url: '/pages/work/index' });
     } catch (e: any) {
@@ -68,6 +69,13 @@ export default function Login() {
       </View>
 
       <View className="login__card">
+        <Text className="login__label">机构编码</Text>
+        <Input
+          className="login__input"
+          placeholder="请输入机构编码"
+          value={tenantCode}
+          onInput={(e) => setTenantCode(e.detail.value)}
+        />
         <Text className="login__label">账号</Text>
         <Input
           className="login__input"

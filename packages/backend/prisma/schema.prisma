@@ -377,7 +377,7 @@ model CreditAccount {
   updatedAt   DateTime        @updatedAt @map("updated_at")
   ledgers     CreditLedger[]
 
-  @@unique([ownerType, ownerId])
+  @@unique([tenantId, ownerType, ownerId])
   @@index([tenantId])
   @@map("credit_accounts")
 }

@@ -4,11 +4,11 @@ import { setToken } from '../store/auth';
 import { WX_APPID } from '../config/env';
 import type { TokenPair } from '@nongchang/shared';
 
-export async function login(username: string, password: string): Promise<void> {
+export async function login(tenantCode: string, username: string, password: string): Promise<void> {
   const res = await request<TokenPair>({
     url: '/auth/login',
     method: 'POST',
-    data: { username, password },
+    data: { tenantCode, username, password },
   });
   setToken(res.accessToken);
 }

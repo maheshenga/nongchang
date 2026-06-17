@@ -95,20 +95,20 @@ async function main() {
 
   // ── 计费额度预置(演示用)── update 分支恢复规范余额,保证再次执行后额度回满。
   await prisma.creditAccount.upsert({
-    where: { ownerType_ownerId: { ownerType: 'PLATFORM', ownerId: 'PLATFORM' } },
+    where: { tenantId_ownerType_ownerId: { tenantId: tenant.id, ownerType: 'PLATFORM', ownerId: 'PLATFORM' } },
     update: { tenantId: tenant.id, aiBalance: 100000, codeBalance: 1000000 },
     create: { ownerType: 'PLATFORM', ownerId: 'PLATFORM', tenantId: tenant.id, aiBalance: 100000, codeBalance: 1000000 },
   });
   for (const ag of [agentA, agentB]) {
     await prisma.creditAccount.upsert({
-      where: { ownerType_ownerId: { ownerType: 'AGENT', ownerId: ag.id } },
+      where: { tenantId_ownerType_ownerId: { tenantId: tenant.id, ownerType: 'AGENT', ownerId: ag.id } },
       update: { tenantId: tenant.id, aiBalance: 5000, codeBalance: 50000 },
       create: { ownerType: 'AGENT', ownerId: ag.id, tenantId: tenant.id, aiBalance: 5000, codeBalance: 50000 },
     });
   }
   for (const m of [merchantA, merchantB]) {
     await prisma.creditAccount.upsert({
-      where: { ownerType_ownerId: { ownerType: 'MERCHANT', ownerId: m.id } },
+      where: { tenantId_ownerType_ownerId: { tenantId: tenant.id, ownerType: 'MERCHANT', ownerId: m.id } },
       update: { tenantId: tenant.id, aiBalance: 1000, codeBalance: 10000 },
       create: { ownerType: 'MERCHANT', ownerId: m.id, tenantId: tenant.id, aiBalance: 1000, codeBalance: 10000 },
     });

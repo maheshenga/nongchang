@@ -28,7 +28,8 @@ export class BillingService {
   }
 
   async ensureAccount(ownerType: CreditOwnerType, ownerId: string, tenantId: string) {
-    const found = await this.prisma.creditAccount.findFirst({ where: { ownerType, ownerId } });
+    // 必须带 tenantId:PLATFORM 账户用固定 ownerId='PLATFORM',若漏 tenantId 会命中其它租户的平台账户造成串账。
+    const found = await this.prisma.creditAccount.findFirst({ where: { tenantId, ownerType, ownerId } });
     if (found) return found;
     return this.prisma.creditAccount.create({ data: { ownerType, ownerId, tenantId } });
   }

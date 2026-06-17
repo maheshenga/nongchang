@@ -41,12 +41,13 @@ export default function Work() {
     setLoading(true);
     setErr(null);
     try {
-      const [bs, recs] = await Promise.all([
+      // /farm-records 返回分页对象 {items,total,page,pageSize},取 items 列表
+      const [bs, recsPage] = await Promise.all([
         listBatches(),
-        request<FarmRecord[]>({ url: '/farm-records' }),
+        request<{ items: FarmRecord[] }>({ url: '/farm-records' }),
       ]);
       setBatches(bs);
-      setRecords(sortByRecentDesc(recs).slice(0, 5));
+      setRecords(sortByRecentDesc(recsPage.items).slice(0, 5));
     } catch (e: any) {
       setErr(e?.message || '加载失败');
     } finally {
