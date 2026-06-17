@@ -269,6 +269,8 @@ model AiProvider {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@index([tenantId])
+  // 每租户至多一条 enabled=true:由偏唯一索引在 DB 层根治并发双启
+  // (Prisma 不支持声明 partial unique index,见迁移 20260617030000_ai_provider_enabled_unique)
   @@map("ai_providers")
 }
 

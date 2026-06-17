@@ -78,4 +78,26 @@ describe('AiProvider e2e', () => {
       .send({ message: '你好' });
     expect(res.status).toBe(400);
   });
+
+  it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {
+    // ai_providers.tenant_id 无 FK(#20 未纳入),用合成租户隔离真实数据。
+    const fakeTenant = 'e2e-115-tenant';
+    const base = {
+      tenantId: fakeTenant,
+      baseUrl: 'https://x.com/v1',
+      apiKeyEnc: 'iv:tag:cipher',
+      textModel: 'qwen-plus',
+      enabled: true,
+    };
+    const first = await prisma.aiProvider.create({ data: { ...base, name: '启用A' } });
+    createdIds.push(first.id);
+    await expect(
+      prisma.aiProvider.create({ data: { ...base, name: '启用B' } }),
+    ).rejects.toThrow(); // 偏唯一索引冲突(P2002)
+    // enabled=false 不受约束:同租户可任意多条
+    const disabled = await prisma.aiProvider.create({
+      data: { ...base, name: '停用C', enabled: false },
+    });
+    createdIds.push(disabled.id);
+  });
 });
