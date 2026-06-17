@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro';
 import { getToken, clearToken } from '../store/auth';
+import { isTokenExpired } from '../utils/token';
 import { API_BASE_URL } from '../config/env';
 
 // API 基址由 config/env.ts 经 Taro 编译期环境变量 TARO_APP_API 注入。
@@ -18,6 +19,12 @@ const TIMEOUT = 20000;
 
 export async function request<T>({ url, method = 'GET', data }: RequestOptions): Promise<T> {
   const token = getToken();
+  // 本地预判 token 过期:省掉一次必然 401 的往返,直接登出跳登录。
+  if (token && isTokenExpired(token)) {
+    clearToken();
+    Taro.redirectTo({ url: '/pages/login/index' });
+    throw new Error('登录已失效,请重新登录');
+  }
   const res = await Taro.request({
     url: `${BASE_URL}${url}`,
     method,

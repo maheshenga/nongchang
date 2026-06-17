@@ -24,6 +24,7 @@ export interface TokenPayload {
   username?: string;
   role?: string;
   tenantId?: string;
+  exp?: number;
   [k: string]: unknown;
 }
 
@@ -41,6 +42,14 @@ export function decodeToken(token: string): TokenPayload | null {
   } catch {
     return null;
   }
+}
+
+// 本地预判 JWT 是否过期:仅当能解出 exp 且已过期才返回 true;
+// 解析失败/无 exp 时返回 false,把判定权交给后端(避免误登出)。
+export function isTokenExpired(token: string): boolean {
+  const p = decodeToken(token);
+  if (!p || typeof p.exp !== 'number') return false;
+  return Date.now() >= p.exp * 1000;
 }
 
 const ROLE_LABEL: Record<string, string> = {

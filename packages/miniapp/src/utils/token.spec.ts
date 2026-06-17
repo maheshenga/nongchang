@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeToken, roleLabel } from './token';
+import { decodeToken, roleLabel, isTokenExpired } from './token';
 
 // 构造一个 JWT（header.payload.signature），payload 用 base64url
 function makeToken(payload: object): string {
@@ -32,5 +32,20 @@ describe('utils/token', () => {
     expect(roleLabel('merchant')).toBe('商家主理人');
     expect(roleLabel('unknown')).toBe('农技员');
     expect(roleLabel(undefined)).toBe('农技员');
+  });
+
+  it('isTokenExpired:已过期 exp 返回 true', () => {
+    const t = makeToken({ exp: Math.floor(Date.now() / 1000) - 60 });
+    expect(isTokenExpired(t)).toBe(true);
+  });
+
+  it('isTokenExpired:未过期 exp 返回 false', () => {
+    const t = makeToken({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    expect(isTokenExpired(t)).toBe(false);
+  });
+
+  it('isTokenExpired:无 exp 或无法解析时返回 false(交后端判定)', () => {
+    expect(isTokenExpired(makeToken({ username: 'x' }))).toBe(false);
+    expect(isTokenExpired('garbage')).toBe(false);
   });
 });
