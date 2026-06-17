@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 // ── 集成配置(第三方凭证)──
-// provider 类型:wechat(微信小程序登录)、xfyun(讯飞语音听写)
-export const integrationProviderSchema = z.enum(['wechat', 'xfyun']);
+// provider 类型:wechat(微信小程序登录)、xfyun(讯飞语音听写)、tianditu(天地图底图)
+export const integrationProviderSchema = z.enum(['wechat', 'xfyun', 'tianditu']);
 export type IntegrationProvider = z.infer<typeof integrationProviderSchema>;
 
 // 微信:appId 明文 + secret 密文
@@ -21,6 +21,19 @@ export const xfyunConfigInputSchema = z.object({
   enabled: z.boolean().optional(),
 });
 export type XfyunConfigInput = z.infer<typeof xfyunConfigInputSchema>;
+
+// 天地图:key 为纯前端 JS API 密钥(浏览器可见,靠域名白名单防盗用),用 appId 字段承载。
+export const tiandituConfigInputSchema = z.object({
+  key: z.string().min(1).max(128),
+  enabled: z.boolean().optional(),
+});
+export type TiandituConfigInput = z.infer<typeof tiandituConfigInputSchema>;
+
+// 天地图公开读取视图:返回启用中的 key 供前端加载地图脚本(未启用则 null)。
+export const tiandituPublicSchema = z.object({
+  key: z.string().nullable(),
+});
+export type TiandituPublicView = z.infer<typeof tiandituPublicSchema>;
 
 // 统一查看视图(密钥脱敏)
 export const integrationConfigViewSchema = z.object({

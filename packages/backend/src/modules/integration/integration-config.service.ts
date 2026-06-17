@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import type {
   AuthUser, IntegrationConfigView, IntegrationProvider,
-  WechatConfigInput, XfyunConfigInput,
+  WechatConfigInput, XfyunConfigInput, TiandituConfigInput,
 } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
@@ -96,6 +96,24 @@ export class IntegrationConfigService {
       update,
     })) as IntegrationRow;
     return this.toView(row);
+  }
+
+  // 天地图:key 存明文 appId 字段(前端可见,无需加密),仅 enabled 时对前端可读。
+  async upsertTianditu(user: AuthUser, dto: TiandituConfigInput): Promise<IntegrationConfigView> {
+    const enabled = dto.enabled ?? false;
+    const row = (await this.prisma.integrationConfig.upsert({
+      where: { tenantId_provider: { tenantId: user.tenantId, provider: 'tianditu' } },
+      create: { tenantId: user.tenantId, provider: 'tianditu', appId: dto.key, enabled },
+      update: { appId: dto.key, enabled },
+    })) as IntegrationRow;
+    return this.toView(row);
+  }
+
+  // 前端加载地图脚本:取本租户启用中的天地图 key(未配置/未启用则 null)
+  async getEnabledTiandituKey(tenantId: string): Promise<string | null> {
+    const row = await this.findRow(tenantId, 'tianditu');
+    if (!row || !row.enabled || !row.appId) return null;
+    return row.appId;
   }
 
   // 微信登录:用 appId 全局反查租户 + 解密 secret(仅启用)

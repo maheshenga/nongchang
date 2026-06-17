@@ -105,12 +105,14 @@ export type {
 
 export {
   integrationProviderSchema, wechatConfigInputSchema, xfyunConfigInputSchema,
+  tiandituConfigInputSchema, tiandituPublicSchema,
   integrationConfigViewSchema, userGroupInputSchema, userGroupViewSchema,
   assignUserGroupSchema, wechatLoginSchema,
   wechatRegisterSchema, pendingUserViewSchema, reviewUserSchema,
 } from './dto/integration.dto';
 export type {
   IntegrationProvider, WechatConfigInput, XfyunConfigInput, IntegrationConfigView,
+  TiandituConfigInput, TiandituPublicView,
   UserGroupInput, UserGroupView, AssignUserGroupInput, WechatLoginDto,
   WechatRegisterDto, WechatRegisterResponse, PendingUserView, ReviewUserInput,
 } from './dto/integration.dto';

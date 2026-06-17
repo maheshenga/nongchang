@@ -83,4 +83,17 @@ describe('IntegrationConfigService', () => {
     const c = await svc.getEnabledXfyun('t1');
     expect(c).toEqual({ appId: 'xf01', apiKey: 'KEY5678', apiSecret: 'SEC9012' });
   });
+
+  it('天地图 upsert 存 key 到 appId 字段(明文,前端可见)', async () => {
+    const v = await svc.upsertTianditu(user, { key: 'TDT_KEY_ABC', enabled: true });
+    expect(v.appId).toBe('TDT_KEY_ABC');
+    expect(prisma.rows[0].appId).toBe('TDT_KEY_ABC');
+  });
+
+  it('getEnabledTiandituKey 启用时返回 key,未启用返回 null', async () => {
+    await svc.upsertTianditu(user, { key: 'TDT_KEY_ABC', enabled: true });
+    expect(await svc.getEnabledTiandituKey('t1')).toBe('TDT_KEY_ABC');
+    await svc.upsertTianditu(user, { key: 'TDT_KEY_ABC', enabled: false });
+    expect(await svc.getEnabledTiandituKey('t1')).toBeNull();
+  });
 });
