@@ -8,6 +8,8 @@ export interface Field {
   ownerName: string | null;
   name: string;
   area: number;
+  lng: number | null;
+  lat: number | null;
   iotDeviceId: string | null;
   createdAt: string;
 }

@@ -116,7 +116,7 @@ export default function App() {
         { id: 'phenology', label: '标准物候模型', icon: Sprout },
         { id: 'batches', label: '全域批次追踪', icon: Layers },
         { id: 'warehouse', label: '智能仓储管理', icon: Database },
-        { id: 'logistics', label: '现代物流与系统', icon: Truck },
+        { id: 'logistics', label: '农资投入品管理', icon: Truck },
       ]
     },
     {

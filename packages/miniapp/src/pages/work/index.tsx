@@ -7,7 +7,6 @@ import { listQuickTemplates } from '../../api/quickTemplate';
 import { getBillingSummary } from '../../api/billing';
 import { request } from '../../api/request';
 import { sortByRecentDesc } from '../../utils/stats';
-import Sensors from '../../components/Sensors';
 import Icon from '../../components/Icon';
 import RecordForm, { type RecordFormHandle } from '../../components/RecordForm';
 import AiPanel from '../../components/AiPanel';
@@ -119,8 +118,6 @@ export default function Work() {
       </View>
 
       <View className="work__body">
-        <Sensors />
-
         <View className="work__card">
           <Text className="work__section-title">我的批次</Text>
           {batches.length === 0 ? (

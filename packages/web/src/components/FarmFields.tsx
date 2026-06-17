@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Map, MapPin, Search, Plus, Layers, ChevronRight, Maximize2 } from 'lucide-react';
+import { Map, MapPin, Search, Plus, Layers, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApi } from '../hooks/useApi';
 import { listFields, createField, type Field } from '../api/fields';
+import TiandituMap from './TiandituMap';
 import { listMerchants, type MerchantUser } from '../api/agents';
 import { useAuth } from '../auth/auth-context';
 import type { CreateFieldDto, AuthUser } from '@nongchang/shared';
@@ -96,85 +97,50 @@ export default function FarmFields() {
         <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
           {viewMode === 'map' ? (
             <div className="flex-1 relative bg-slate-100">
-               <div className="absolute inset-0 pattern-boxes pattern-slate-300 pattern-bg-transparent pattern-size-6 opacity-30"></div>
-               {/* Mock Map View */}
-               <div className="absolute inset-0 flex items-center justify-center p-8">
-                  <div className="w-full max-w-3xl aspect-video bg-emerald-900/5 rounded-3xl border-2 border-emerald-500/20 relative shadow-inner overflow-hidden backdrop-blur-sm">
-                     {/* SVG Map Mock */}
-                     <svg width="100%" height="100%" viewBox="0 0 800 450" className="opacity-80">
-                        {/* A 区 */}
-                        <polygon points="100,100 300,80 350,200 150,250" fill={activeField?.id === fields[0]?.id ? 'rgba(16, 185, 129, 0.4)' : 'rgba(16, 185, 129, 0.15)'} stroke="#10b981" strokeWidth="2" className="transition-all duration-300 cursor-pointer" onClick={() => fields[0] && setActiveFieldId(fields[0].id)} />
-                        {activeField?.id === fields[0]?.id && <circle cx="225" cy="165" r="4" fill="white" className="animate-pulse" />}
-
-                        {/* B 区 */}
-                        <polygon points="320,70 600,100 550,280 370,210" fill={activeField?.id === fields[1]?.id ? 'rgba(245, 158, 11, 0.4)' : 'rgba(245, 158, 11, 0.15)'} stroke="#f59e0b" strokeWidth="2" className="transition-all duration-300 cursor-pointer" onClick={() => fields[1] && setActiveFieldId(fields[1].id)} />
-
-                        {/* C 区 */}
-                        <polygon points="120,270 330,230 380,380 200,400" fill={activeField?.id === fields[2]?.id ? 'rgba(16, 185, 129, 0.4)' : 'rgba(16, 185, 129, 0.15)'} stroke="#10b981" strokeWidth="2" className="transition-all duration-300 cursor-pointer" onClick={() => fields[2] && setActiveFieldId(fields[2].id)} />
-
-                        {/* D 区 */}
-                        <polygon points="390,225 540,295 480,420 360,390" fill={activeField?.id === fields[3]?.id ? 'rgba(148, 163, 184, 0.4)' : 'rgba(148, 163, 184, 0.15)'} stroke="#94a3b8" strokeWidth="2" className="transition-all duration-300 cursor-pointer" onClick={() => fields[3] && setActiveFieldId(fields[3].id)} />
-                     </svg>
-
-                     {/* Overlay Stats for Active Field */}
-                     <AnimatePresence mode="wait">
-                       <motion.div
-                         key={activeField?.id ?? 'none'}
-                         initial={{ opacity: 0, x: 20 }}
-                         animate={{ opacity: 1, x: 0 }}
-                         exit={{ opacity: 0, x: -20 }}
-                         className="absolute top-6 right-6 w-64 bg-white/95 backdrop-blur shadow-xl rounded-xl border border-slate-200 p-4"
-                       >
-                          <div className="flex justify-between items-start mb-3">
-                            <h4 className="font-black text-slate-800">{activeField?.name ?? '—'}</h4>
-                            <div className="p-1.5 bg-slate-100 rounded-md">
-                              <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 mb-4">
-                             <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                               <div className="text-[10px] text-slate-400 font-bold mb-0.5 uppercase tracking-wide">当前气温</div>
-                               <div className="text-sm font-bold text-slate-700">—</div>
-                             </div>
-                             <div className="bg-slate-50 p-2 rounded-lg border border-slate-100">
-                               <div className="text-[10px] text-slate-400 font-bold mb-0.5 uppercase tracking-wide">土壤湿度</div>
-                               <div className="text-sm font-bold text-slate-700">—</div>
-                             </div>
-                          </div>
-
-                                                     <ul className="space-y-1.5 border-t border-slate-100 pt-3">
-                              <li className="flex justify-between text-xs items-center mb-1">
-                                <span className="text-slate-500">综合健康指数</span>
-                                <div className="flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                  <span>—</span>
-                                  <span className="text-[10px] text-emerald-500/80">NDVI</span>
-                                </div>
-                              </li>
-                              <li className="flex justify-between text-xs">
-                                <span className="text-slate-500">负责人</span>
-                                <span className="font-bold text-slate-700">{activeField?.ownerName ?? '—'}</span>
-                              </li>
-                              <li className="flex justify-between text-xs">
-                                <span className="text-slate-500">规划面积</span>
-                                <span className="font-mono text-slate-700">{activeField?.area ?? '—'} 亩</span>
-                              </li>
-                              <li className="flex justify-between text-xs">
-                                <span className="text-slate-500">IoT 设备</span>
-                                <span className="font-bold text-slate-700">{activeField?.iotDeviceId ?? '—'}</span>
-                              </li>
-                           </ul>
-
-                           <div className="flex gap-2 mt-4">
-                              <button className="flex-1 text-xs font-bold bg-emerald-50 text-emerald-600 py-2 rounded-lg hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1">
-                                查看 IoT 详情 <ChevronRight className="w-3 h-3" />
-                              </button>
-                           </div>
-                        </motion.div>
-                      </AnimatePresence>
-                   </div>
-                </div>
-                
+               <TiandituMap
+                 fields={fields}
+                 activeFieldId={activeField?.id ?? null}
+                 onSelect={setActiveFieldId}
+               />
+               {/* Overlay Stats for Active Field */}
+               <AnimatePresence mode="wait">
+                 <motion.div
+                   key={activeField?.id ?? 'none'}
+                   initial={{ opacity: 0, x: 20 }}
+                   animate={{ opacity: 1, x: 0 }}
+                   exit={{ opacity: 0, x: -20 }}
+                   className="absolute top-6 right-6 w-64 bg-white/95 backdrop-blur shadow-xl rounded-xl border border-slate-200 p-4 z-[400]"
+                 >
+                    <div className="flex justify-between items-start mb-3">
+                      <h4 className="font-black text-slate-800">{activeField?.name ?? '—'}</h4>
+                      <div className="p-1.5 bg-slate-100 rounded-md">
+                        <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
+                      </div>
+                    </div>
+                    <ul className="space-y-1.5 border-t border-slate-100 pt-3">
+                       <li className="flex justify-between text-xs">
+                         <span className="text-slate-500">负责人</span>
+                         <span className="font-bold text-slate-700">{activeField?.ownerName ?? '—'}</span>
+                       </li>
+                       <li className="flex justify-between text-xs">
+                         <span className="text-slate-500">规划面积</span>
+                         <span className="font-mono text-slate-700">{activeField?.area ?? '—'} 亩</span>
+                       </li>
+                       <li className="flex justify-between text-xs">
+                         <span className="text-slate-500">经纬度</span>
+                         <span className="font-mono text-slate-700">
+                           {activeField?.lng != null && activeField?.lat != null
+                             ? `${activeField.lng.toFixed(4)}, ${activeField.lat.toFixed(4)}`
+                             : '—'}
+                         </span>
+                       </li>
+                       <li className="flex justify-between text-xs">
+                         <span className="text-slate-500">IoT 设备</span>
+                         <span className="font-bold text-slate-700">{activeField?.iotDeviceId ?? '—'}</span>
+                       </li>
+                    </ul>
+                 </motion.div>
+               </AnimatePresence>
              </div>
            ) : (
              <div className="flex-1 p-8 overflow-y-auto">
@@ -187,7 +153,6 @@ export default function FarmFields() {
                      <div className="flex-1">
                        <div className="flex items-center gap-3 mb-2">
                           <h3 className="text-2xl font-black text-slate-800">{activeField?.name ?? '—'}</h3>
-                          <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded font-bold">演示数据</span>
                        </div>
                        <p className="text-sm text-slate-500 mb-4 bg-slate-50 inline-block px-3 py-1.5 rounded-lg border border-slate-100">标识码: {activeField?.id ?? '—'} • 面积: {activeField?.area ?? '—'} 亩</p>
                        <div className="flex gap-3">

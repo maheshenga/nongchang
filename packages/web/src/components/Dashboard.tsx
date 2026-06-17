@@ -7,10 +7,7 @@ import html2canvas from 'html2canvas';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
-import HeatmapD3 from './HeatmapD3';
-import D3GeoMap from './D3GeoMap';
 import AntiFakeMonitor from './AntiFakeMonitor';
-import RfidMonitor from './RfidMonitor';
 import DemoBadge from './DemoBadge';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -289,10 +286,8 @@ export default function Dashboard() {
     { i: 'team-collaboration', x: 0, y: 53, w: 12, h: 5, static: false },
     { i: 'gis-map', x: 0, y: 58, w: 6, h: 4, static: false },
     { i: 'ai-panel', x: 6, y: 58, w: 6, h: 4, static: false },
-    { i: 'geo-heatmap', x: 0, y: 62, w: 12, h: 7, static: false }, // Replaced heatmap-d3
     { i: 'anti-fake-monitor', x: 0, y: 69, w: 12, h: 5, static: false },
     { i: 'annual-performance', x: 0, y: 74, w: 12, h: 6, static: false },
-    { i: 'rfid-monitor', x: 0, y: 80, w: 12, h: 5, static: false },
     { i: 'yield-trend-30days', x: 0, y: 85, w: 6, h: 5, static: false },
     { i: 'plot-comparison', x: 6, y: 85, w: 6, h: 5, static: false },
   ];
@@ -1256,18 +1251,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <div key="geo-heatmap" className="h-full flex flex-col pt-1">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
-            <h3 className="font-bold text-slate-800 mb-4 drag-handle cursor-move flex items-center gap-2">
-              <Map className="w-5 h-5 text-indigo-500" />
-              全球供应链与终端地理监控
-            </h3>
-            <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-100">
-               <D3GeoMap />
-            </div>
-          </div>
-        </div>
-
         <div key="anti-fake-monitor" className="h-full flex flex-col pt-1">
            <AntiFakeMonitor />
         </div>
@@ -1298,9 +1281,6 @@ export default function Dashboard() {
                </ResponsiveContainer>
             </div>
           </div>
-        </div>
-        <div key="rfid-monitor" className="h-full flex flex-col pt-1">
-          <RfidMonitor />
         </div>
         <div key="yield-trend-30days" className="h-full flex flex-col pt-1">
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center h-full">
