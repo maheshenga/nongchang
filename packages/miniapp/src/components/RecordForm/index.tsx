@@ -162,8 +162,8 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     if (location) { setLocation(''); return; } // 再次点击清除
     setLocating(true);
     try {
-      const r = await Taro.getLocation({ type: 'gcj02' });
-      // 经度,纬度,保留 6 位小数,与后端 location(string,≤128)对齐
+      // 统一存 WGS84(与 DB/天地图一致);渲染到原生地图时再转 GCJ-02
+      const r = await Taro.getLocation({ type: 'wgs84' });
       setLocation(`${r.longitude.toFixed(6)},${r.latitude.toFixed(6)}`);
       Taro.showToast({ title: '已记录当前位置', icon: 'none' });
     } catch {

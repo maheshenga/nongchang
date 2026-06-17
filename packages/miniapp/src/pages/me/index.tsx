@@ -6,6 +6,7 @@ import { request } from '../../api/request';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
+import { wgs84ToGcj02 } from '../../utils/geo';
 import './index.scss';
 
 export default function Me() {
@@ -106,10 +107,12 @@ export default function Me() {
             {(() => {
               const located = fields.filter((f) => f.lng != null && f.lat != null);
               if (located.length === 0) return null;
-              const markers = located.map((f, i) => ({
+              // DB 存 WGS84,原生 <map> 用 GCJ-02,渲染前转换
+              const pts = located.map((f) => ({ f, c: wgs84ToGcj02(f.lng, f.lat) }));
+              const markers = pts.map(({ f, c }, i) => ({
                 id: i,
-                latitude: f.lat,
-                longitude: f.lng,
+                latitude: c.lat,
+                longitude: c.lng,
                 title: `${f.name} · ${f.area} 亩`,
                 iconPath: '',
                 width: 24,
@@ -118,8 +121,8 @@ export default function Me() {
               return (
                 <Map
                   className="me__field-map"
-                  longitude={located[0].lng}
-                  latitude={located[0].lat}
+                  longitude={pts[0].c.lng}
+                  latitude={pts[0].c.lat}
                   scale={12}
                   markers={markers}
                   showLocation
