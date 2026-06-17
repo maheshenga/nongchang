@@ -76,9 +76,22 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-emerald-100 selection:text-emerald-900 pb-12">
       <div className="relative bg-emerald-900 text-white overflow-hidden pb-12 rounded-b-[2.5rem]">
-        <div className="absolute inset-0 opacity-20">
-          <img src="https://images.unsplash.com/photo-1563241527-3004b7be0ffd?q=80&w=1200&h=600&fit=crop" alt="Peony Farm" className="w-full h-full object-cover" />
-        </div>
+        {/* 纯 CSS 装饰背景:径向高光 + 内联 SVG 叶脉纹理,零外部网络依赖(消费者扫码首屏,弱网/无外网也能正常渲染) */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle at 20% 0%, rgba(16,185,129,0.55), transparent 60%), radial-gradient(circle at 85% 30%, rgba(5,150,105,0.45), transparent 55%)',
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M30 0C30 16 16 30 0 30c16 0 30 14 30 30 0-16 14-30 30-30-16 0-30-14-30-30z' fill='none' stroke='%23ffffff' stroke-width='0.6'/%3E%3C/svg%3E\")",
+            backgroundSize: '60px 60px',
+          }}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-emerald-900 via-emerald-900/80 to-transparent"></div>
 
         <div className="relative px-5 pt-8 z-10 max-w-lg mx-auto">
