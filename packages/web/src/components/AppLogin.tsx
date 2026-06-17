@@ -47,7 +47,7 @@ export default function AppLogin() {
             <QrCode className="w-8 h-8" />
           </div>
           <h1 className="text-3xl font-black text-white tracking-tight mb-2">农业溯源 SaaS 平台</h1>
-          <p className="text-emerald-100/70 font-medium tracking-wide text-sm">全链路数据上链与数字农业协作</p>
+          <p className="text-emerald-100/70 font-medium tracking-wide text-sm">全链路数据存证与数字农业协作</p>
         </div>
         <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl">
           <div className="mb-8 border-b border-white/10 pb-4">

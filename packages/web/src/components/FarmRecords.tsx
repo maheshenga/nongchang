@@ -99,7 +99,7 @@ export default function FarmRecords() {
      showToast('已加载快捷模板');
   };
 
-  // #1 状态流转:待完成 → 已完成(上链)。
+  // #1 状态流转:待完成 → 已完成(归档)。
   const handleComplete = async (id: string) => {
     try {
       await updateFarmRecordStatus(id, 'completed');
@@ -167,7 +167,7 @@ export default function FarmRecords() {
             <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
             农事实操与质检记录看板
           </h3>
-          <p className="text-xs text-slate-500 mt-1">记录由农户端与后台填报，已完成农事自动归档上链</p>
+          <p className="text-xs text-slate-500 mt-1">记录由农户端与后台填报，已完成农事自动归档</p>
         </div>
         <div className="flex gap-3 items-center">
           <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition shadow-sm mr-2 hidden md:flex">
@@ -275,7 +275,7 @@ export default function FarmRecords() {
           className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm"
         >
           <div className="p-4 border-b border-emerald-100 bg-emerald-50 flex items-center justify-between">
-            <h4 className="font-bold text-emerald-800 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-600" /> 已完成 (已上链)</h4>
+            <h4 className="font-bold text-emerald-800 flex items-center gap-2"><CheckCircle className="w-4 h-4 text-emerald-600" /> 已完成 (已归档)</h4>
             <span className="text-xs bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded font-bold">{completedTasks.length}</span>
           </div>
           <div className="flex-1 overflow-auto p-4 space-y-3">
