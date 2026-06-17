@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useApi } from '../hooks/useApi';
 import { listFields, createField, type Field } from '../api/fields';
 import TiandituMap from './TiandituMap';
+import TiandituPicker from './TiandituPicker';
 import { listMerchants, type MerchantUser } from '../api/agents';
 import { useAuth } from '../auth/auth-context';
 import type { CreateFieldDto, AuthUser } from '@nongchang/shared';
@@ -209,7 +210,7 @@ function CreateFieldModal({
 
   return (
     <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-slate-800 text-lg">新建地块</h3>
         {!isMerchant && (
           <label className="block text-xs font-bold text-slate-500">归属商家
@@ -230,6 +231,16 @@ function CreateFieldModal({
           <input type="number" step="0.1" value={area} onChange={(e) => setArea(e.target.value)} required
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </label>
+        <div>
+          <span className="block text-xs font-bold text-slate-500 mb-1">地块位置(点击地图选点,或手动填写)</span>
+          <div className="h-48 rounded-lg overflow-hidden border border-slate-200">
+            <TiandituPicker
+              lng={lng ? Number(lng) : null}
+              lat={lat ? Number(lat) : null}
+              onPick={(pLng, pLat) => { setLng(String(pLng)); setLat(String(pLat)); }}
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-xs font-bold text-slate-500">经度
             <input type="number" step="0.000001" value={lng} onChange={(e) => setLng(e.target.value)} required
