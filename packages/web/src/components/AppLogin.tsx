@@ -25,7 +25,22 @@ export default function AppLogin() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1595166669963-c744f9c5d0ba?auto=format&fit=crop&w=1920&q=80')] bg-cover bg-center brightness-[0.2]" />
+      {/* 纯 CSS 深色背景:登录页是所有内部用户的入口,避免外链图弱网/无外网时门面降级 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 25% 15%, rgba(6,78,59,0.95), transparent 55%), radial-gradient(circle at 80% 85%, rgba(15,118,110,0.85), transparent 50%), linear-gradient(160deg, #0f172a, #064e3b)',
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.08]"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M30 0C30 16 16 30 0 30c16 0 30 14 30 30 0-16 14-30 30-30-16 0-30-14-30-30z' fill='none' stroke='%23ffffff' stroke-width='0.6'/%3E%3C/svg%3E\")",
+          backgroundSize: '60px 60px',
+        }}
+      />
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-10">
           <div className="w-16 h-16 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 mx-auto mb-6">
