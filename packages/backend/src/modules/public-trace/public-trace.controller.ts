@@ -2,6 +2,10 @@ import { Controller, Get, Param, Req } from '@nestjs/common';
 import type { IncomingMessage } from 'http';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicTraceService } from './public-trace.service';
+import { resolveClientIp } from './client-ip';
+
+// 可信反代跳数:宝塔单层 Nginx 默认 1。生产按实际拓扑用 env TRUST_PROXY_HOPS 覆盖。
+const TRUST_PROXY_HOPS = Number.parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10) || 0;
 
 @Controller('public/trace')
 export class PublicTraceController {
@@ -10,11 +14,8 @@ export class PublicTraceController {
   @Public()
   @Get(':code')
   get(@Param('code') code: string, @Req() req: IncomingMessage) {
-    // 注意:XFF 由客户端可控,此处取最左段仅作弱信号。IP 不可信,异常检测仅供参考,
-    // 不作为可信证据(待部署拓扑确定后改用可信代理跳/trust proxy)。见后续硬化项。
-    const fwd = req.headers['x-forwarded-for'];
-    const fwdFirst = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(',')[0];
-    const rawIp = fwdFirst ?? req.socket.remoteAddress ?? 'unknown';
+    // XFF 由客户端可控,直接取最左段会被伪造。按可信反代跳数从 XFF 右端取真实客户端 IP。
+    const rawIp = resolveClientIp(req.headers['x-forwarded-for'], req.socket.remoteAddress, TRUST_PROXY_HOPS);
     const ua = req.headers['user-agent'] ?? null;
     // 落库前截断:该端点 @Public 无鉴权,header 由客户端任意构造,防止超长写入膨胀存储。
     return this.svc.getByCode(code, { ip: rawIp.trim().slice(0, 64), userAgent: ua?.slice(0, 512) ?? null });

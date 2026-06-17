@@ -11,7 +11,7 @@ function makeService(prismaOverrides: any) {
   const prisma = {
     batch: { findMany: async () => [], ...(prismaOverrides.batch ?? {}) },
     traceScan: { findMany: async () => [], ...(prismaOverrides.traceScan ?? {}) },
-    traceCode: { findFirst: async () => null, update: async () => ({}), ...(prismaOverrides.traceCode ?? {}) },
+    traceCode: { findFirst: async () => null, findMany: async () => [], update: async () => ({}), ...(prismaOverrides.traceCode ?? {}) },
   };
   return { svc: new AntiFakeService(prisma as any, new ScopeService()), prisma };
 }
@@ -50,7 +50,7 @@ describe('AntiFakeService.listAlerts', () => {
     ];
     const { svc } = makeService({
       traceScan: { findMany: async () => scans },
-      traceCode: { findFirst: async ({ where }: any) => ({ code: where.code, status: 'active' }) },
+      traceCode: { findMany: async () => [{ code: 'HOT', status: 'active' }] },
     });
     const alerts = await svc.listAlerts(sysadmin);
     expect(alerts).toHaveLength(1);
@@ -58,6 +58,19 @@ describe('AntiFakeService.listAlerts', () => {
     expect(alerts[0].distinctIps).toBe(3);
     expect(alerts[0].scanCount).toBe(5);
     expect(alerts[0].frozen).toBe(false);
+  });
+  it('已冻结的码 frozen=true', async () => {
+    const scans = [
+      scan('FRZ', '1.1.1.1', 5), scan('FRZ', '2.2.2.2', 4), scan('FRZ', '3.3.3.3', 3),
+      scan('FRZ', '1.1.1.1', 2), scan('FRZ', '2.2.2.2', 1),
+    ];
+    const { svc } = makeService({
+      traceScan: { findMany: async () => scans },
+      traceCode: { findMany: async () => [{ code: 'FRZ', status: 'frozen' }] },
+    });
+    const alerts = await svc.listAlerts(sysadmin);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].frozen).toBe(true);
   });
   it('单 IP 高频不告警(IP 多样性不足)', async () => {
     const scans = [scan('SOLO','9.9.9.9',5), scan('SOLO','9.9.9.9',4), scan('SOLO','9.9.9.9',3), scan('SOLO','9.9.9.9',2), scan('SOLO','9.9.9.9',1)];

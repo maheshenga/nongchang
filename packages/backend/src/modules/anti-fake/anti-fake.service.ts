@@ -51,17 +51,28 @@ export class AntiFakeService {
       list.push(r);
       byCode.set(r.code, list);
     }
-    const alerts: AntiFakeAlert[] = [];
+    // 先按阈值筛出疑似告警 code,再一次性批量查 traceCode 取冻结状态(避免逐 code N+1 查询)。
+    const candidates: { code: string; list: ScanRow[]; ips: Set<string> }[] = [];
     for (const [code, list] of byCode) {
       const ips = new Set(list.map((r) => r.ip));
       if (ips.size < MIN_DISTINCT_IPS || list.length < MIN_SCANS) continue;
-      const tc = await this.prisma.traceCode.findFirst({ where: { code, tenantId: user.tenantId } });
-      const last = list.reduce((a, b) => (a.scannedAt > b.scannedAt ? a : b));
-      alerts.push({
-        code, batchId: list[0].batchId, distinctIps: ips.size, scanCount: list.length,
-        locations: [...ips], lastScanAt: last.scannedAt.toISOString(), frozen: tc?.status === 'frozen',
-      });
+      candidates.push({ code, list, ips });
     }
+    if (candidates.length === 0) return [];
+
+    const tcs = (await this.prisma.traceCode.findMany({
+      where: { tenantId: user.tenantId, code: { in: candidates.map((c) => c.code) } },
+      select: { code: true, status: true },
+    })) as { code: string; status: string }[];
+    const statusByCode = new Map(tcs.map((t) => [t.code, t.status]));
+
+    const alerts: AntiFakeAlert[] = candidates.map(({ code, list, ips }) => {
+      const last = list.reduce((a, b) => (a.scannedAt > b.scannedAt ? a : b));
+      return {
+        code, batchId: list[0].batchId, distinctIps: ips.size, scanCount: list.length,
+        locations: [...ips], lastScanAt: last.scannedAt.toISOString(), frozen: statusByCode.get(code) === 'frozen',
+      };
+    });
     return alerts.sort((a, b) => b.scanCount - a.scanCount);
   }
 
