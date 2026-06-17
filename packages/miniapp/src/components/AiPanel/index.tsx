@@ -19,6 +19,7 @@ export default function AiPanel({ mode, onClose }: Props) {
   const [chatLoading, setChatLoading] = useState(false);
   // 诊断
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
@@ -40,6 +41,7 @@ export default function AiPanel({ mode, onClose }: Props) {
   }
 
   async function pickImage() {
+    if (uploading) return;
     let tempPath: string;
     try {
       const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['camera', 'album'] });
@@ -47,10 +49,13 @@ export default function AiPanel({ mode, onClose }: Props) {
     } catch {
       return; // 用户取消选图，静默忽略
     }
+    setUploading(true);
     try {
       setImageUrl(await uploadImage(tempPath));
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -95,7 +100,7 @@ export default function AiPanel({ mode, onClose }: Props) {
               {imageUrl ? (
                 <Image className="ai-panel__preview" src={imageUrl} mode="aspectFill" />
               ) : (
-                <Text className="ai-panel__pick-text">点击拍照 / 选择图片</Text>
+                <Text className="ai-panel__pick-text">{uploading ? '上传中…' : '点击拍照 / 选择图片'}</Text>
               )}
             </View>
             <Input className="ai-panel__input" value={note} onInput={(e) => setNote(e.detail.value)} placeholder="备注（可选，如：症状已持续3天）" />

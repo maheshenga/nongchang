@@ -120,6 +120,11 @@
     justify-content: center;
   }
 
+  &__add-loading {
+    font-size: 24px;
+    color: $c-text-sub;
+  }
+
   &__submit {
     margin-top: 36px;
     background: $c-primary;

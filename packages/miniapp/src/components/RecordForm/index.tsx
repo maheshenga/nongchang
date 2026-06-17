@@ -25,6 +25,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [cost, setCost] = useState('');
   const [labor, setLabor] = useState('');
   const [images, setImages] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [supplies, setSupplies] = useState<SupplyItem[]>([]);
   const [supplyId, setSupplyId] = useState('');
@@ -134,6 +135,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   }
 
   async function chooseAndUpload() {
+    if (uploading) return;
     let tempPath: string;
     try {
       const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] });
@@ -141,11 +143,14 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     } catch {
       return; // 用户取消选图，静默忽略
     }
+    setUploading(true);
     try {
       const url = await uploadImage(tempPath);
       setImages((prev) => [...prev, url]);
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -242,7 +247,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
           <Image key={url} className="rec-form__img" src={url} mode="aspectFill" />
         ))}
         <View className="rec-form__add" onClick={chooseAndUpload}>
-          <Icon name="camera" size={28} />
+          {uploading ? <Text className="rec-form__add-loading">上传中…</Text> : <Icon name="camera" size={28} />}
         </View>
       </View>
 

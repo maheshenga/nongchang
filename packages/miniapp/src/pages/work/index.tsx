@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, ScrollView, Image } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
@@ -36,6 +36,16 @@ export default function Work() {
     }
     void load();
   });
+
+  // 真实网络状态:初始查询 + 订阅变化,只读展示(离线仅提示,不伪造请求行为)。
+  useEffect(() => {
+    Taro.getNetworkType()
+      .then((r) => setIsOffline(r.networkType === 'none'))
+      .catch(() => {});
+    const onChange = (r: { isConnected: boolean }) => setIsOffline(!r.isConnected);
+    Taro.onNetworkStatusChange(onChange);
+    return () => Taro.offNetworkStatusChange(onChange);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -80,7 +90,7 @@ export default function Work() {
             <Text className="work__title">芍药工作台</Text>
             <Text className="work__subtitle">{subtitle}</Text>
           </View>
-          <View className="work__net" onClick={() => setIsOffline((v) => !v)}>
+          <View className="work__net">
             <Icon name="wifi" color="#fff" size={22} />
             <Text className="work__net-text">{isOffline ? '离线' : '在线'}</Text>
           </View>
