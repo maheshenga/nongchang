@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Plug, RefreshCw } from 'lucide-react';
-import type { WechatConfigInput, XfyunConfigInput } from '@nongchang/shared';
+import type { WechatConfigInput, XfyunConfigInput, TiandituConfigInput } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
-import { getIntegrationConfig, upsertWechatConfig, upsertXfyunConfig } from '../api/integration';
+import { getIntegrationConfig, upsertWechatConfig, upsertXfyunConfig, upsertTiandituConfig } from '../api/integration';
 
 const fetchWechat = () => getIntegrationConfig('wechat');
 const fetchXfyun = () => getIntegrationConfig('xfyun');
+const fetchTianditu = () => getIntegrationConfig('tianditu');
 
 const inputCls =
   'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition';
@@ -170,6 +171,74 @@ function XfyunCard() {
   );
 }
 
+function TiandituCard() {
+  const { data, loading, error, reload } = useApi(fetchTianditu);
+  const [key, setKey] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data) {
+      // 天地图 key 存明文 appId 字段,直接回显
+      setKey(data.appId ?? '');
+      setEnabled(data.enabled);
+    }
+  }, [data]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true); setErr(null); setMsg(null);
+    const dto: TiandituConfigInput = { key: key.trim(), enabled };
+    try {
+      await upsertTiandituConfig(dto);
+      setMsg('已保存'); await reload();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : '保存失败');
+    } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-slate-200 bg-slate-50/50">
+        <h3 className="font-bold text-slate-800 text-base">天地图(地块底图)</h3>
+        <p className="text-xs text-slate-500 mt-1">
+          配置天地图浏览器端 key 后,地块管理将以真实底图按经纬度展示地块。key 为前端 JS API 密钥,
+          请在天地图控制台(lbs.tianditu.gov.cn)按域名白名单防盗用。
+        </p>
+      </div>
+      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+      {error && (
+        <div className="p-8 text-center text-rose-500 text-sm">
+          加载失败:{error}
+          <button onClick={() => void reload()} className="underline font-bold ml-2 inline-flex items-center gap-1">
+            <RefreshCw className="w-3 h-3" /> 重试
+          </button>
+        </div>
+      )}
+      {!loading && !error && (
+        <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
+          <div>
+            <label className={labelCls}>浏览器端 key</label>
+            <input className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} placeholder="天地图 tk 密钥" required />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
+            <span className="text-sm text-slate-700 font-bold">启用天地图底图</span>
+          </label>
+          {err && <div className="text-sm text-rose-500 font-bold">{err}</div>}
+          <div className="flex items-center gap-3 pt-2">
+            <button type="submit" disabled={submitting} className={btnPrimary}>{submitting ? '保存中…' : '保存'}</button>
+            {msg && <span className="text-sm text-emerald-600 font-bold">{msg}</span>}
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function IntegrationSettings() {
   return (
     <div className="space-y-6 max-w-3xl">
@@ -179,6 +248,7 @@ export default function IntegrationSettings() {
       </div>
       <WechatCard />
       <XfyunCard />
+      <TiandituCard />
     </div>
   );
 }
