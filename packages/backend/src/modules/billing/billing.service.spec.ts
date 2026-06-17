@@ -15,7 +15,9 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
     creditAccount: {
       updateMany: async (a: any) => {
         const field = a.data.aiBalance ? 'aiBalance' : 'codeBalance';
-        const dec = (a.data.aiBalance ?? a.data.codeBalance).decrement;
+        const op = a.data.aiBalance ?? a.data.codeBalance;
+        if (op.increment != null) { state[field] += op.increment; return { count: 1 }; }
+        const dec = op.decrement;
         const min = field === 'aiBalance' ? a.where.aiBalance.gte : a.where.codeBalance.gte;
         if (state[field] >= min) { state[field] -= dec; return { count: 1 }; }
         return { count: 0 };
@@ -55,6 +57,15 @@ describe('BillingService.consume', () => {
     const { svc } = makeService({ aiBalance: 10 });
     const bad = { ...merchant, ownerId: null } as AuthUser;
     await expect(svc.consume(bad, 'AI', 1, {})).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('BillingService.refund', () => {
+  it('退款:余额增加并写 REFUND 流水(正 delta)', async () => {
+    const { svc, state, ledgers } = makeService({ aiBalance: 7 });
+    await svc.refund(merchant, 'AI', 3, { refType: 'ai.transcribe' });
+    expect(state.aiBalance).toBe(10);
+    expect(ledgers[0]).toMatchObject({ resource: 'AI', delta: 3, balanceAfter: 10, reason: 'REFUND', refType: 'ai.transcribe' });
   });
 });
 

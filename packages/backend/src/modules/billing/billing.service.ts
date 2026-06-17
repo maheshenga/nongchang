@@ -61,6 +61,29 @@ export class BillingService {
     });
   }
 
+  // 退款:外部付费调用失败时把已扣额度原路退回 + 写 REFUND 流水。
+  async refund(user: AuthUser, resource: CreditResource, amount: number, ref: ConsumeRef) {
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    return this.prisma.$transaction(async (tx) => {
+      await tx.creditAccount.updateMany({
+        where: { id: acct.id },
+        data: { [field]: { increment: amount } },
+      });
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      const balanceAfter = (after as any)[field] as number;
+      await tx.creditLedger.create({
+        data: {
+          accountId: acct.id, resource, delta: amount, balanceAfter, reason: 'REFUND',
+          refType: ref.refType ?? null, refId: ref.refId ?? null,
+          operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+        },
+      });
+      return { balanceAfter };
+    });
+  }
+
   // 校验 target 下级在调用方范围内
   private async resolveTarget(user: AuthUser, targetOwnerType: 'AGENT' | 'MERCHANT', targetOwnerId: string) {
     if (user.role === Role.SYSTEM_ADMIN) {

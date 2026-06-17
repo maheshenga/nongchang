@@ -7,7 +7,7 @@ import { AI_WEIGHT } from '../billing/billing.constants';
 const user = { userId: 'u1', tenantId: 't1', role: 'merchant' } as AuthUser;
 function providerSvc(enabled: any) { return { getEnabled: async () => enabled } as any; }
 function integrationSvc(xfyun: any = null) { return { getEnabledXfyun: async () => xfyun } as any; }
-function billingSvc() { return { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }) } as any; }
+function billingSvc() { return { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }), refund: vi.fn().mockResolvedValue({ balanceAfter: 0 }) } as any; }
 const noProv = providerSvc(null);
 
 describe('AiService', () => {
@@ -80,20 +80,35 @@ describe('AiService', () => {
 describe('AiService 扣费插桩', () => {
   it('chat 成功后扣 AI 1', async () => {
     const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const billing: any = { consume };
+    const refund = vi.fn();
+    const billing: any = { consume, refund };
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '答' } }] }) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
     const res = await svc.chat(user, '你好');
     expect(res.answer).toBe('答');
     expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
+    expect(refund).not.toHaveBeenCalled();
   });
-  it('chat 外部失败则不扣费', async () => {
-    const consume = vi.fn();
-    const billing: any = { consume };
+  it('余额不足(consume 抛 403)时不发起外部调用', async () => {
+    const consume = vi.fn(async () => { throw new Error('额度不足'); });
+    const refund = vi.fn();
+    const billing: any = { consume, refund };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+    await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(refund).not.toHaveBeenCalled();
+  });
+  it('chat 外部失败则退款(先扣后退,用户不损失额度)', async () => {
+    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+    const refund = vi.fn().mockResolvedValue({ balanceAfter: 10 });
+    const billing: any = { consume, refund };
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
     await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
-    expect(consume).not.toHaveBeenCalled();
+    expect(consume).toHaveBeenCalledTimes(1);
+    expect(refund).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
   });
 });
 
