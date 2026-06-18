@@ -197,3 +197,72 @@ describe('AuthService.registerWechat', () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 });
+
+const actor = { userId: 'u1', tenantId: 't1', role: 'merchant' as any, agentId: null, ownerId: 'u1' };
+
+describe('AuthService.getMe', () => {
+  it('返回个人资料且 select 不含 passwordHash', async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '大理基地', phone: '13800001111', status: 'active' });
+    const prisma = { user: { findUnique } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const me = await svc.getMe(actor);
+    expect(me.username).toBe('merchantA');
+    expect((me as any).passwordHash).toBeUndefined();
+    // 校验 select 显式排除敏感字段(不查 passwordHash / wxOpenid)
+    const sel = findUnique.mock.calls[0][0].select;
+    expect(sel.passwordHash).toBeUndefined();
+    expect(sel.wxOpenid).toBeUndefined();
+  });
+  it('账号不存在抛 Unauthorized', async () => {
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    await expect(svc.getMe(actor)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe('AuthService.updateMe', () => {
+  it('仅写入 displayName/phone,锁定为本人 id', async () => {
+    const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '新名', phone: '13900002222', status: 'active' });
+    const prisma = { user: { update } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const res = await svc.updateMe(actor, { displayName: '新名', phone: '13900002222' });
+    expect(res.displayName).toBe('新名');
+    const arg = update.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'u1' });
+    expect(arg.data).toEqual({ displayName: '新名', phone: '13900002222' });
+  });
+  it('仅传 phone 时只更新 phone(displayName 不进 data)', async () => {
+    const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '旧名', phone: '13700003333', status: 'active' });
+    const prisma = { user: { update } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    await svc.updateMe(actor, { phone: '13700003333' });
+    expect(update.mock.calls[0][0].data).toEqual({ phone: '13700003333' });
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  it('旧密码正确则写入新哈希且哈希可验证', async () => {
+    const oldHash = await bcrypt.hash('oldpass123', 10);
+    const update = vi.fn().mockResolvedValue({});
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ passwordHash: oldHash }), update } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const res = await svc.changePassword(actor, { oldPassword: 'oldpass123', newPassword: 'newpass456' });
+    expect(res).toEqual({ ok: true });
+    const newHash = update.mock.calls[0][0].data.passwordHash;
+    expect(newHash).not.toBe(oldHash);
+    expect(await bcrypt.compare('newpass456', newHash)).toBe(true);
+  });
+  it('旧密码错误抛 Unauthorized 且不改密', async () => {
+    const oldHash = await bcrypt.hash('oldpass123', 10);
+    const update = vi.fn();
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ passwordHash: oldHash }), update } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    await expect(svc.changePassword(actor, { oldPassword: 'wrongold', newPassword: 'newpass456' })).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(update).not.toHaveBeenCalled();
+  });
+  it('账号不存在抛 Unauthorized', async () => {
+    const prisma = { user: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    await expect(svc.changePassword(actor, { oldPassword: 'x123456', newPassword: 'y123456' })).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});

@@ -10,7 +10,7 @@ export const BASE_URL = API_BASE_URL;
 
 interface RequestOptions {
   url: string;
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'PATCH';
   data?: Record<string, unknown>;
 }
 

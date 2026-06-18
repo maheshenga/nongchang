@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, NotFoundException, ForbiddenExceptio
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
-import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse } from '@nongchang/shared';
+import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
@@ -137,6 +137,38 @@ export class AuthService {
       throw new UnauthorizedException('刷新令牌无效');
     }
     return this.issueTokens(this.toAuthUser(user));
+  }
+
+  // ── 个人账号(/auth/me)── 任意已登录角色自助查看/维护本人资料。
+  // 始终以 DB 最新数据为准,绝不回传 passwordHash / wxOpenid。
+  async getMe(actor: AuthUser): Promise<MeProfileView> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.userId },
+      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true },
+    });
+    if (!user) throw new UnauthorizedException('账号不存在');
+    return { ...user, agentId: user.agentId ?? null, phone: user.phone ?? null };
+  }
+
+  async updateMe(actor: AuthUser, dto: UpdateMeDto): Promise<MeProfileView> {
+    const data: Record<string, unknown> = {};
+    if (dto.displayName !== undefined) data.displayName = dto.displayName;
+    if (dto.phone !== undefined) data.phone = dto.phone;
+    const user = await this.prisma.user.update({
+      where: { id: actor.userId }, data,
+      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true },
+    });
+    return { ...user, agentId: user.agentId ?? null, phone: user.phone ?? null };
+  }
+
+  async changePassword(actor: AuthUser, dto: ChangePasswordDto): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: actor.userId }, select: { passwordHash: true } });
+    if (!user) throw new UnauthorizedException('账号不存在');
+    const ok = await bcrypt.compare(dto.oldPassword, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('原密码错误');
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({ where: { id: actor.userId }, data: { passwordHash } });
+    return { ok: true };
   }
 
   private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null }): AuthUser {

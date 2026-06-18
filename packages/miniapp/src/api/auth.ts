@@ -2,7 +2,7 @@ import Taro from '@tarojs/taro';
 import { request } from './request';
 import { setToken } from '../store/auth';
 import { WX_APPID } from '../config/env';
-import type { TokenPair } from '@nongchang/shared';
+import type { TokenPair, MeProfileView } from '@nongchang/shared';
 
 export async function login(tenantCode: string, username: string, password: string): Promise<void> {
   const res = await request<TokenPair>({
@@ -36,5 +36,18 @@ export async function registerWechat(displayName: string, phone?: string): Promi
     method: 'POST',
     data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) },
   });
+}
+
+// ── 个人账号 ──
+export function getMe(): Promise<MeProfileView> {
+  return request<MeProfileView>({ url: '/auth/me' });
+}
+
+export function updateMe(data: { displayName?: string; phone?: string | null }): Promise<MeProfileView> {
+  return request<MeProfileView>({ url: '/auth/me', method: 'PATCH', data });
+}
+
+export function changePassword(oldPassword: string, newPassword: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>({ url: '/auth/me/password', method: 'POST', data: { oldPassword, newPassword } });
 }
 

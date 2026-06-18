@@ -144,4 +144,57 @@
     color: $c-rose;
     font-weight: bold;
   }
+
+  &__panel {
+    margin: 24px 24px 0;
+    padding: 28px 24px;
+    @include card;
+  }
+
+  &__panel-title {
+    display: block;
+    font-size: 30px;
+    font-weight: bold;
+    color: $c-text;
+    margin-bottom: 16px;
+  }
+
+  &__panel-label {
+    display: block;
+    font-size: 26px;
+    color: $c-text-sub;
+    margin: 16px 0 8px;
+  }
+
+  &__panel-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 20px 24px;
+    font-size: 28px;
+    color: $c-text;
+    background: $c-bg;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+  }
+
+  &__panel-actions {
+    display: flex;
+    gap: 20px;
+    margin-top: 28px;
+  }
+
+  &__panel-btn {
+    flex: 1;
+    font-size: 28px;
+    color: #fff;
+    background: $c-primary;
+    border-radius: 14px;
+    padding: 18px 0;
+
+    &--ghost {
+      color: $c-text-sub;
+      background: $c-bg;
+      border: 1px solid $c-border;
+    }
+  }
 }

@@ -1,4 +1,5 @@
-import type { LoginDto, TokenPair } from '@nongchang/shared';
+import type { LoginDto, TokenPair, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
+import { request } from './request';
 
 export async function login(dto: LoginDto): Promise<TokenPair> {
   const res = await fetch('/api/auth/login', {
@@ -15,4 +16,17 @@ export async function login(dto: LoginDto): Promise<TokenPair> {
     throw new Error(message);
   }
   return (await res.json()) as TokenPair;
+}
+
+// ── 个人账号 ──
+export function getMe(): Promise<MeProfileView> {
+  return request<MeProfileView>('/auth/me');
+}
+
+export function updateMe(dto: UpdateMeDto): Promise<MeProfileView> {
+  return request<MeProfileView>('/auth/me', { method: 'PATCH', body: JSON.stringify(dto) });
+}
+
+export function changePassword(dto: ChangePasswordDto): Promise<{ ok: true }> {
+  return request<{ ok: true }>('/auth/me/password', { method: 'POST', body: JSON.stringify(dto) });
 }

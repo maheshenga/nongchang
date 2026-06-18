@@ -26,6 +26,7 @@ const AiAssistant = lazy(() => import('./components/AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
 const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
 const PayResult = lazy(() => import('./components/PayResult'));
+const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 
 const ViewSkeleton = () => (
   <div className="animate-pulse space-y-6 w-full h-full p-4">
@@ -55,6 +56,7 @@ export default function App() {
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     setMountedTabs(prev => new Set(prev).add(activeTab));
@@ -312,7 +314,7 @@ export default function App() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
             </button>
             <div className="h-6 w-px bg-slate-200"></div>
-            <div className="flex items-center gap-3 cursor-pointer group">
+            <div onClick={() => setProfileOpen(true)} title="个人账号设置" className="flex items-center gap-3 cursor-pointer group">
               <div className="flex flex-col items-end">
                 <span className="text-sm font-bold text-slate-700 group-hover:text-emerald-600 transition-colors">
                   {systemRole === 'system_admin' ? '李总管' : systemRole === 'agent_admin' ? '西南大区代理' : '大理基地主理人'}
@@ -325,7 +327,7 @@ export default function App() {
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-slate-100 to-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm shadow-sm ring-2 ring-white border border-slate-200 group-hover:border-emerald-200 transition-colors">
                   <img src="https://api.dicebear.com/7.x/notionists/svg?seed=Admin" alt="Admin" className="w-7 h-7" />
                 </div>
-                <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-2" title="退出登录">
+                <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors ml-2" title="退出登录">
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
@@ -361,6 +363,12 @@ export default function App() {
           </Suspense>
         </section>
       </main>
+
+      {profileOpen && (
+        <Suspense fallback={null}>
+          <ProfileSettings onClose={() => setProfileOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
