@@ -55,61 +55,6 @@
     color: $c-text;
   }
 
-  &__buy {
-    margin-bottom: 28px;
-  }
-
-  &__plans {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 16px;
-  }
-
-  &__plan {
-    @include card;
-    width: calc(50% - 8px);
-    box-sizing: border-box;
-    padding: 20px 24px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  &__plan-name {
-    font-size: 26px;
-    font-weight: bold;
-    color: $c-text;
-  }
-
-  &__plan-qty {
-    font-size: 24px;
-    color: $c-text-sub;
-    margin-top: 8px;
-  }
-
-  &__plan-price {
-    font-size: 30px;
-    font-weight: bold;
-    color: $c-primary;
-    margin-top: 8px;
-  }
-
-  &__plan-btn {
-    margin-top: 16px;
-    background: $c-primary;
-    border-radius: 12px;
-    padding: 14px 0;
-    text-align: center;
-
-    &--disabled { opacity: 0.5; }
-  }
-
-  &__plan-btn-text {
-    font-size: 26px;
-    color: #fff;
-    font-weight: bold;
-  }
-
   &__hint {
     display: block;
     font-size: 24px;
