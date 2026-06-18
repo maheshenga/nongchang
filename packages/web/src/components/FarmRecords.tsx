@@ -45,7 +45,7 @@ export default function FarmRecords() {
   const [query, setQuery] = useState<ListFarmRecordsQuery>({});
 
   const fetchRecords = useCallback(() => listFarmRecords(query), [query]);
-  const { data: rawRecords, loading, error, reload } = useApi(fetchRecords);
+  const { data: rawRecords, loading, error, reload } = useApi<FarmRecord[]>(fetchRecords);
   const { data: batches } = useApi(listBatches);
   const tasks: RecordTask[] = (rawRecords ?? []).map(toRecordTask);
 
