@@ -8,6 +8,11 @@ import { ScopeService } from '../../common/scope/scope.service';
 export class FarmRecordService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
+  // 统一出口:Decimal 列 supplyAmount 经 JSON 序列化会变字符串,返回前端前转 number(契约为 number)。
+  private serialize<T extends { supplyAmount: Prisma.Decimal | number | null }>(rec: T) {
+    return { ...rec, supplyAmount: rec.supplyAmount != null ? new Prisma.Decimal(rec.supplyAmount).toNumber() : null };
+  }
+
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
     await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
@@ -32,7 +37,7 @@ export class FarmRecordService {
         throw new BadRequestException('实际用量超过领用配额 110%,核销熔断');
       }
     }
-    return this.prisma.farmRecord.create({
+    const created = await this.prisma.farmRecord.create({
       data: {
         tenantId: user.tenantId, batchId: dto.batchId, fieldId: dto.fieldId,
         operatorId: user.userId, action: dto.action,
@@ -43,6 +48,7 @@ export class FarmRecordService {
         supplyId: dto.supplyId ?? undefined, supplyAmount: dto.supplyAmount ?? undefined,
       },
     });
+    return this.serialize(created);
   }
 
   async list(user: AuthUser, query: FarmRecordQueryDto) {
@@ -81,8 +87,7 @@ export class FarmRecordService {
     });
     const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
     const withOwner = items.map((r: any) => ({
-      ...r,
-      supplyAmount: r.supplyAmount != null ? new Prisma.Decimal(r.supplyAmount).toNumber() : null,
+      ...this.serialize(r),
       ownerName: nameMap.get(batchOwner.get(r.batchId) as string) ?? null,
     }));
     return { items: withOwner, total, page, pageSize };
@@ -95,6 +100,7 @@ export class FarmRecordService {
     });
     if (!rec) throw new ForbiddenException('农事记录不在可操作范围内');
     await this.scope.assertInScope(this.prisma, user, 'batch', rec.batchId);
-    return this.prisma.farmRecord.update({ where: { id }, data: { status: dto.status } });
+    const updated = await this.prisma.farmRecord.update({ where: { id }, data: { status: dto.status } });
+    return this.serialize(updated);
   }
 }

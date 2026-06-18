@@ -76,7 +76,7 @@ describe('Supply e2e', () => {
       .send({ batchId: batchAId, amount: 50 });
     expect(issue.status).toBe(400);
     const after = await prisma.supply.findUnique({ where: { id } });
-    expect(after!.used).toBe(0);
+    expect(Number(after!.used)).toBe(0);
   });
 
   it('作用域隔离:merchantB 看不到 A 的农资,越权领用/删除被拒', async () => {

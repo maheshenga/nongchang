@@ -31,9 +31,10 @@ export class FieldService {
     });
     const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
     // 经纬度存 PostGIS geography 列,用 ST_X/ST_Y 从 location 提取(转 geometry 后取坐标)。
+    // 注:id 列为 uuid,Prisma 把 JS 字符串数组绑定为 text[],故用 id::text 比较避免 text=uuid 操作符不存在(42883)。
     const ids = fields.map((f: any) => f.id);
     const coords = await this.prisma.$queryRawUnsafe<Array<{ id: string; lng: number | null; lat: number | null }>>(
-      `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id = ANY($1::uuid[])`,
+      `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id::text = ANY($1)`,
       ids,
     );
     const coordMap = new Map(coords.map((c) => [c.id, c]));
