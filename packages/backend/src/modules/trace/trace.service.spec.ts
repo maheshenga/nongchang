@@ -11,7 +11,7 @@ const evt: CreateTraceEventDto = {
 
 function make(batchInScope = true) {
   const created: any[] = [];
-  const billing = { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }) };
+  const billing = { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }), refund: vi.fn().mockResolvedValue({ balanceAfter: 0 }) };
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
     traceCode: {
@@ -108,5 +108,12 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     const h = make(false);
     await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
     expect(h.billing.consume).not.toHaveBeenCalled();
+  });
+  it('建码失败则退还已扣额度并重抛', async () => {
+    const h = make(true);
+    h.prisma.traceCode.createMany.mockRejectedValueOnce(new Error('db down'));
+    await expect(h.svc.generateCodes(merchant, 'b1', 4)).rejects.toThrow('db down');
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
+    expect(h.billing.refund).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
   });
 });

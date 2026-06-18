@@ -73,9 +73,10 @@ model Field {
   area        Float
   iotDeviceId String?                                @map("iot_device_id")
   // PostGIS 地理列:Prisma 以 Unsupported 类型识别(消除列漂移)。
-  // GIST 索引 fields_location_gist 由 field_geography 原生 SQL 迁移创建,
-  // 无法在 schema 中用 @@index 表达,故 `migrate dev` 会提示一个无害的
-  // DROP INDEX —— 切勿接受;生产/CI 统一用 `prisma migrate deploy`(不会提示)。
+  // 注:早期 field_geography 迁移建过 GIST 索引 fields_location_gist,
+  // 后续迁移已将其 DROP;目前所有 location 访问均为按主键 id 点查
+  // (ST_X/ST_Y 提取坐标),无空间邻近查询,故不需要该索引。
+  // 若将来新增 ST_DWithin/KNN 类查询,需用原生 SQL 迁移重建 GIST 索引。
   location    Unsupported("geography(Point, 4326)")?
   createdAt   DateTime                               @default(now()) @map("created_at")
   owner       User     @relation(fields: [ownerId], references: [id])
@@ -97,8 +98,8 @@ model Batch {
   plantDate       DateTime @map("plant_date")
   expectedHarvest DateTime @map("expected_harvest")
   status          String
-  laborCost       Float    @default(0) @map("labor_cost")
-  sellPrice       Float    @default(0) @map("sell_price")
+  laborCost       Decimal  @default(0) @map("labor_cost") @db.Decimal(14, 2)
+  sellPrice       Decimal  @default(0) @map("sell_price") @db.Decimal(14, 2)
   createdAt       DateTime @default(now()) @map("created_at")
   owner            User     @relation(fields: [ownerId], references: [id])
   field            Field    @relation(fields: [fieldId], references: [id])
@@ -127,7 +128,7 @@ model FarmRecord {
   source     String
   status     String   @default("completed")
   supplyId     String?  @map("supply_id")
-  supplyAmount Float?   @map("supply_amount")
+  supplyAmount Decimal? @map("supply_amount") @db.Decimal(14, 2)
   createdAt  DateTime @default(now()) @map("created_at")
   batch      Batch    @relation(fields: [batchId], references: [id])
   field      Field    @relation(fields: [fieldId], references: [id])
@@ -225,8 +226,8 @@ model Supply {
   ownerId   String   @map("owner_id")
   name      String
   unit      String
-  total     Float    @default(0)
-  used      Float    @default(0)
+  total     Decimal  @default(0) @db.Decimal(14, 2)
+  used      Decimal  @default(0) @db.Decimal(14, 2)
   createdAt DateTime @default(now()) @map("created_at")
   owner     User     @relation(fields: [ownerId], references: [id])
   issues    SupplyIssue[]
@@ -242,8 +243,8 @@ model SupplyIssue {
   ownerId   String   @map("owner_id")
   supplyId  String   @map("supply_id")
   batchId   String   @map("batch_id")
-  amount    Float
-  unitPrice Float    @default(0) @map("unit_price")
+  amount    Decimal  @db.Decimal(14, 2)
+  unitPrice Decimal  @default(0) @map("unit_price") @db.Decimal(14, 2)
   createdAt DateTime @default(now()) @map("created_at")
   owner     User     @relation(fields: [ownerId], references: [id])
   supply    Supply   @relation(fields: [supplyId], references: [id])
@@ -364,6 +365,13 @@ enum LedgerReason {
   ALLOCATE_OUT
   CONSUME
   REFUND
+  PURCHASE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
 }
 
 model CreditAccount {
@@ -398,4 +406,48 @@ model CreditLedger {
 
   @@index([accountId, createdAt])
   @@map("credit_ledgers")
+}
+
+// 售卖套餐:固定套餐(quantity 固定)或单价基准(供自定义数量计价)。
+// 单价基准:isUnit=true 的套餐,其 priceCents/quantity 即每单位价格,自定义购买按此计价。
+model CreditPlan {
+  id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  name        String
+  resource    CreditResource
+  quantity    Int            // 套餐含额度数量(单价基准套餐此处为基准单位量,通常 1)
+  priceCents  Int            @map("price_cents") // 售价(分)
+  isUnit      Boolean        @default(false) @map("is_unit") // 是否为自定义数量的单价基准
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  orders      CreditOrder[]
+
+  @@index([tenantId])
+  @@map("credit_plans")
+}
+
+// 购买订单:PENDING(待支付)→ PAID(已支付入账)。
+// 支付:发起支付宝下单后用户跳转付款,支付宝异步 notify 回调验签通过后入账(payChannel/tradeNo 记录渠道与交易号)。
+model CreditOrder {
+  id          String         @id @default(uuid())
+  tenantId    String         @map("tenant_id")
+  ownerType   CreditOwnerType @map("owner_type") // 购买方账户类型(AGENT/MERCHANT)
+  ownerId     String         @map("owner_id")
+  planId      String?        @map("plan_id")
+  plan        CreditPlan?    @relation(fields: [planId], references: [id])
+  resource    CreditResource
+  quantity    Int            // 购买额度数量
+  amountCents Int            @map("amount_cents") // 应付金额(分)
+  status      OrderStatus    @default(PENDING)
+  buyerId     String         @map("buyer_id") // 下单用户 userId
+  payChannel  String?        @map("pay_channel") // 支付渠道:alipay_page(PC) | alipay_wap(H5) | manual(管理员兜底)
+  tradeNo     String?        @map("trade_no")     // 支付宝交易号(回调入账时记录)
+  paidAt      DateTime?      @map("paid_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([tenantId, ownerType, ownerId])
+  @@index([tenantId, status])
+  @@map("credit_orders")
 }

@@ -136,9 +136,15 @@ export {
   creditOwnerTypeSchema, creditResourceSchema, ledgerReasonSchema,
   billingSummarySchema, creditAccountItemSchema, creditLedgerItemSchema,
   ledgerQuerySchema, paginatedLedgerSchema, allocateSchema, rechargeSchema,
+  orderStatusSchema, createCreditPlanSchema, updateCreditPlanSchema, creditPlanViewSchema,
+  createOrderSchema, creditOrderViewSchema, orderQuerySchema, paginatedOrdersSchema,
+  alipayConfigSchema, alipayConfigViewSchema, payChannelSchema, createPaymentSchema, paymentViewSchema,
 } from './dto/billing.dto';
 export type {
   CreditOwnerType, CreditResource, LedgerReason, BillingSummary,
   CreditAccountItem, CreditLedgerItem, LedgerQuery, PaginatedLedger,
   AllocateInput, RechargeInput,
+  OrderStatus, CreateCreditPlanInput, UpdateCreditPlanInput, CreditPlanView,
+  CreateOrderInput, CreditOrderView, OrderQuery, PaginatedOrders,
+  AlipayConfigInput, AlipayConfigView, PayChannel, CreatePaymentInput, PaymentView,
 } from './dto/billing.dto';

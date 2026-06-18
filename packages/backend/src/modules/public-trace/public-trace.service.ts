@@ -2,6 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PublicTraceResult } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 
+// 公开溯源页实际消费的 payload 字段白名单(见 web TraceabilityPage)。其余录入字段不外泄。
+const PUBLIC_PAYLOAD_KEYS = ['desc', 'image', 'tag', 'weather', 'data', 'temp'] as const;
+function pickPublicPayload(payload: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const out: Record<string, unknown> = {};
+  for (const k of PUBLIC_PAYLOAD_KEYS) {
+    if (payload[k] !== undefined) out[k] = payload[k];
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 @Injectable()
 export class PublicTraceService {
   constructor(private prisma: PrismaService) {}
@@ -91,7 +102,8 @@ export class PublicTraceService {
         actor: e.actor,
         location: e.location,
         occurredAt: e.occurredAt.toISOString(),
-        payload: (e.payload as Record<string, unknown> | null) ?? null,
+        // 白名单:payload 是录入方自由 JSON,公开端点仅透出前端实际消费的展示字段,避免内部备注泄露。
+        payload: pickPublicPayload(e.payload as Record<string, unknown> | null),
       })),
       credentials: credentials.map((c) => ({
         type: c.type as Extract<PublicTraceResult, { frozen: false }>['credentials'][number]['type'],

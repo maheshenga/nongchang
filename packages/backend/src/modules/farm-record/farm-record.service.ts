@@ -25,9 +25,10 @@ export class FarmRecordService {
       const consumedAgg = await this.prisma.farmRecord.aggregate({
         where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
       });
-      const quota = quotaAgg._sum.amount ?? 0;
-      const consumed = consumedAgg._sum.supplyAmount ?? 0;
-      if (consumed + dto.supplyAmount > quota * 1.1) {
+      const quota = new Prisma.Decimal(quotaAgg._sum.amount ?? 0);
+      const consumed = new Prisma.Decimal(consumedAgg._sum.supplyAmount ?? 0);
+      // 实际累计用量超过领用配额 110% 则熔断。用 Decimal 比较避免浮点误差。
+      if (consumed.plus(dto.supplyAmount).greaterThan(quota.times(1.1))) {
         throw new BadRequestException('实际用量超过领用配额 110%,核销熔断');
       }
     }
@@ -79,7 +80,11 @@ export class FarmRecordService {
       where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
     });
     const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
-    const withOwner = items.map(r => ({ ...r, ownerName: nameMap.get(batchOwner.get(r.batchId) as string) ?? null }));
+    const withOwner = items.map((r: any) => ({
+      ...r,
+      supplyAmount: r.supplyAmount != null ? new Prisma.Decimal(r.supplyAmount).toNumber() : null,
+      ownerName: nameMap.get(batchOwner.get(r.batchId) as string) ?? null,
+    }));
     return { items: withOwner, total, page, pageSize };
   }
 

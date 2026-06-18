@@ -24,12 +24,19 @@ export class TraceService {
       throw new ForbiddenException(`生成数量须为 1~${MAX_CODES_PER_BATCH} 的整数`);
     }
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    await this.billing.consume(user, 'CODE', count, { refType: 'trace.generate', refId: batchId });
-    const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
-    await this.prisma.traceCode.createMany({
-      data: codes.map((code) => ({ tenantId: user.tenantId, batchId, code })),
-    });
-    return this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, code: { in: codes } } });
+    const ref = { refType: 'trace.generate', refId: batchId };
+    // 先扣额度(余额不足直接 403 短路);建码失败则退还,避免「扣了费但没生成码」。
+    await this.billing.consume(user, 'CODE', count, ref);
+    try {
+      const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
+      await this.prisma.traceCode.createMany({
+        data: codes.map((code) => ({ tenantId: user.tenantId, batchId, code })),
+      });
+      return await this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, code: { in: codes } } });
+    } catch (err) {
+      await this.billing.refund(user, 'CODE', count, ref);
+      throw err;
+    }
   }
 
   async addEvent(user: AuthUser, dto: CreateTraceEventDto) {

@@ -114,6 +114,25 @@ async function main() {
     });
   }
 
+  // ── 售卖套餐预置(演示用):固定套餐 + 单价基准(isUnit)──
+  // CreditPlan 无自然唯一键,按 (tenantId,name) 复用以保证幂等。
+  const planSeeds = [
+    { name: 'AI 算力 100 次', resource: 'AI' as const, quantity: 100, priceCents: 1000, isUnit: false },
+    { name: 'AI 算力 500 次', resource: 'AI' as const, quantity: 500, priceCents: 4500, isUnit: false },
+    { name: 'AI 算力单价', resource: 'AI' as const, quantity: 1, priceCents: 12, isUnit: true },
+    { name: '二维码 1000 个', resource: 'CODE' as const, quantity: 1000, priceCents: 2000, isUnit: false },
+    { name: '二维码 5000 个', resource: 'CODE' as const, quantity: 5000, priceCents: 9000, isUnit: false },
+    { name: '二维码单价', resource: 'CODE' as const, quantity: 1, priceCents: 3, isUnit: true },
+  ];
+  for (const p of planSeeds) {
+    const existing = await prisma.creditPlan.findFirst({ where: { tenantId: tenant.id, name: p.name } });
+    if (existing) {
+      await prisma.creditPlan.update({ where: { id: existing.id }, data: { ...p, active: true } });
+    } else {
+      await prisma.creditPlan.create({ data: { tenantId: tenant.id, active: true, ...p } });
+    }
+  }
+
   console.log('Seed done:', { agentA: agentA.id, agentB: agentB.id, merchantA: merchantA.id, merchantB: merchantB.id, traceCode: traceCode.code });
 }
 

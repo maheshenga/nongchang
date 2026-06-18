@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Plus, Download, Printer, Search, QrCode, X, Settings2, GripVertical, BarChart, MapPin, ShieldCheck, Map, ScanLine } from 'lucide-react';
+import { Plus, Printer, Search, QrCode, X, Settings2, GripVertical, MapPin, ShieldCheck } from 'lucide-react';
 import { Crop } from '../types';
 import { useApi } from '../hooks/useApi';
 import { listBatches, type Batch } from '../api/batches';
@@ -24,7 +24,6 @@ export default function MerchantAdmin() {
   const [selectedCropIds, setSelectedCropIds] = useState<Set<string>>(new Set());
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
-  const [isProcessingRfid, setIsProcessingRfid] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // 打印预览时为每个批次真实生成的溯源码:batchId → code。
   const [cropCodes, setCropCodes] = useState<Record<string, string>>({});
@@ -88,9 +87,7 @@ export default function MerchantAdmin() {
   
   // H5 Template Editor State
   const [showH5Editor, setShowH5Editor] = useState(false);
-  const [showScanInsights, setShowScanInsights] = useState(false);
-  const [showRfidModal, setShowRfidModal] = useState<string | null>(null);
-  
+
   const [abTestMode, setAbTestMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'A' | 'B'>('A');
 
@@ -183,19 +180,12 @@ export default function MerchantAdmin() {
                   <Printer className="w-4 h-4" />
                   {generatingPrint ? '生成中…' : `打印追溯标签 (${selectedCropIds.size})`}
                 </button>
-                <button 
+                <button
                   onClick={() => setShowH5Editor(true)}
                   className="flex items-center gap-2 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
                 >
                   <Settings2 className="w-4 h-4" />
                   定制专属溯源模板
-                </button>
-                <button 
-                  onClick={() => setShowScanInsights(true)}
-                  className="flex items-center gap-2 bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
-                >
-                  <BarChart className="w-4 h-4" />
-                  防伪与消费者洞察
                 </button>
               </div>
             )}
@@ -276,12 +266,6 @@ export default function MerchantAdmin() {
                       </button>
                       <button className="text-indigo-700 hover:text-white hover:bg-indigo-600 font-bold text-[10px] bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
                         发货流向绑定 <span className="font-normal opacity-70 ml-0.5">(防窜货)</span>
-                      </button>
-                      <button 
-                        onClick={() => setShowRfidModal(crop.id)}
-                        className="text-amber-700 hover:text-white hover:bg-amber-600 font-bold text-[10px] bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm"
-                      >
-                        <ScanLine className="w-3 h-3" /> 智能芯片绑定
                       </button>
                       <button className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 font-bold text-[10px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white transition-colors shadow-sm">
                         生命周期追溯档案
@@ -631,171 +615,6 @@ export default function MerchantAdmin() {
                  setShowPrintPreview(false);
                }} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-colors shadow-sm flex items-center gap-2 focus:ring-4 focus:ring-blue-500/20">
                  <Printer className="w-4 h-4"/> 连接打印机执行批量出单
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Consumer Insights & Anti-fake Analytics Modal */}
-      {showScanInsights && (
-        <div role="dialog" aria-modal="true" aria-label="防伪扫码监控与终端消费者洞察" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
-             <div className="flex justify-between items-center p-6 border-b border-orange-100 bg-orange-50/80 shrink-0">
-               <div>
-                 <h3 className="font-bold text-orange-900 text-lg flex items-center gap-3">
-                   <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                     <ShieldCheck className="w-5 h-5" /> 
-                   </div>
-                   防伪扫码监控与终端消费者洞察
-                 </h3>
-                 <p className="text-xs text-orange-700/80 mt-1.5 tracking-wide">基于真实扫码记录的大数据分析、留存转化率与防窜货预警网</p>
-               </div>
-               <button onClick={() => setShowScanInsights(false)} aria-label="关闭" className="text-orange-900/40 hover:text-orange-900 hover:bg-orange-100/50 p-2 rounded-lg transition-colors">
-                 <X className="w-5 h-5" />
-               </button>
-             </div>
-             
-             <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 flex flex-col lg:flex-row gap-8">
-                <div className="w-full lg:w-1/3 flex flex-col gap-6">
-                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm transition-shadow hover:shadow-md">
-                      <div className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
-                        <BarChart className="w-4 h-4 text-slate-400"/> 数据大盘总览 <span className="text-[10px] font-normal text-slate-400 ml-auto bg-slate-100 px-2 py-0.5 rounded-full">近 30 天</span>
-                      </div>
-                      <div className="space-y-5">
-                        <div className="flex justify-between items-end border-b border-slate-100/60 pb-3 hover:bg-slate-50/30 transition-colors rounded-lg px-2 -mx-2">
-                           <div className="text-xs font-bold text-slate-500">累计有效端点扫码量</div>
-                           <div className="text-2xl font-black font-mono text-slate-800">14,208 <span className="text-sm text-slate-400 font-normal">次</span></div>
-                        </div>
-                        <div className="flex justify-between items-end border-b border-slate-100/60 pb-3 hover:bg-slate-50/30 transition-colors rounded-lg px-2 -mx-2">
-                           <div className="text-xs font-bold text-slate-500">留存独立消费者 (UV)</div>
-                           <div className="text-2xl font-black font-mono text-slate-800">9,852 <span className="text-sm text-slate-400 font-normal">人</span></div>
-                        </div>
-                        <div className="flex justify-between items-end border-b border-slate-100/60 pb-3 hover:bg-red-50/30 transition-colors rounded-lg px-2 -mx-2">
-                           <div className="text-xs font-bold text-slate-500">异常扫码阻断拦截 (疑似仿冒)</div>
-                           <div className="text-xl font-black font-mono text-red-600 bg-red-50 px-2 py-1 rounded-lg">42 <span className="text-xs text-red-400 font-normal">次</span></div>
-                        </div>
-                        <div className="flex justify-between items-end pb-1 hover:bg-emerald-50/30 transition-colors rounded-lg px-2 -mx-2">
-                           <div className="text-xs font-bold text-slate-500">端内复购链路转化率</div>
-                           <div className="text-xl font-black font-mono text-emerald-600">8.4%</div>
-                        </div>
-                      </div>
-                   </div>
-
-                   <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex-1 flex flex-col">
-                      <div className="text-sm font-bold text-slate-800 mb-5 flex justify-between items-center">
-                        <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-red-500"/> 异常防伪安全预警</span>
-                        <button className="text-[10px] text-slate-400 hover:text-slate-600 font-medium">查看全部日志</button>
-                      </div>
-                      <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-                         <div className="bg-gradient-to-r from-red-50 to-white border border-red-100 p-4 rounded-xl text-xs flex justify-between items-start group hover:border-red-200 transition-all">
-                           <div>
-                             <div className="font-bold text-red-800 flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>同一序列号异地并发扫码</div>
-                             <div className="text-red-500/80 mt-1.5 font-mono bg-red-100/50 inline-block px-1.5 py-0.5 rounded text-[10px]">序列: 8A9B-CC2-11</div>
-                           </div>
-                           <button className="bg-white text-red-600 px-3 py-1.5 rounded-lg shadow-sm font-bold border border-red-100 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100">一键冻结</button>
-                         </div>
-                         <div className="bg-gradient-to-r from-amber-50 to-white border border-amber-100 p-4 rounded-xl text-xs flex justify-between items-start group hover:border-amber-200 transition-all">
-                           <div>
-                             <div className="font-bold text-amber-800 flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>终端设备高频重复调阅</div>
-                             <div className="text-amber-600/80 mt-1.5 tracking-wide">单 IP 地址 1 小时内触发 50 次</div>
-                           </div>
-                           <button className="bg-white text-amber-700 px-3 py-1.5 rounded-lg shadow-sm font-bold border border-amber-100 hover:bg-amber-50 transition-colors opacity-0 group-hover:opacity-100">查看画像</button>
-                         </div>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="flex-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col relative overflow-hidden group">
-                   <div className="text-sm font-bold text-slate-800 mb-5 flex items-center justify-between relative z-10 w-full">
-                     <span className="flex items-center gap-2"><Map className="w-4 h-4 text-blue-600" /> 消费者扫码终端地理位置热力图</span>
-                     <div className="flex items-center gap-2">
-                       <span className="flex items-center gap-1.5 text-[10px] text-slate-500"><div className="w-2 h-2 rounded-full bg-red-400"></div>高热度</span>
-                       <span className="flex items-center gap-1.5 text-[10px] text-slate-500"><div className="w-2 h-2 rounded-full bg-amber-400"></div>中度激活</span>
-                     </div>
-                   </div>
-                   <div className="flex-1 bg-slate-50 rounded-xl relative overflow-hidden flex items-center justify-center flex-col border border-slate-100 shadow-inner group-hover:bg-slate-100 transition-colors duration-500">
-                      <MapPin className="w-16 h-16 text-blue-200 mb-4 drop-shadow-md transform group-hover:scale-110 transition-transform duration-700" />
-                      <p className="font-bold text-slate-400 z-10 text-center tracking-wide leading-relaxed">系统已检测到主产区外高活跃度终端：<br/><span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">上海市</span> 、 <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">江苏省</span> 、 <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">广东省</span></p>
-                      
-                      {/* Fake Heatmap dots */}
-                      <div className="absolute top-[25%] right-[28%] w-8 h-8 bg-red-500/50 rounded-full blur-xl animate-pulse"></div>
-                      <div className="absolute top-[35%] right-[25%] w-10 h-10 bg-amber-500/40 rounded-full blur-xl delay-75"></div>
-                      <div className="absolute top-[55%] right-[38%] w-16 h-16 bg-blue-500/30 rounded-full blur-2xl"></div>
-                      <div className="absolute bottom-[20%] left-[30%] w-12 h-12 bg-emerald-500/20 rounded-full blur-xl"></div>
-                   </div>
-                   
-                   <div className="mt-5 pt-5 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500 relative z-10">
-                     <p className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/> 基于通信基站与 LBS 数据聚类 (已进行脱敏与合规化处理)</p>
-                     <button className="text-blue-600 font-bold hover:text-white px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-600 transition-colors shadow-sm">导出热力洞察报表</button>
-                   </div>
-                </div>
-             </div>
-          </div>
-        </div>
-      )}
-
-      {/* RFID / NFC Binding Modal */}
-      {showRfidModal && (
-        <div role="dialog" aria-modal="true" aria-label="RFID/NFC 物理智能芯片绑定" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-3">
-                <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-                  <ScanLine className="w-5 h-5 text-amber-600" /> 
-                </div>
-                RFID/NFC 物理智能芯片绑定
-              </h3>
-              <button onClick={() => setShowRfidModal(null)} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
-            </div>
-            
-            <div className="p-8 flex flex-col items-center">
-              <div className="w-24 h-24 bg-amber-50 rounded-full flex items-center justify-center mb-6 relative shadow-inner">
-                <ScanLine className="w-10 h-10 text-amber-500 animate-pulse" />
-                <div className="absolute inset-0 border-[6px] border-amber-200 rounded-full animate-ping opacity-20"></div>
-              </div>
-              
-              <h4 className="text-lg font-black text-slate-800 mb-2 tracking-wide">感应终端或扫描物理标签</h4>
-              <p className="text-xs text-slate-500 text-center mb-8 leading-relaxed font-medium bg-slate-50 p-3 rounded-xl border border-slate-100">
-                请将您的定制读卡器、智能扫码设备或 NFC 手机靠近电子标牌传感器，系统将挂载并映射至该批次生命周期档案库。
-              </p>
-
-              <div className="w-full">
-                <label className="block text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-1.5">当前挂载目标批次</label>
-                <div className="w-full border border-slate-200 bg-slate-100 px-4 py-3 rounded-xl text-sm font-bold text-slate-500 mb-5 cursor-not-allowed shadow-inner flex items-center justify-between">
-                  <span>{crops.find(c => c.id === showRfidModal)?.name}</span>
-                  <span className="font-mono text-xs">{crops.find(c => c.id === showRfidModal)?.batchNo}</span>
-                </div>
-
-                <label className="block text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-1.5">物理标签通用通信协议 ID (RFID/NFC)</label>
-                <div className="relative">
-                  <input 
-                    type="text" 
-                    placeholder="等待感应输入..."
-                    className="w-full border border-slate-300 px-3 py-2 rounded text-sm placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
-                    autoFocus
-                  />
-                  <div className="absolute top-1/2 right-3 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200">
-               <button onClick={() => setShowRfidModal(null)} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-200 rounded text-sm transition-colors">取消</button>
-               <button 
-                 onClick={() => {
-                   setIsProcessingRfid(true);
-                   setTimeout(() => {
-                     setIsProcessingRfid(false);
-                     setShowRfidModal(null);
-                     showToast('RFID / NFC物理芯片挂载成功');
-                   }, 800);
-                 }} 
-                 disabled={isProcessingRfid}
-                 className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded shadow-sm text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-               >
-                 {isProcessingRfid ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"></div> : null}
-                 确认绑定
                </button>
             </div>
           </div>

@@ -4,7 +4,7 @@ import { getLedger } from '../api/billing';
 import type { CreditLedgerItem, CreditResource, LedgerReason } from '@nongchang/shared';
 
 const REASON_LABEL: Record<LedgerReason, string> = {
-  RECHARGE: '充值', ALLOCATE_IN: '转入', ALLOCATE_OUT: '转出', CONSUME: '消费', REFUND: '退还',
+  RECHARGE: '充值', ALLOCATE_IN: '转入', ALLOCATE_OUT: '转出', CONSUME: '消费', REFUND: '退还', PURCHASE: '购买',
 };
 const RESOURCE_LABEL: Record<CreditResource, string> = { AI: 'AI算力', CODE: '二维码' };
 

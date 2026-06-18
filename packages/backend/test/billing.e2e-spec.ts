@@ -31,6 +31,8 @@ describe('Billing e2e', () => {
   const createdCodes: string[] = [];
   let createdBatchId: string | null = null;
   let createdFieldId: string | null = null;
+  const createdPlanIds: string[] = [];
+  const createdOrderIds: string[] = [];
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -67,6 +69,13 @@ describe('Billing e2e', () => {
   afterAll(async () => {
     if (createdCodes.length) {
       await prisma.traceCode.deleteMany({ where: { code: { in: createdCodes } } });
+    }
+    if (createdOrderIds.length) {
+      await prisma.creditLedger.deleteMany({ where: { refType: 'order', refId: { in: createdOrderIds } } });
+      await prisma.creditOrder.deleteMany({ where: { id: { in: createdOrderIds } } });
+    }
+    if (createdPlanIds.length) {
+      await prisma.creditPlan.deleteMany({ where: { id: { in: createdPlanIds } } });
     }
     if (createdBatchId) await prisma.batch.deleteMany({ where: { id: createdBatchId } });
     if (createdFieldId) await prisma.field.deleteMany({ where: { id: createdFieldId } });
@@ -137,8 +146,61 @@ describe('Billing e2e', () => {
     expect(after).toBe(before);
   });
 
+  it('自助购买闭环:管理员建套餐→商户下单→支付→AI 余额到账+PURCHASE 流水', async () => {
+    // 管理员建一个固定套餐(AI 100 次 / ¥10)
+    const planRes = await request(app.getHttpServer())
+      .post('/api/billing/plans').set('Authorization', `Bearer ${sysToken}`)
+      .send({ name: `e2e-AI100-${Date.now()}`, resource: 'AI', quantity: 100, priceCents: 1000, isUnit: false, active: true });
+    expect([200, 201]).toContain(planRes.status);
+    const planId = planRes.body.id;
+    createdPlanIds.push(planId);
+
+    // 套餐对商户可见
+    const plans = await request(app.getHttpServer())
+      .get('/api/billing/plans').set('Authorization', `Bearer ${merchantToken}`);
+    expect(plans.status).toBe(200);
+    expect(plans.body.find((p: any) => p.id === planId)).toBeTruthy();
+
+    // 商户下单
+    const summaryBefore = await request(app.getHttpServer())
+      .get('/api/billing/summary').set('Authorization', `Bearer ${merchantToken}`);
+    const aiBefore = summaryBefore.body.aiBalance;
+
+    const orderRes = await request(app.getHttpServer())
+      .post('/api/billing/orders').set('Authorization', `Bearer ${merchantToken}`)
+      .send({ planId });
+    expect([200, 201]).toContain(orderRes.status);
+    expect(orderRes.body).toMatchObject({ resource: 'AI', quantity: 100, amountCents: 1000, status: 'PENDING' });
+    const orderId = orderRes.body.id;
+    createdOrderIds.push(orderId);
+
+    // 支付(占位)→ 入账
+    const payRes = await request(app.getHttpServer())
+      .post(`/api/billing/orders/${orderId}/pay`).set('Authorization', `Bearer ${merchantToken}`);
+    expect([200, 201]).toContain(payRes.status);
+    expect(payRes.body.status).toBe('PAID');
+
+    const summaryAfter = await request(app.getHttpServer())
+      .get('/api/billing/summary').set('Authorization', `Bearer ${merchantToken}`);
+    expect(summaryAfter.body.aiBalance).toBe(aiBefore + 100);
+
+    // PURCHASE 流水存在
+    const ledger = await request(app.getHttpServer())
+      .get('/api/billing/ledger?resource=AI&reason=PURCHASE&page=1&pageSize=10').set('Authorization', `Bearer ${merchantToken}`);
+    expect(ledger.status).toBe(200);
+    const purchase = ledger.body.items.find((it: any) => it.reason === 'PURCHASE' && it.refId === orderId && it.delta === 100);
+    expect(purchase).toBeDefined();
+
+    // 幂等:重复支付不二次入账
+    const payAgain = await request(app.getHttpServer())
+      .post(`/api/billing/orders/${orderId}/pay`).set('Authorization', `Bearer ${merchantToken}`);
+    expect([200, 201]).toContain(payAgain.status);
+    const summaryFinal = await request(app.getHttpServer())
+      .get('/api/billing/summary').set('Authorization', `Bearer ${merchantToken}`);
+    expect(summaryFinal.body.aiBalance).toBe(aiBefore + 100);
+  });
+
   it('平台账户租户隔离:PLATFORM 账户按 tenantId 区分,不跨租户串账', async () => {
-    // BUG1 回归:ensureAccount 漏 tenantId + PLATFORM 固定 ownerId 曾导致全库共用一行平台账户。
     // 为 DEMO 租户充值后,另建一个独立租户的 PLATFORM 账户,二者余额必须互不影响。
     await request(app.getHttpServer())
       .post('/api/billing/recharge').set('Authorization', `Bearer ${sysToken}`)

@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { LayoutDashboard, QrCode, Smartphone, Database, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout, Wallet } from 'lucide-react';
+import { QrCode, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
@@ -25,6 +25,7 @@ const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
 const AiAssistant = lazy(() => import('./components/AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
 const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
+const PayResult = lazy(() => import('./components/PayResult'));
 
 const ViewSkeleton = () => (
   <div className="animate-pulse space-y-6 w-full h-full p-4">
@@ -49,10 +50,11 @@ export default function App() {
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology' | 'billing'>('dashboard');
-  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['dashboard']));
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology' | 'billing'>('fields');
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set());
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
+  const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     setMountedTabs(prev => new Set(prev).add(activeTab));
@@ -67,8 +69,16 @@ export default function App() {
         let code = raw;
         try { code = decodeURIComponent(raw); } catch { /* 非法编码则按原样 */ }
         setTraceCode(code);
+        setPayResultOrderId(null);
+      } else if (hash.startsWith('#/billing/pay-result')) {
+        // 支付宝同步回跳:#/billing/pay-result?orderId=xxx
+        const qs = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
+        const orderId = new URLSearchParams(qs).get('orderId');
+        setPayResultOrderId(orderId);
+        setTraceCode(null);
       } else {
         setTraceCode(null);
+        setPayResultOrderId(null);
       }
     };
     
@@ -90,17 +100,11 @@ export default function App() {
 
   const handleLogout = () => {
     logout();
-    setActiveTab('dashboard');
+    setActiveTab('fields');
   };
 
   // Define nav items for each role
   const SYSTEM_ADMIN_NAV: NavCategory[] = [
-    {
-      category: '核心看板',
-      items: [
-        { id: 'dashboard', label: '总台大屏监控', icon: LayoutDashboard },
-      ]
-    },
     {
       category: '平台组织管理',
       items: [
@@ -115,14 +119,12 @@ export default function App() {
         { id: 'records', label: '农事实操记录', icon: FileSpreadsheet },
         { id: 'phenology', label: '标准物候模型', icon: Sprout },
         { id: 'batches', label: '全域批次追踪', icon: Layers },
-        { id: 'warehouse', label: '智能仓储管理', icon: Database },
         { id: 'logistics', label: '农资投入品管理', icon: Truck },
       ]
     },
     {
-      category: '移动端与系统',
+      category: '系统',
       items: [
-        { id: 'mobile', label: '种植与检测小程序', icon: Smartphone },
         { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
         { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
         { id: 'billing', label: '算力与额度', icon: Wallet },
@@ -140,7 +142,6 @@ export default function App() {
     {
       category: '代理商中心',
       items: [
-        { id: 'dashboard', label: '代理商大屏', icon: LayoutDashboard },
         { id: 'merchantFiles', label: '旗下商家管理', icon: Store },
       ]
     },
@@ -159,12 +160,6 @@ export default function App() {
 
   const MERCHANT_ADMIN_NAV: NavCategory[] = [
     {
-      category: '商家总览',
-      items: [
-        { id: 'dashboard', label: '商家数据看板', icon: LayoutDashboard },
-      ]
-    },
-    {
       category: '生产与档案',
       items: [
         { id: 'fields', label: '我的地块管理', icon: Map },
@@ -176,7 +171,6 @@ export default function App() {
     {
       category: '系统',
       items: [
-        { id: 'mobile', label: '商家移动端', icon: Smartphone },
         { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
         { id: 'settings', label: '商家设置', icon: SettingsIcon },
       ]
@@ -194,12 +188,31 @@ export default function App() {
 
   const navItems = getNavItems();
 
+  // 默认/兜底:若当前 activeTab 不在该角色导航内(如已下线的 dashboard),自动跳到首个可用页。
+  useEffect(() => {
+    const allIds = navItems.flatMap((c) => c.items.map((i) => i.id));
+    if (allIds.length > 0 && !allIds.includes(activeTab)) {
+      setActiveTab(navItems[0].items[0].id as any);
+    }
+  }, [navItems, activeTab]);
+
   if (traceCode) {
     return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;
   }
 
   if (!isAuthenticated) {
     return <AppLogin />;
+  }
+
+  if (payResultOrderId) {
+    return (
+      <Suspense fallback={<ViewSkeleton />}>
+        <PayResult
+          orderId={payResultOrderId}
+          onBack={() => { window.location.hash = ''; setPayResultOrderId(null); setActiveTab('billing'); }}
+        />
+      </Suspense>
+    );
   }
 
   return (

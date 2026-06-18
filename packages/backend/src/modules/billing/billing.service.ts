@@ -1,7 +1,9 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   AuthUser, CreditResource, CreditOwnerType, BillingSummary,
   CreditAccountItem, LedgerQuery, PaginatedLedger, AllocateInput, RechargeInput,
+  CreateCreditPlanInput, UpdateCreditPlanInput, CreditPlanView,
+  CreateOrderInput, CreditOrderView, OrderQuery, PaginatedOrders,
 } from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -174,6 +176,217 @@ export class BillingService {
     return {
       items: rows.map((r) => ({ id: r.id, resource: r.resource, delta: r.delta, balanceAfter: r.balanceAfter, reason: r.reason, refType: r.refType, refId: r.refId, note: r.note, createdAt: r.createdAt.toISOString() })),
       total, page: query.page, pageSize: query.pageSize,
+    };
+  }
+
+  // ===== 套餐管理(SYSTEM_ADMIN) =====
+
+  async listPlans(user: AuthUser): Promise<CreditPlanView[]> {
+    // 购买方(代理/商户)只看上架套餐;系统管理员看全部(含下架)以便管理。
+    const where: any = { tenantId: user.tenantId };
+    if (user.role !== Role.SYSTEM_ADMIN) where.active = true;
+    const plans = await this.prisma.creditPlan.findMany({ where, orderBy: { createdAt: 'asc' } });
+    return plans.map((p) => this.toPlanView(p));
+  }
+
+  async createPlan(user: AuthUser, dto: CreateCreditPlanInput): Promise<CreditPlanView> {
+    if (user.role !== Role.SYSTEM_ADMIN) throw new ForbiddenException('仅平台管理员可管理套餐');
+    const created = await this.prisma.creditPlan.create({
+      data: {
+        tenantId: user.tenantId, name: dto.name, resource: dto.resource,
+        quantity: dto.quantity, priceCents: dto.priceCents, isUnit: dto.isUnit, active: dto.active,
+      },
+    });
+    return this.toPlanView(created);
+  }
+
+  async updatePlan(user: AuthUser, id: string, dto: UpdateCreditPlanInput): Promise<CreditPlanView> {
+    if (user.role !== Role.SYSTEM_ADMIN) throw new ForbiddenException('仅平台管理员可管理套餐');
+    const found = await this.prisma.creditPlan.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!found) throw new NotFoundException('套餐不存在');
+    const updated = await this.prisma.creditPlan.update({
+      where: { id },
+      data: {
+        ...(dto.name != null ? { name: dto.name } : {}),
+        ...(dto.resource != null ? { resource: dto.resource } : {}),
+        ...(dto.quantity != null ? { quantity: dto.quantity } : {}),
+        ...(dto.priceCents != null ? { priceCents: dto.priceCents } : {}),
+        ...(dto.isUnit != null ? { isUnit: dto.isUnit } : {}),
+        ...(dto.active != null ? { active: dto.active } : {}),
+      },
+    });
+    return this.toPlanView(updated);
+  }
+
+  async removePlan(user: AuthUser, id: string) {
+    if (user.role !== Role.SYSTEM_ADMIN) throw new ForbiddenException('仅平台管理员可管理套餐');
+    const found = await this.prisma.creditPlan.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!found) throw new NotFoundException('套餐不存在');
+    const orderCount = await this.prisma.creditOrder.count({ where: { planId: id } });
+    // 已有订单引用的套餐不可硬删(FK Restrict),改为下架,保留历史订单可追溯。
+    if (orderCount > 0) {
+      await this.prisma.creditPlan.update({ where: { id }, data: { active: false } });
+      return { id, archived: true };
+    }
+    await this.prisma.creditPlan.delete({ where: { id } });
+    return { id, archived: false };
+  }
+
+  private toPlanView(p: any): CreditPlanView {
+    return {
+      id: p.id, name: p.name, resource: p.resource, quantity: p.quantity,
+      priceCents: p.priceCents, isUnit: p.isUnit, active: p.active,
+      createdAt: p.createdAt.toISOString(),
+    };
+  }
+
+  // ===== 自助购买(AGENT_ADMIN / MERCHANT 进自己账户) =====
+
+  // 仅代理商/商户可购买进自己账户;平台无上级故不自助购买。
+  private resolveBuyer(user: AuthUser): { ownerType: CreditOwnerType; ownerId: string } {
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId,拒绝购买');
+      return { ownerType: 'AGENT', ownerId: user.agentId };
+    }
+    if (user.role === Role.MERCHANT) {
+      if (!user.ownerId) throw new ForbiddenException('merchant 缺少 ownerId,拒绝购买');
+      return { ownerType: 'MERCHANT', ownerId: user.ownerId };
+    }
+    throw new ForbiddenException('当前角色不支持自助购买额度');
+  }
+
+  async createOrder(user: AuthUser, dto: CreateOrderInput): Promise<CreditOrderView> {
+    const buyer = this.resolveBuyer(user);
+    let resource: CreditResource;
+    let quantity: number;
+    let amountCents: number;
+    let planId: string | null = null;
+    let planName: string | null = null;
+
+    if (dto.planId) {
+      const plan = await this.prisma.creditPlan.findFirst({ where: { id: dto.planId, tenantId: user.tenantId, active: true } });
+      if (!plan) throw new NotFoundException('套餐不存在或已下架');
+      planId = plan.id;
+      planName = plan.name;
+      resource = plan.resource;
+      if (plan.isUnit) {
+        // 单价基准套餐用于自定义,不应直接整单购买;但若直接下单则按 1 个基准单位计。
+        quantity = plan.quantity;
+        amountCents = plan.priceCents;
+      } else {
+        quantity = plan.quantity;
+        amountCents = plan.priceCents;
+      }
+    } else {
+      // 自定义数量:按该资源的单价基准套餐(isUnit=true)计价。
+      resource = dto.resource!;
+      quantity = dto.quantity!;
+      const unit = await this.prisma.creditPlan.findFirst({
+        where: { tenantId: user.tenantId, resource, isUnit: true, active: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!unit) throw new BadRequestException('该资源未配置单价,无法自定义购买');
+      if (unit.quantity <= 0) throw new BadRequestException('单价基准配置非法');
+      // 单价 = priceCents / quantity(每基准单位价),金额向上取整到分。
+      amountCents = Math.ceil((unit.priceCents * quantity) / unit.quantity);
+    }
+
+    const order = await this.prisma.creditOrder.create({
+      data: {
+        tenantId: user.tenantId, ownerType: buyer.ownerType, ownerId: buyer.ownerId,
+        planId, resource, quantity, amountCents, status: 'PENDING', buyerId: user.userId,
+      },
+    });
+    return this.toOrderView(order, planName);
+  }
+
+  // 管理员兜底支付(占位:标记已支付即入账)。幂等——仅 PENDING→PAID 时入账,重复调用不二次入账。
+  async payOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
+    const buyer = this.resolveBuyer(user);
+    const order = await this.prisma.creditOrder.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!order) throw new NotFoundException('订单不存在');
+    // 归属校验:只能支付自己账户的订单。
+    if (order.ownerType !== buyer.ownerType || order.ownerId !== buyer.ownerId) {
+      throw new ForbiddenException('无权支付该订单');
+    }
+    if (order.status === 'CANCELLED') throw new BadRequestException('订单已取消');
+    const updated = await this.settleOrder(order, { operatorId: user.userId, payChannel: 'manual' });
+    const planName = updated?.planId
+      ? (await this.prisma.creditPlan.findUnique({ where: { id: updated.planId }, select: { name: true } }))?.name ?? null
+      : null;
+    return this.toOrderView(updated, planName);
+  }
+
+  // 取消订单:仅本人 PENDING 订单可取消(原子 PENDING→CANCELLED)。已支付不可取消。
+  async cancelOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
+    const buyer = this.resolveBuyer(user);
+    const order = await this.prisma.creditOrder.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!order) throw new NotFoundException('订单不存在');
+    if (order.ownerType !== buyer.ownerType || order.ownerId !== buyer.ownerId) {
+      throw new ForbiddenException('无权操作该订单');
+    }
+    if (order.status === 'PAID') throw new BadRequestException('订单已支付,不可取消');
+    const flip = await this.prisma.creditOrder.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    });
+    if (flip.count === 0) throw new BadRequestException('订单当前状态不可取消');
+    const fresh = await this.prisma.creditOrder.findUnique({ where: { id }, include: { plan: { select: { name: true } } } });
+    return this.toOrderView(fresh, (fresh as any)?.plan?.name ?? null);
+  }
+
+  /** 共用入账:对一个订单行原子地 PENDING→PAID 并把额度记入对应账户 + 写 PURCHASE 流水。
+   *  幂等:仅当订单仍为 PENDING 时入账;已 PAID(或并发)直接返回当前行不二次入账。
+   *  供管理员兜底支付与支付宝回调共用——回调侧不持有 AuthUser,故按订单行自身归属入账。 */
+  async settleOrder(order: { id: string; tenantId: string; ownerType: string; ownerId: string; resource: string; quantity: number }, meta: { operatorId?: string; payChannel?: string; tradeNo?: string }) {
+    const field = BALANCE_FIELD[order.resource as CreditResource];
+    const acct = await this.ensureAccount(order.ownerType as CreditOwnerType, order.ownerId, order.tenantId);
+    return this.prisma.$transaction(async (tx) => {
+      const flip = await tx.creditOrder.updateMany({
+        where: { id: order.id, status: 'PENDING' },
+        data: { status: 'PAID', paidAt: new Date(), payChannel: meta.payChannel ?? null, tradeNo: meta.tradeNo ?? null },
+      });
+      if (flip.count === 0) {
+        return tx.creditOrder.findUnique({ where: { id: order.id } });
+      }
+      await tx.creditAccount.updateMany({ where: { id: acct.id }, data: { [field]: { increment: order.quantity } } });
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      await tx.creditLedger.create({
+        data: {
+          accountId: acct.id, resource: order.resource as CreditResource, delta: order.quantity,
+          balanceAfter: (after as any)[field], reason: 'PURCHASE',
+          refType: 'order', refId: order.id, operatorId: meta.operatorId ?? null,
+        },
+      });
+      return tx.creditOrder.findUnique({ where: { id: order.id } });
+    });
+  }
+
+  async listOrders(user: AuthUser, query: OrderQuery): Promise<PaginatedOrders> {
+    const buyer = this.resolveBuyer(user);
+    const where: any = { tenantId: user.tenantId, ownerType: buyer.ownerType, ownerId: buyer.ownerId };
+    if (query.status) where.status = query.status;
+    const [rows, total] = await Promise.all([
+      this.prisma.creditOrder.findMany({
+        where, orderBy: { createdAt: 'desc' },
+        skip: (query.page - 1) * query.pageSize, take: query.pageSize,
+        include: { plan: { select: { name: true } } },
+      }),
+      this.prisma.creditOrder.count({ where }),
+    ]);
+    return {
+      items: rows.map((r: any) => this.toOrderView(r, r.plan?.name ?? null)),
+      total, page: query.page, pageSize: query.pageSize,
+    };
+  }
+
+  private toOrderView(o: any, planName: string | null): CreditOrderView {
+    return {
+      id: o.id, ownerType: o.ownerType, ownerId: o.ownerId,
+      planId: o.planId ?? null, planName,
+      resource: o.resource, quantity: o.quantity, amountCents: o.amountCents,
+      status: o.status, paidAt: o.paidAt ? o.paidAt.toISOString() : null,
+      createdAt: o.createdAt.toISOString(),
     };
   }
 }

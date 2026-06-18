@@ -6,6 +6,9 @@ import { useAuth } from '../auth/auth-context';
 import { getBillingSummary, listCreditAccounts, allocateCredit, rechargeCredit } from '../api/billing';
 import type { CreditAccountItem, CreditResource, AllocateInput, RechargeInput } from '@nongchang/shared';
 import BillingLedger from './BillingLedger';
+import BillingPurchase from './BillingPurchase';
+import BillingPlans from './BillingPlans';
+import BillingAlipayConfig from './BillingAlipayConfig';
 
 const LOW = 100;
 
@@ -126,6 +129,13 @@ export default function BillingAdmin() {
           <BalanceCard label="AI算力余额" value={aiBal} icon={<Zap className="w-4 h-4 text-emerald-600" />} />
           <BalanceCard label="二维码余额" value={codeBal} icon={<QrCode className="w-4 h-4 text-emerald-600" />} />
         </div>
+
+        {/* 自助购买:代理商/商户可买额度进自己账户 */}
+        {!isSystemAdmin && <BillingPurchase onPaid={() => { void sum.reload(); }} />}
+
+        {/* 套餐管理 + 支付宝配置:仅系统管理员 */}
+        {isSystemAdmin && <BillingPlans />}
+        {isSystemAdmin && <BillingAlipayConfig />}
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-800 flex items-center gap-2">

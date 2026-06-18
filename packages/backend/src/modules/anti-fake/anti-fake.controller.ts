@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { AuthUser } from '@nongchang/shared';
+import { AuthUser, Role } from '@nongchang/shared';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AntiFakeService } from './anti-fake.service';
 
@@ -18,12 +19,13 @@ export class AntiFakeController {
     return this.svc.listAlerts(user);
   }
 
-  @Post('codes/:code/freeze')
+  // 冻结/解冻防伪码属风控写操作:显式声明授权角色;服务层 ownedScopeWhere 再做 fail-closed 范围校验。
+  @Post('codes/:code/freeze') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT)
   freeze(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.svc.freeze(user, code);
   }
 
-  @Post('codes/:code/unfreeze')
+  @Post('codes/:code/unfreeze') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT)
   unfreeze(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.svc.unfreeze(user, code);
   }

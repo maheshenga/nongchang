@@ -2,3 +2,5 @@
 // AppModule 中的 CryptoModule 会 fail-fast 校验 APP_ENCRYPTION_KEY，
 // 此处注入一个合法的 32 字节(hex64)测试密钥，避免 e2e 启动即崩。
 process.env.APP_ENCRYPTION_KEY ||= '0'.repeat(64);
+process.env.JWT_SECRET ||= 'test-jwt-secret';
+process.env.JWT_REFRESH_SECRET ||= 'test-jwt-refresh-secret';
