@@ -38,11 +38,6 @@ describe('TraceService #24 batch 归属校验', () => {
     await expect(h.svc.addEvent(merchant, evt)).rejects.toThrow();
     expect(h.prisma.traceEvent.create).not.toHaveBeenCalled();
   });
-  it('generateCode:batch 不在范围则抛 Forbidden(不创建)', async () => {
-    const h = make(false);
-    await expect(h.svc.generateCode(merchant, 'b1')).rejects.toThrow();
-    expect(h.prisma.traceCode.create).not.toHaveBeenCalled();
-  });
   it('listEvents:batch 不在范围则抛 Forbidden(不查询事件)', async () => {
     const h = make(false);
     await expect(h.svc.listEvents(merchant, 'b1')).rejects.toThrow();

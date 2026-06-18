@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { Role, type AuthUser } from '@nongchang/shared';
@@ -222,6 +222,8 @@ describe('BillingService.createOrder', () => {
 });
 
 describe('BillingService.payOrder', () => {
+  beforeEach(() => { process.env.ALLOW_MANUAL_PAY = 'true'; });
+  afterEach(() => { delete process.env.ALLOW_MANUAL_PAY; });
   function payPrisma(order: any, startBalance = 0) {
     const state: any = { aiBalance: startBalance, codeBalance: startBalance };
     const orderRow = { ...order };
@@ -272,6 +274,15 @@ describe('BillingService.payOrder', () => {
     const { prisma } = payPrisma({ ...baseOrder, ownerId: 'mX' }, 0);
     const svc = new BillingService(prisma);
     await expect(svc.payOrder(merchant, 'o1')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('闸门关闭(ALLOW_MANUAL_PAY!=true):拒绝兜底入账', async () => {
+    delete process.env.ALLOW_MANUAL_PAY;
+    const { prisma, state, ledgers } = payPrisma(baseOrder, 500);
+    const svc = new BillingService(prisma);
+    await expect(svc.payOrder(merchant, 'o1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(state.codeBalance).toBe(500); // 未入账
+    expect(ledgers).toHaveLength(0);
   });
 });
 

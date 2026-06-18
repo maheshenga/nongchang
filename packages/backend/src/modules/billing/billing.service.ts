@@ -300,8 +300,13 @@ export class BillingService {
     return this.toOrderView(order, planName);
   }
 
-  // 管理员兜底支付(占位:标记已支付即入账)。幂等——仅 PENDING→PAID 时入账,重复调用不二次入账。
+  // 兜底支付(标记已支付即入账,不经真实支付渠道)。幂等——仅 PENDING→PAID 时入账,重复调用不二次入账。
+  // 安全闸门:仅当 ALLOW_MANUAL_PAY=true 时允许,默认关闭。生产环境禁用以杜绝绕过支付直接入账;
+  // 本地联调(小程序暂无真实支付)在 .env 置 true 放行。
   async payOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
+    if (process.env.ALLOW_MANUAL_PAY !== 'true') {
+      throw new ForbiddenException('当前环境未开放免支付入账,请通过支付宝完成支付');
+    }
     const buyer = this.resolveBuyer(user);
     const order = await this.prisma.creditOrder.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!order) throw new NotFoundException('订单不存在');

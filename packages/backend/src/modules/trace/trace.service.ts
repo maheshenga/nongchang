@@ -12,12 +12,6 @@ const MAX_CODES_PER_BATCH = 10000;
 export class TraceService {
   constructor(private prisma: PrismaService, private scope: ScopeService, private billing: BillingService) {}
 
-  async generateCode(user: AuthUser, batchId: string) {
-    await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    const code = `ORC-${randomUUID().slice(0, 8).toUpperCase()}`;
-    return this.prisma.traceCode.create({ data: { tenantId: user.tenantId, batchId, code } });
-  }
-
   /** 一物一码:为批次批量生成 count 个唯一溯源码并返回。 */
   async generateCodes(user: AuthUser, batchId: string, count = 1) {
     if (!Number.isInteger(count) || count < 1 || count > MAX_CODES_PER_BATCH) {
