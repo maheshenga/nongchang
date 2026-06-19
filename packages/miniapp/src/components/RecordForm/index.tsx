@@ -5,7 +5,8 @@ import { createFarmRecord, uploadImage, listSupplies, findBatchByCode, type Batc
 import { transcribeVoice, normalizeAiError, aiAdvice } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
-import type { SupplyItem, QuickTemplateView } from '@nongchang/shared';
+import type { QuickTemplateView, SupplyItem } from '@nongchang/shared';
+import { buildFarmRecordPayload, getSupplyAmountError, getSupplySelectionUpdate } from './payload';
 import Icon from '../Icon';
 import './index.scss';
 
@@ -28,6 +29,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [supplies, setSupplies] = useState<SupplyItem[]>([]);
+  const [suppliesStatus, setSuppliesStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [supplyId, setSupplyId] = useState('');
   const [supplyAmount, setSupplyAmount] = useState('');
   const [recording, setRecording] = useState(false);
@@ -55,9 +57,17 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     if (!batchId && batches[0]) setBatchId(batches[0].id);
   }, [batches, batchId]);
 
-
   useEffect(() => {
-    listSupplies().then(setSupplies).catch(() => setSupplies([]));
+    setSuppliesStatus('loading');
+    listSupplies()
+      .then((rows) => {
+        setSupplies(rows);
+        setSuppliesStatus('ready');
+      })
+      .catch(() => {
+        setSupplies([]);
+        setSuppliesStatus('error');
+      });
   }, []);
 
   // 录音管理器:停止后把音频上传后端转写,结果追加到「农事实录」。
@@ -99,6 +109,21 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   // props 批次 + 扫码补充批次,去重。
   const allBatches = [...batches, ...scannedBatches.filter((s) => !batches.some((b) => b.id === s.id))];
   const selectedBatch = allBatches.find((b) => b.id === batchId);
+  const selectedSupply = supplies.find((s) => s.id === supplyId);
+  const supplyHint =
+    suppliesStatus === 'loading'
+      ? '物料加载中…'
+      : suppliesStatus === 'error'
+        ? '物料加载失败,本次可先不关联物料'
+        : supplies.length === 0
+          ? '暂无可用物料'
+          : '';
+
+  function toggleSupply(nextSupplyId: string) {
+    const next = getSupplySelectionUpdate(supplyId, nextSupplyId);
+    setSupplyId(next.supplyId);
+    setSupplyAmount(next.supplyAmount);
+  }
 
   async function getAdvice() {
     if (!selectedBatch) { Taro.showToast({ title: '请先选择批次', icon: 'none' }); return; }
@@ -182,23 +207,26 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       Taro.showToast({ title: '请选择农事动作', icon: 'none' });
       return;
     }
-    const detail: Record<string, unknown> = {};
-    if (note) detail.note = note;
-    if (cost) detail.cost = Number(cost) || 0;
-    if (labor) detail.labor = Number(labor) || 0;
+    const supplyError = getSupplyAmountError(supplyId, supplyAmount);
+    if (supplyError) {
+      Taro.showToast({ title: supplyError, icon: 'none' });
+      return;
+    }
     setSubmitting(true);
     try {
-      await createFarmRecord({
-        batchId: selectedBatch.id,
-        fieldId: selectedBatch.fieldId,
+      await createFarmRecord(buildFarmRecordPayload({
+        batch: selectedBatch,
         action,
-        detail: Object.keys(detail).length ? detail : undefined,
-        images: images.length ? images : undefined,
-        location: location || undefined,
+        note,
+        cost,
+        labor,
+        images,
+        location,
         recordedAt: new Date().toISOString(),
         source: FarmRecordSource.MINIAPP,
-        ...(supplyId ? { supplyId, supplyAmount: Number(supplyAmount) || 0 } : {}),
-      });
+        supplyId,
+        supplyAmount,
+      }));
       Taro.showToast({ title: '已提交', icon: 'success' });
       setNote(''); setCost(''); setLabor(''); setImages([]);
       setSupplyId(''); setSupplyAmount(''); setAction(''); setLocation('');
@@ -242,13 +270,39 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
 
       <View className="rec-form__row">
         <View className="rec-form__col">
-          <Text className="rec-form__label">物料成本(元)</Text>
+          <Text className="rec-form__label">投入成本(元)</Text>
           <Input className="rec-form__input" type="number" value={cost} onInput={(e) => setCost(e.detail.value)} placeholder="0" />
         </View>
         <View className="rec-form__col">
           <Text className="rec-form__label">耗用工时(天)</Text>
           <Input className="rec-form__input" type="number" value={labor} onInput={(e) => setLabor(e.detail.value)} placeholder="0" />
         </View>
+      </View>
+
+      <Text className="rec-form__label">关联物料与用量(可选)</Text>
+      <View className="rec-form__chips">
+        {supplyHint && <Text className={`rec-form__empty ${suppliesStatus === 'error' ? 'rec-form__empty--err' : ''}`}>{supplyHint}</Text>}
+        {supplies.map((s) => (
+          <View
+            key={s.id}
+            className={`rec-form__chip rec-form__supply-chip ${supplyId === s.id ? 'rec-form__chip--on' : ''}`}
+            onClick={() => toggleSupply(s.id)}
+          >
+            <Text className="rec-form__supply-name">{s.name}</Text>
+            <Text className="rec-form__supply-meta">余 {s.remaining}{s.unit}</Text>
+          </View>
+        ))}
+      </View>
+      <View className="rec-form__supply-row">
+        <Input
+          className="rec-form__input rec-form__supply-input"
+          type="digit"
+          disabled={!supplyId}
+          value={supplyAmount}
+          onInput={(e) => setSupplyAmount(e.detail.value)}
+          placeholder={selectedSupply ? `用量(${selectedSupply.unit})` : '先选择物料'}
+        />
+        {selectedSupply && <Text className="rec-form__supply-unit">{selectedSupply.unit}</Text>}
       </View>
 
       <Text className="rec-form__label">农事实录</Text>

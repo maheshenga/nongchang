@@ -124,5 +124,6 @@ describe('Supply e2e', () => {
       .send({ batchId: batchAId, fieldId: batchA!.fieldId, action: '施肥',
         recordedAt: new Date().toISOString(), source: 'miniapp', supplyId: id, supplyAmount: 20 });
     expect(bad.status).toBe(400);
+    expect(bad.body.message).toBe('实际用量超过领用配额 110%,核销熔断');
   });
 });

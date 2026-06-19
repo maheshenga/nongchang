@@ -1,4 +1,4 @@
-@import '../../styles/theme.scss';
+@use '../../styles/theme.scss' as *;
 
 .rec-form {
   @include card;
@@ -40,6 +40,51 @@
   }
 
   &__empty {
+    font-size: 24px;
+    color: $c-text-sub;
+
+    &--err {
+      color: $c-rose;
+    }
+  }
+
+  &__supply-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  &__supply-name {
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__supply-meta {
+    font-size: 20px;
+    color: $c-text-sub;
+    flex-shrink: 0;
+  }
+
+  &__chip--on &__supply-meta {
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  &__supply-row {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__supply-input {
+    flex: 1;
+  }
+
+  &__supply-unit {
     font-size: 24px;
     color: $c-text-sub;
   }

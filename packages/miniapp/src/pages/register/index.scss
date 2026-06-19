@@ -1,4 +1,4 @@
-@import '../../styles/theme.scss';
+@use '../../styles/theme.scss' as *;
 
 .register {
   min-height: 100vh;
