@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { AlertOctagon, MapPin, ShieldAlert, Activity, CheckCircle, RefreshCw } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { showToast } from '../hooks/useToast';
 import { listScans, listAlerts, freezeCode, unfreezeCode } from '../api/anti-fake';
 
 export default function AntiFakeMonitor() {
   const { data: scans, loading: scansLoading, error: scansError, reload: reloadScans } = useApi(listScans);
   const { data: alerts, error: alertsError, reload: reloadAlerts } = useApi(listAlerts);
-  const [toastMessage, setToastMessage] = useState('');
 
   const reloadAll = useCallback(() => { void reloadScans(); void reloadAlerts(); }, [reloadScans, reloadAlerts]);
 
@@ -14,8 +14,6 @@ export default function AntiFakeMonitor() {
     const t = setInterval(reloadAll, 10_000);
     return () => clearInterval(t);
   }, [reloadAll]);
-
-  const showToast = (m: string) => { setToastMessage(m); setTimeout(() => setToastMessage(''), 3000); };
 
   const handleFreeze = async (code: string) => {
     try { await freezeCode(code); showToast(`已冻结溯源码 [${code}]，公开溯源将被拦截`); reloadAll(); }
@@ -109,12 +107,6 @@ export default function AntiFakeMonitor() {
         </div>
       </div>
 
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-50">
-          <ShieldAlert className="w-5 h-5 text-red-400" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-        </div>
-      )}
     </div>
   );
 }

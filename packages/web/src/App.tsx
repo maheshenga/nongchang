@@ -1,8 +1,9 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { QrCode, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout, Wallet } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
+import { ToastBanner } from './hooks/useToast';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
@@ -369,6 +370,7 @@ export default function App() {
           <ProfileSettings onClose={() => setProfileOpen(false)} />
         </Suspense>
       )}
+      <ToastBanner />
     </div>
   );
 }
