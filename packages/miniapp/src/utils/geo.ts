@@ -4,6 +4,9 @@
 
 const PI = Math.PI;
 const A = 6378245.0; // 长半轴
+// WGS84 偏心率平方(WGS84 eccentricity²) — 该常量精度超过 JS Number 表示范围,
+// 但保留完整位数作为文档化参考值,实际运算中截断到 IEEE754 双精度。
+// eslint-disable-next-line no-loss-of-precision
 const EE = 0.00669342162296594323; // 偏心率平方
 
 function outOfChina(lng: number, lat: number): boolean {

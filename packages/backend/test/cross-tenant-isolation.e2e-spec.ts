@@ -19,7 +19,6 @@ describe('跨租户隔离(多租户深度)e2e', () => {
 
   // T2 自建实体 id,afterAll 清理
   let t2TenantId: string;
-  let t2SysId: string;
   let t2MerchantId: string;
   let t2FieldId: string;
   let t2BatchId: string;
@@ -45,12 +44,11 @@ describe('跨租户隔离(多租户深度)e2e', () => {
       (await prisma.tenant.create({ data: { name: 'T2 隔离租户', code: 'T2ISO' } }));
     t2TenantId = tenant.id;
 
-    const sys = await prisma.user.upsert({
+    await prisma.user.upsert({
       where: { tenantId_username: { tenantId: t2TenantId, username: 'sysadminT2' } },
       update: {},
       create: { tenantId: t2TenantId, username: 'sysadminT2', passwordHash: pwd, role: 'system_admin', displayName: 'T2总管' },
     });
-    t2SysId = sys.id;
     const merchant = await prisma.user.upsert({
       where: { tenantId_username: { tenantId: t2TenantId, username: 'merchantT2' } },
       update: {},

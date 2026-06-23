@@ -90,7 +90,6 @@ describe('租户内跨 owner 越权(#23/#24)', () => {
   });
 
   it('merchant 建 batch 传他人 ownerId → 被强制为 self(记录归属 merchantB 自己)', async () => {
-    const { fieldId } = await merchantABatchAndField(); // 仅借 fieldId 形态;下面用 merchantB 自己的 field
     const tB = await token('merchantB');
     const fieldsB = await request(app.getHttpServer())
       .get('/api/fields').set('Authorization', `Bearer ${tB}`).expect(200);
