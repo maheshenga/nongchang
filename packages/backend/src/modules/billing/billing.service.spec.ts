@@ -129,6 +129,57 @@ describe('BillingService.summary', () => {
   });
 });
 
+describe('BillingService.listAccounts (N+1 修复)', () => {
+  it('SYSTEM_ADMIN:一次 findMany 取所有代理商余额,不逐个建账', async () => {
+    let findManyCalls = 0;
+    let created = 0;
+    const prisma: any = {
+      agent: { findMany: async () => [{ id: 'a1', name: '代理一' }, { id: 'a2', name: '代理二' }] },
+      creditAccount: {
+        findMany: async (q: any) => {
+          findManyCalls++;
+          expect(q.where.ownerType).toBe('AGENT');
+          expect(q.where.ownerId.in).toEqual(['a1', 'a2']);
+          // a1 已有账户,a2 从未触账(不在结果里)
+          return [{ id: 'accA1', ownerId: 'a1', aiBalance: 30, codeBalance: 40 }];
+        },
+        findFirst: async () => { throw new Error('不应调用 findFirst(N+1)'); },
+        create: async () => { created++; return {}; },
+      },
+    };
+    const svc = new BillingService(prisma);
+    const out = await svc.listAccounts(sysadmin);
+    expect(findManyCalls).toBe(1); // 单次批量查询
+    expect(created).toBe(0);       // 列表不再副作用建账
+    expect(out).toEqual([
+      { id: 'accA1', ownerType: 'AGENT', ownerId: 'a1', ownerName: '代理一', aiBalance: 30, codeBalance: 40 },
+      { id: 'pending:AGENT:a2', ownerType: 'AGENT', ownerId: 'a2', ownerName: '代理二', aiBalance: 0, codeBalance: 0 },
+    ]);
+  });
+
+  it('AGENT_ADMIN:返回旗下商户余额,未触账商户按 0/0 且 id 唯一', async () => {
+    const prisma: any = {
+      user: { findMany: async () => [{ id: 'm1', displayName: '商户一' }, { id: 'm2', displayName: '商户二' }] },
+      creditAccount: {
+        findMany: async () => [{ id: 'accM2', ownerId: 'm2', aiBalance: 5, codeBalance: 0 }],
+      },
+    };
+    const svc = new BillingService(prisma);
+    const out = await svc.listAccounts(agent);
+    expect(out).toEqual([
+      { id: 'pending:MERCHANT:m1', ownerType: 'MERCHANT', ownerId: 'm1', ownerName: '商户一', aiBalance: 0, codeBalance: 0 },
+      { id: 'accM2', ownerType: 'MERCHANT', ownerId: 'm2', ownerName: '商户二', aiBalance: 5, codeBalance: 0 },
+    ]);
+    // id 唯一(React key 不冲突)
+    expect(new Set(out.map((o) => o.id)).size).toBe(out.length);
+  });
+
+  it('MERCHANT:无下级返回空数组', async () => {
+    const svc = new BillingService({} as any);
+    await expect(svc.listAccounts(merchant)).resolves.toEqual([]);
+  });
+});
+
 describe('BillingService 套餐管理', () => {
   function planPrisma(initial: any[] = []) {
     const plans = [...initial];
@@ -231,7 +282,10 @@ describe('BillingService.payOrder', () => {
     const tx: any = {
       creditOrder: {
         updateMany: async (a: any) => {
-          if (orderRow.status === a.where.status) { Object.assign(orderRow, a.data); return { count: 1 }; }
+          // settleOrder 现用 status: { in: ['PENDING','CANCELLED'] };兼容字符串与 in 数组两种条件。
+          const cond = a.where.status;
+          const allowed = cond && typeof cond === 'object' && Array.isArray(cond.in) ? cond.in : [cond];
+          if (allowed.includes(orderRow.status)) { Object.assign(orderRow, a.data); return { count: 1 }; }
           return { count: 0 };
         },
         findUnique: async () => ({ ...orderRow }),
@@ -282,6 +336,61 @@ describe('BillingService.payOrder', () => {
     const svc = new BillingService(prisma);
     await expect(svc.payOrder(merchant, 'o1')).rejects.toBeInstanceOf(ForbiddenException);
     expect(state.codeBalance).toBe(500); // 未入账
+    expect(ledgers).toHaveLength(0);
+  });
+});
+
+describe('BillingService.settleOrder 回调赢得竞态', () => {
+  // settleOrder 共用入账逻辑;复用 payOrder 的 mock 工厂(支持 PENDING/CANCELLED 入账)。
+  function settlePrisma(order: any, startBalance = 0) {
+    const state: any = { aiBalance: startBalance, codeBalance: startBalance };
+    const orderRow = { ...order };
+    const ledgers: any[] = [];
+    const tx: any = {
+      creditOrder: {
+        updateMany: async (a: any) => {
+          const cond = a.where.status;
+          const allowed = cond && typeof cond === 'object' && Array.isArray(cond.in) ? cond.in : [cond];
+          if (allowed.includes(orderRow.status)) { Object.assign(orderRow, a.data); return { count: 1 }; }
+          return { count: 0 };
+        },
+        findUnique: async () => ({ ...orderRow }),
+      },
+      creditAccount: {
+        updateMany: async (a: any) => { const f = a.data.aiBalance ? 'aiBalance' : 'codeBalance'; state[f] += (a.data.aiBalance ?? a.data.codeBalance).increment; return { count: 1 }; },
+        findUnique: async () => ({ id: 'acc1', ...state }),
+      },
+      creditLedger: { create: async (a: any) => { ledgers.push(a.data); return a.data; } },
+    };
+    const prisma: any = {
+      creditAccount: { findFirst: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }), create: async () => ({ id: 'acc1', ...state }) },
+      $transaction: async (fn: any) => fn(tx),
+    };
+    return { prisma, state, ledgers, orderRow };
+  }
+
+  const baseOrder = { id: 'o1', tenantId: 't1', ownerType: 'MERCHANT', ownerId: 'm1', resource: 'CODE', quantity: 1000, status: 'PENDING' };
+
+  it('PENDING 订单回调:入账 + 转 PAID + 写 PURCHASE 流水', async () => {
+    const { prisma, state, ledgers, orderRow } = settlePrisma(baseOrder, 500);
+    await new BillingService(prisma).settleOrder(baseOrder, { payChannel: 'alipay', tradeNo: 'T1' });
+    expect(state.codeBalance).toBe(1500);
+    expect(orderRow.status).toBe('PAID');
+    expect(ledgers[0]).toMatchObject({ reason: 'PURCHASE', delta: 1000, refId: 'o1' });
+  });
+
+  it('已取消订单回调:支付宝付款凭证补入账,转 PAID(回调赢得竞态,不丢钱)', async () => {
+    const { prisma, state, ledgers, orderRow } = settlePrisma({ ...baseOrder, status: 'CANCELLED' }, 500);
+    await new BillingService(prisma).settleOrder(baseOrder, { payChannel: 'alipay', tradeNo: 'T1' });
+    expect(state.codeBalance).toBe(1500); // 已取消订单仍入账
+    expect(orderRow.status).toBe('PAID');
+    expect(ledgers).toHaveLength(1);
+  });
+
+  it('已 PAID 订单回调:幂等,不二次入账', async () => {
+    const { prisma, state, ledgers } = settlePrisma({ ...baseOrder, status: 'PAID' }, 500);
+    await new BillingService(prisma).settleOrder(baseOrder, { payChannel: 'alipay', tradeNo: 'T1' });
+    expect(state.codeBalance).toBe(500);
     expect(ledgers).toHaveLength(0);
   });
 });

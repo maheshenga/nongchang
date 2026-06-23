@@ -181,4 +181,18 @@ describe('AlipayService.handleNotify', () => {
     await expect(svc.handleNotify({ out_trade_no: 'o1', trade_status: 'TRADE_SUCCESS', total_amount: '10.00', trade_no: '2026XYZ' })).resolves.toBe('success');
     expect(settleOrder).toHaveBeenCalledWith(order, expect.objectContaining({ tradeNo: '2026XYZ' }));
   });
+
+  it('app_id 与本租户配置不符:返回 failure 不入账(纵深防御)', async () => {
+    const { svc, settleOrder } = makeService({ order, configRow: enabledRow }); // enabledRow.appId='app1'
+    checkNotifySign.mockReturnValue(true);
+    await expect(svc.handleNotify({ out_trade_no: 'o1', app_id: 'evil-app', trade_status: 'TRADE_SUCCESS', total_amount: '10.00', trade_no: 'X' })).resolves.toBe('failure');
+    expect(settleOrder).not.toHaveBeenCalled();
+  });
+
+  it('app_id 与本租户配置一致:正常入账', async () => {
+    const { svc, settleOrder } = makeService({ order, configRow: enabledRow });
+    checkNotifySign.mockReturnValue(true);
+    await expect(svc.handleNotify({ out_trade_no: 'o1', app_id: 'app1', trade_status: 'TRADE_SUCCESS', total_amount: '10.00', trade_no: 'Y' })).resolves.toBe('success');
+    expect(settleOrder).toHaveBeenCalled();
+  });
 });

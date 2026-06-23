@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import AlipaySdk from 'alipay-sdk';
 import { Role } from '@nongchang/shared';
-import type { AuthUser, AlipayConfigInput, AlipayConfigView, CreatePaymentInput, PaymentView, PayChannel } from '@nongchang/shared';
+import type { AuthUser, AlipayConfigInput, AlipayConfigView, CreatePaymentInput, PaymentView } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import { BillingService } from './billing.service';
@@ -135,7 +135,14 @@ export class AlipayService {
     } catch {
       return 'failure';
     }
-    let ok = false;
+    // app_id 纵深校验:回调声明的 app_id 必须等于本租户配置的 appId。
+    // 验签已用本租户公钥挡掉大部分伪造,此处再防密钥配置错位/跨 app 串单(支付宝官方建议校验)。
+    const cfgRow = await this.findRow(order.tenantId);
+    const notifyAppId = tenantHintBody.app_id;
+    if (notifyAppId && cfgRow?.appId && notifyAppId !== cfgRow.appId) {
+      return 'failure';
+    }
+    let ok: boolean;
     try {
       ok = sdk.checkNotifySign(tenantHintBody);
     } catch {

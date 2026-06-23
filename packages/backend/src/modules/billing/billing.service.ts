@@ -147,20 +147,33 @@ export class BillingService {
   async listAccounts(user: AuthUser): Promise<CreditAccountItem[]> {
     if (user.role === Role.SYSTEM_ADMIN) {
       const agents = await this.prisma.agent.findMany({ where: { tenantId: user.tenantId }, select: { id: true, name: true } });
-      return Promise.all(agents.map(async (a) => {
-        const acc = await this.ensureAccount('AGENT', a.id, user.tenantId);
-        return { id: acc.id, ownerType: 'AGENT' as const, ownerId: a.id, ownerName: a.name, aiBalance: acc.aiBalance, codeBalance: acc.codeBalance };
-      }));
+      const balances = await this.loadBalances('AGENT', agents.map((a) => a.id), user.tenantId);
+      return agents.map((a) => {
+        const b = balances.get(a.id);
+        return { id: b?.id ?? `pending:AGENT:${a.id}`, ownerType: 'AGENT' as const, ownerId: a.id, ownerName: a.name, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
+      });
     }
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
       const merchants = await this.prisma.user.findMany({ where: { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId }, select: { id: true, displayName: true } });
-      return Promise.all(merchants.map(async (m) => {
-        const acc = await this.ensureAccount('MERCHANT', m.id, user.tenantId);
-        return { id: acc.id, ownerType: 'MERCHANT' as const, ownerId: m.id, ownerName: m.displayName ?? m.id, aiBalance: acc.aiBalance, codeBalance: acc.codeBalance };
-      }));
+      const balances = await this.loadBalances('MERCHANT', merchants.map((m) => m.id), user.tenantId);
+      return merchants.map((m) => {
+        const b = balances.get(m.id);
+        return { id: b?.id ?? `pending:MERCHANT:${m.id}`, ownerType: 'MERCHANT' as const, ownerId: m.id, ownerName: m.displayName ?? m.id, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
+      });
     }
     return [];
+  }
+
+  // 批量取一组下级账户余额,一次 findMany(ownerId in [...]) 取代逐个 ensureAccount(消除 N+1)。
+  // 从未触账的下级此前无 CreditAccount 行,展示按 0/0 处理(账户行在其首次充值/消费时惰性创建)。
+  private async loadBalances(ownerType: CreditOwnerType, ownerIds: string[], tenantId: string) {
+    if (ownerIds.length === 0) return new Map<string, { id: string; aiBalance: number; codeBalance: number }>();
+    const rows = await this.prisma.creditAccount.findMany({
+      where: { tenantId, ownerType, ownerId: { in: ownerIds } },
+      select: { id: true, ownerId: true, aiBalance: true, codeBalance: true },
+    });
+    return new Map(rows.map((r) => [r.ownerId, { id: r.id, aiBalance: r.aiBalance, codeBalance: r.codeBalance }]));
   }
 
   async ledger(user: AuthUser, query: LedgerQuery): Promise<PaginatedLedger> {
@@ -314,6 +327,10 @@ export class BillingService {
     if (order.ownerType !== buyer.ownerType || order.ownerId !== buyer.ownerId) {
       throw new ForbiddenException('无权支付该订单');
     }
+    // 已取消订单显式拒绝:本检查是 best-effort UX 提示(非安全边界)。
+    // 该读与下方 settleOrder 之间存在 TOCTOU 窗口——若并发取消先于此处写入,
+    // settleOrder 仍会入账(语义上"付款强于取消"无资金风险)。
+    // 生产环境 payOrder 已被 ALLOW_MANUAL_PAY 闸门拦截,故仅本地联调受影响。
     if (order.status === 'CANCELLED') throw new BadRequestException('订单已取消');
     const updated = await this.settleOrder(order, { operatorId: user.userId, payChannel: 'manual' });
     const planName = updated?.planId
@@ -340,15 +357,20 @@ export class BillingService {
     return this.toOrderView(fresh, (fresh as any)?.plan?.name ?? null);
   }
 
-  /** 共用入账:对一个订单行原子地 PENDING→PAID 并把额度记入对应账户 + 写 PURCHASE 流水。
-   *  幂等:仅当订单仍为 PENDING 时入账;已 PAID(或并发)直接返回当前行不二次入账。
+  /** 共用入账:对一个订单行原子地 →PAID 并把额度记入对应账户 + 写 PURCHASE 流水。
+   *  入账条件:订单仍为 PENDING(正常),或 CANCELLED(支付宝回调证明用户已真实付款,
+   *  但本地在回调到达前/并发已把订单取消)。回调验签+金额校验通过即为权威付款凭证,
+   *  据此对已取消订单补入账,杜绝"钱已收、额度不到账"的丢钱竞态(回调赢得竞态)。
+   *  幂等:已 PAID(或并发)直接返回当前行不二次入账。
+   *  注:管理员兜底支付 payOrder 在调用本方法前已显式拒绝 CANCELLED 订单,
+   *  故"补入账已取消订单"仅经支付宝回调发生——只有真实付款凭证能让取消订单复活。
    *  供管理员兜底支付与支付宝回调共用——回调侧不持有 AuthUser,故按订单行自身归属入账。 */
   async settleOrder(order: { id: string; tenantId: string; ownerType: string; ownerId: string; resource: string; quantity: number }, meta: { operatorId?: string; payChannel?: string; tradeNo?: string }) {
     const field = BALANCE_FIELD[order.resource as CreditResource];
     const acct = await this.ensureAccount(order.ownerType as CreditOwnerType, order.ownerId, order.tenantId);
     return this.prisma.$transaction(async (tx) => {
       const flip = await tx.creditOrder.updateMany({
-        where: { id: order.id, status: 'PENDING' },
+        where: { id: order.id, status: { in: ['PENDING', 'CANCELLED'] } },
         data: { status: 'PAID', paidAt: new Date(), payChannel: meta.payChannel ?? null, tradeNo: meta.tradeNo ?? null },
       });
       if (flip.count === 0) {
