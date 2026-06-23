@@ -16,38 +16,46 @@ export class FarmRecordService {
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
     await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
+    const data = {
+      tenantId: user.tenantId, batchId: dto.batchId, fieldId: dto.fieldId,
+      operatorId: user.userId, action: dto.action,
+      detail: (dto.detail ?? undefined) as Prisma.InputJsonValue | undefined,
+      images: (dto.images ?? undefined) as Prisma.InputJsonValue | undefined,
+      location: dto.location ?? null, recordedAt: new Date(dto.recordedAt), source: dto.source,
+      status: dto.status ?? 'completed',
+      supplyId: dto.supplyId ?? undefined, supplyAmount: dto.supplyAmount ?? undefined,
+    };
     if (dto.supplyId && dto.supplyAmount != null) {
-      // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额。
+      // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额(只读鉴权,事务外)。
       const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
       const sup = await this.prisma.supply.findFirst({
         where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
         select: { id: true },
       });
       if (!sup) throw new ForbiddenException('农资不在可操作范围内');
-      const quotaAgg = await this.prisma.supplyIssue.aggregate({
-        where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
+      // 配额核销:读累计用量、判 110%、再写,三步必须原子。
+      // 否则并发提交在"读"与"写"之间无锁(TOCTOU),可双双通过校验导致超额核销。
+      // 用事务 + 对该 supply 行 FOR UPDATE 行锁串行化同一农资的并发核销。
+      const created = await this.prisma.$transaction(async (tx) => {
+        // 锁定 supply 行:并发核销同一农资的事务在此排队,保证后到者读到前者已提交的用量。
+        await tx.$queryRaw`SELECT id FROM supplies WHERE id = ${dto.supplyId} FOR UPDATE`;
+        const quotaAgg = await tx.supplyIssue.aggregate({
+          where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
+        });
+        const consumedAgg = await tx.farmRecord.aggregate({
+          where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
+        });
+        const quota = new Prisma.Decimal(quotaAgg._sum.amount ?? 0);
+        const consumed = new Prisma.Decimal(consumedAgg._sum.supplyAmount ?? 0);
+        // 实际累计用量超过领用配额 110% 则熔断。用 Decimal 比较避免浮点误差。
+        if (consumed.plus(dto.supplyAmount!).greaterThan(quota.times(1.1))) {
+          throw new BadRequestException('实际用量超过领用配额 110%,核销熔断');
+        }
+        return tx.farmRecord.create({ data });
       });
-      const consumedAgg = await this.prisma.farmRecord.aggregate({
-        where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { supplyAmount: true },
-      });
-      const quota = new Prisma.Decimal(quotaAgg._sum.amount ?? 0);
-      const consumed = new Prisma.Decimal(consumedAgg._sum.supplyAmount ?? 0);
-      // 实际累计用量超过领用配额 110% 则熔断。用 Decimal 比较避免浮点误差。
-      if (consumed.plus(dto.supplyAmount).greaterThan(quota.times(1.1))) {
-        throw new BadRequestException('实际用量超过领用配额 110%,核销熔断');
-      }
+      return this.serialize(created);
     }
-    const created = await this.prisma.farmRecord.create({
-      data: {
-        tenantId: user.tenantId, batchId: dto.batchId, fieldId: dto.fieldId,
-        operatorId: user.userId, action: dto.action,
-        detail: (dto.detail ?? undefined) as Prisma.InputJsonValue | undefined,
-        images: (dto.images ?? undefined) as Prisma.InputJsonValue | undefined,
-        location: dto.location ?? null, recordedAt: new Date(dto.recordedAt), source: dto.source,
-        status: dto.status ?? 'completed',
-        supplyId: dto.supplyId ?? undefined, supplyAmount: dto.supplyAmount ?? undefined,
-      },
-    });
+    const created = await this.prisma.farmRecord.create({ data });
     return this.serialize(created);
   }
 

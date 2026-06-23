@@ -11,15 +11,20 @@ const base = { batchId: BATCH, fieldId: FIELD, action: '施肥', recordedAt: '20
 
 function makeService(overrides: any = {}) {
   let created: any;
+  const farmRecord = {
+    create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
+    aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
+  };
+  const supplyIssue = { aggregate: async () => ({ _sum: { amount: overrides.quota ?? 0 } }) };
   const prisma = {
     batch: { findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }) },
     field: { findFirst: async () => (overrides.fieldScoped === false ? null : { id: 'f1' }) },
-    farmRecord: {
-      create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
-      aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
-    },
-    supplyIssue: { aggregate: async () => ({ _sum: { amount: overrides.quota ?? 0 } }) },
+    farmRecord,
+    supplyIssue,
     supply: { findFirst: async () => (overrides.supplyScoped === false ? null : { id: 'sup1' }) },
+    // 核销路径用事务 + FOR UPDATE 行锁;tx 复用同一组 mock 表。
+    $queryRaw: async () => [{ id: 'sup1' }],
+    $transaction: async (fn: any) => fn({ farmRecord, supplyIssue, $queryRaw: async () => [{ id: 'sup1' }] }),
   };
   return { svc: new FarmRecordService(prisma as any, new ScopeService()), get created() { return created; } };
 }
