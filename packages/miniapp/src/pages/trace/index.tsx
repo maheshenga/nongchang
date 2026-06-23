@@ -83,8 +83,9 @@ export default function Trace() {
   return (
     <View className="trace">
       <View className="trace__header">
+        <Text className="trace__eyebrow">批次可信履历</Text>
         <Text className="trace__title">近期溯源</Text>
-        <Text className="trace__subtitle">选择批次查看全程溯源链路</Text>
+        <Text className="trace__subtitle">按批次查看农事、质检与流通节点</Text>
       </View>
 
       <View className="trace__body">
@@ -102,6 +103,18 @@ export default function Trace() {
           ))}
         </ScrollView>
 
+        <View className="trace__summary">
+          <View>
+            <Text className="trace__summary-label">当前批次</Text>
+            <Text className="trace__summary-title">{selected ? selected.batchNo : '未选择批次'}</Text>
+            <Text className="trace__summary-sub">{selected ? selected.cropName : '请先选择批次查看链路'}</Text>
+          </View>
+          <View className="trace__summary-count">
+            <Text className="trace__summary-num">{events.length}</Text>
+            <Text className="trace__summary-unit">节点</Text>
+          </View>
+        </View>
+
         {loading && <Text className="trace__hint">加载中…</Text>}
         {err && <Text className="trace__hint trace__hint--err">{err}</Text>}
         {!loading && !err && <TraceTimeline events={events} />}
@@ -111,9 +124,11 @@ export default function Trace() {
             <Text className="trace__chain-title">区块链存证数据</Text>
             <Text className="trace__chain-badge">区块链接入中</Text>
           </View>
-          <Text className="trace__chain-row">上链哈希　0x····（接入中）</Text>
-          <Text className="trace__chain-row">质检存证　待接入</Text>
-          <Text className="trace__chain-row">封箱时间　待接入</Text>
+          <View className="trace__chain-grid">
+            <Text className="trace__chain-row">上链哈希 0x····（接入中）</Text>
+            <Text className="trace__chain-row">质检存证 待接入</Text>
+            <Text className="trace__chain-row">封箱时间 待接入</Text>
+          </View>
         </View>
 
         <View className="trace__poster-btn" onClick={genPoster}>

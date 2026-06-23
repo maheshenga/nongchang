@@ -155,6 +155,7 @@ export default function Me() {
           <Text className="me__avatar-text">{(displayName || username).slice(0, 1)}</Text>
         </View>
         <View>
+          <Text className="me__eyebrow">当前账号</Text>
           <Text className="me__name">{displayName || username}</Text>
           <Text className="me__role">{role}{phone ? ` · ${phone}` : ''}</Text>
         </View>
@@ -175,7 +176,8 @@ export default function Me() {
         </View>
       </View>
 
-      <View className="me__menu">
+      <View className="me__menu-section">
+        <Text className="me__section-title">账号设置</Text>
         <View className="me__item" onClick={openEdit}>
           <Text className="me__item-text">修改个人资料</Text>
           <Text className="me__item-arrow">›</Text>
@@ -188,6 +190,10 @@ export default function Me() {
           <Text className="me__item-text">蓝牙传感设备配置</Text>
           <Text className="me__item-badge">即将开放</Text>
         </View>
+      </View>
+
+      <View className="me__menu-section">
+        <Text className="me__section-title">农场服务</Text>
         <View className="me__item" onClick={toggleFields}>
           <Text className="me__item-text">承包地块管理</Text>
           <Text className="me__item-arrow">{fields ? '收起' : '展开'}</Text>

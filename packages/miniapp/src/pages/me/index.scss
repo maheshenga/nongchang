@@ -9,13 +9,13 @@
     @include gradient-header;
     display: flex;
     align-items: center;
-    padding: 56px 28px 40px;
+    padding: 64px 32px 72px;
   }
 
   &__avatar {
     width: 112px;
     height: 112px;
-    border-radius: 50%;
+    border-radius: 30px;
     background: rgba(255, 255, 255, 0.25);
     margin-right: 24px;
     display: flex;
@@ -27,6 +27,14 @@
     font-size: 52px;
     font-weight: bold;
     color: #fff;
+  }
+
+  &__eyebrow {
+    display: block;
+    font-size: 22px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.75);
+    margin-bottom: 6px;
   }
 
   &__name {
@@ -45,8 +53,8 @@
 
   &__stats {
     display: flex;
-    margin: -24px 24px 0;
-    padding: 28px 0;
+    margin: -44px 28px 0;
+    padding: 32px 0;
     @include card;
   }
 
@@ -73,16 +81,27 @@
     margin-top: 8px;
   }
 
-  &__menu {
-    margin: 28px 24px 0;
+  &__menu,
+  &__menu-section {
+    margin: 28px 28px 0;
     @include card;
     overflow: hidden;
+  }
+
+  &__section-title {
+    display: block;
+    padding: 24px 28px 8px;
+    font-size: 24px;
+    font-weight: bold;
+    color: $c-primary;
   }
 
   &__item {
     display: flex;
     align-items: center;
-    padding: 32px 28px;
+    min-height: 96px;
+    padding: 0 28px;
+    background: #fff;
 
     & + & {
       border-top: 1px solid $c-border;
@@ -95,8 +114,12 @@
 
   &__item-text {
     flex: 1;
-    font-size: 30px;
+    min-width: 0;
+    font-size: 28px;
     color: $c-text;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__item-badge {
@@ -109,15 +132,19 @@
   }
 
   &__fields {
-    padding: 8px 28px 24px;
+    padding: 12px 28px 24px;
     border-top: 1px solid $c-border;
+    background: #fff;
   }
 
   &__field {
     display: block;
     font-size: 26px;
-    color: $c-text-sub;
-    padding: 12px 0;
+    color: $c-text;
+    padding: 16px 18px;
+    margin-top: 10px;
+    border-radius: 14px;
+    background: $c-bg;
   }
 
   &__field-empty {
@@ -128,12 +155,13 @@
   &__field-map {
     width: 100%;
     height: 360px;
-    border-radius: 14px;
+    border-radius: 18px;
     margin: 8px 0 16px;
+    overflow: hidden;
   }
 
   &__logout {
-    margin: 40px 24px 0;
+    margin: 40px 28px 0;
     padding: 28px 0;
     text-align: center;
     @include card;
@@ -146,9 +174,9 @@
   }
 
   &__panel {
-    margin: 24px 24px 0;
-    padding: 28px 24px;
-    @include card;
+    margin: 24px 28px 0;
+    padding: 32px 28px;
+    @include soft-panel;
   }
 
   &__panel-title {
@@ -172,7 +200,7 @@
     padding: 20px 24px;
     font-size: 28px;
     color: $c-text;
-    background: $c-bg;
+    background: #fff;
     border: 1px solid $c-border;
     border-radius: 14px;
   }
@@ -187,7 +215,7 @@
     flex: 1;
     font-size: 28px;
     color: #fff;
-    background: $c-primary;
+    background: linear-gradient(135deg, $c-primary 0%, $c-primary-dark 100%);
     border-radius: 14px;
     padding: 18px 0;
 

@@ -7,7 +7,15 @@
 
   &__header {
     @include gradient-header;
-    padding: 40px 28px 36px;
+    padding: 54px 32px 64px;
+  }
+
+  &__eyebrow {
+    display: block;
+    font-size: 22px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.78);
+    margin-bottom: 8px;
   }
 
   &__title {
@@ -24,24 +32,25 @@
   }
 
   &__body {
-    padding: 24px 24px 0;
-    margin-top: -20px;
+    padding: 28px 24px 0;
+    margin-top: -42px;
   }
 
   &__chips {
     white-space: nowrap;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
 
   &__chip {
     display: inline-flex;
     flex-direction: column;
-    min-width: 150px;
-    padding: 18px 24px;
+    min-width: 160px;
+    padding: 20px 24px;
     margin-right: 16px;
-    border-radius: 16px;
+    border-radius: 20px;
     background: $c-card;
     border: 1px solid $c-border;
+    box-shadow: $shadow-soft;
 
     &--on {
       background: $c-primary;
@@ -56,6 +65,68 @@
 
   &__empty { font-size: 24px; color: $c-text-sub; }
 
+  &__summary {
+    @include soft-panel;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 24px;
+    margin-bottom: 24px;
+  }
+
+  &__summary-label {
+    display: block;
+    font-size: 22px;
+    color: $c-primary;
+    font-weight: bold;
+  }
+
+  &__summary-title {
+    display: block;
+    max-width: 430px;
+    margin-top: 8px;
+    font-size: 34px;
+    color: $c-text;
+    font-weight: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__summary-sub {
+    display: block;
+    max-width: 430px;
+    margin-top: 6px;
+    font-size: 24px;
+    color: $c-text-sub;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__summary-count {
+    width: 112px;
+    height: 112px;
+    border-radius: 24px;
+    background: $c-soft;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__summary-num {
+    font-size: 38px;
+    font-weight: bold;
+    color: $c-primary-dark;
+  }
+
+  &__summary-unit {
+    font-size: 20px;
+    color: $c-primary;
+  }
+
   &__hint {
     display: block;
     font-size: 24px;
@@ -67,9 +138,8 @@
 
   &__chain {
     @include card;
-    padding: 28px 24px;
-    margin-top: 8px;
-    opacity: 0.75;
+    padding: 32px 28px;
+    margin-top: 16px;
   }
 
   &__chain-head {
@@ -83,17 +153,24 @@
 
   &__chain-badge { @include reserved-badge; }
 
+  &__chain-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
   &__chain-row {
     display: block;
     font-size: 24px;
     color: $c-text-sub;
-    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: $c-bg;
   }
 
   &__poster-btn {
+    @include primary-action;
     margin-top: 24px;
-    background: $c-primary;
-    border-radius: 16px;
     padding: 22px 0;
     text-align: center;
   }

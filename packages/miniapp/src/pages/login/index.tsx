@@ -65,10 +65,19 @@ export default function Login() {
           <Icon name="leaf" color="#fff" size={40} />
         </View>
         <Text className="login__title">溯源工作台</Text>
-        <Text className="login__subtitle">数字生态农业移动管理端 · 让每一次农事都被信任</Text>
+        <Text className="login__subtitle">田间作业、物料核销、批次溯源一站处理</Text>
+        <View className="login__trust">
+          <Text className="login__trust-item">农事记录</Text>
+          <Text className="login__trust-item">扫码追溯</Text>
+          <Text className="login__trust-item">额度可控</Text>
+        </View>
       </View>
 
       <View className="login__card">
+        <View className="login__card-head">
+          <Text className="login__card-title">登录到农场</Text>
+          <Text className="login__card-sub">使用机构账号继续作业</Text>
+        </View>
         <Text className="login__label">机构编码</Text>
         <Input
           className="login__input"
@@ -95,6 +104,7 @@ export default function Login() {
           安全登录
         </Button>
         <View className="login__wechat" onClick={wxLoading ? undefined : onWechatLogin}>
+          <Icon name="user" size={20} color="#07c160" />
           <Text className="login__wechat-text">{wxLoading ? '登录中…' : '微信一键登录'}</Text>
         </View>
         <View className="login__apply" onClick={goRegister}>

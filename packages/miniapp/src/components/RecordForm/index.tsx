@@ -240,94 +240,124 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
 
   return (
     <View className="rec-form">
-      <Text className="rec-form__title">上报流程 · 记一笔</Text>
-
-      <Text className="rec-form__label">选择批次</Text>
-      <View className="rec-form__chips">
-        {allBatches.length === 0 && <Text className="rec-form__empty">暂无批次</Text>}
-        {allBatches.map((b) => (
-          <View
-            key={b.id}
-            className={`rec-form__chip ${batchId === b.id ? 'rec-form__chip--on' : ''}`}
-            onClick={() => setBatchId(b.id)}
-          >
-            <Text>{b.batchNo}</Text>
-          </View>
-        ))}
-      </View>
-      <View className="rec-form__scan" onClick={scan}>
-        <Icon name="trace" size={20} /><Text className="rec-form__scan-text">扫描批次码</Text>
-      </View>
-      <View className="rec-form__scan" onClick={getAdvice}>
-        <Icon name="sparkles" size={20} /><Text className="rec-form__scan-text">{advising ? 'AI 分析中…' : 'AI 推荐农事建议'}</Text>
-      </View>
-      <View className={`rec-form__scan ${location ? 'rec-form__scan--on' : ''}`} onClick={captureLocation}>
-        <Icon name="trace" size={20} />
-        <Text className="rec-form__scan-text">
-          {locating ? '定位中…' : location ? `已记录位置:${location}(点击清除)` : '记录作业地点'}
-        </Text>
-      </View>
-
-      <View className="rec-form__row">
-        <View className="rec-form__col">
-          <Text className="rec-form__label">投入成本(元)</Text>
-          <Input className="rec-form__input" type="number" value={cost} onInput={(e) => setCost(e.detail.value)} placeholder="0" />
+      <View className="rec-form__head">
+        <View>
+          <Text className="rec-form__eyebrow">田间作业</Text>
+          <Text className="rec-form__title">快速记一笔</Text>
         </View>
-        <View className="rec-form__col">
-          <Text className="rec-form__label">耗用工时(天)</Text>
-          <Input className="rec-form__input" type="number" value={labor} onInput={(e) => setLabor(e.detail.value)} placeholder="0" />
+        <Text className="rec-form__badge">{selectedBatch ? selectedBatch.cropName : '待选批次'}</Text>
+      </View>
+
+      <View className="rec-form__section">
+        <View className="rec-form__section-head">
+          <Text className="rec-form__section-title">选择作业批次</Text>
+          <Text className="rec-form__section-sub">扫码或直接点选</Text>
+        </View>
+        <View className="rec-form__chips">
+          {allBatches.length === 0 && <Text className="rec-form__empty">暂无批次</Text>}
+          {allBatches.map((b) => (
+            <View
+              key={b.id}
+              className={`rec-form__chip ${batchId === b.id ? 'rec-form__chip--on' : ''}`}
+              onClick={() => setBatchId(b.id)}
+            >
+              <Text className="rec-form__chip-main">{b.batchNo}</Text>
+              <Text className="rec-form__chip-sub">{b.cropName}</Text>
+            </View>
+          ))}
+        </View>
+        <View className="rec-form__action-grid">
+          <View className="rec-form__action-row" onClick={scan}>
+            <Icon name="trace" size={20} /><Text className="rec-form__action-text">扫描批次码</Text>
+          </View>
+          <View className="rec-form__action-row" onClick={getAdvice}>
+            <Icon name="sparkles" size={20} /><Text className="rec-form__action-text">{advising ? 'AI 分析中…' : 'AI 农事建议'}</Text>
+          </View>
+        </View>
+        <View className={`rec-form__action-row rec-form__action-row--wide ${location ? 'rec-form__action-row--on' : ''}`} onClick={captureLocation}>
+          <Icon name="trace" size={20} />
+          <Text className="rec-form__action-text">
+            {locating ? '定位中…' : location ? `已记录位置:${location}(点击清除)` : '记录作业地点'}
+          </Text>
         </View>
       </View>
 
-      <Text className="rec-form__label">关联物料与用量(可选)</Text>
-      <View className="rec-form__chips">
-        {supplyHint && <Text className={`rec-form__empty ${suppliesStatus === 'error' ? 'rec-form__empty--err' : ''}`}>{supplyHint}</Text>}
-        {supplies.map((s) => (
-          <View
-            key={s.id}
-            className={`rec-form__chip rec-form__supply-chip ${supplyId === s.id ? 'rec-form__chip--on' : ''}`}
-            onClick={() => toggleSupply(s.id)}
-          >
-            <Text className="rec-form__supply-name">{s.name}</Text>
-            <Text className="rec-form__supply-meta">余 {s.remaining}{s.unit}</Text>
+      <View className="rec-form__section">
+        <View className="rec-form__section-head">
+          <Text className="rec-form__section-title">投入与物料</Text>
+          <Text className="rec-form__section-sub">可选填,用于核算</Text>
+        </View>
+        <View className="rec-form__row">
+          <View className="rec-form__col">
+            <Text className="rec-form__label">投入成本(元)</Text>
+            <Input className="rec-form__input" type="number" value={cost} onInput={(e) => setCost(e.detail.value)} placeholder="0" />
           </View>
-        ))}
-      </View>
-      <View className="rec-form__supply-row">
-        <Input
-          className="rec-form__input rec-form__supply-input"
-          type="digit"
-          disabled={!supplyId}
-          value={supplyAmount}
-          onInput={(e) => setSupplyAmount(e.detail.value)}
-          placeholder={selectedSupply ? `用量(${selectedSupply.unit})` : '先选择物料'}
-        />
-        {selectedSupply && <Text className="rec-form__supply-unit">{selectedSupply.unit}</Text>}
+          <View className="rec-form__col">
+            <Text className="rec-form__label">耗用工时(天)</Text>
+            <Input className="rec-form__input" type="number" value={labor} onInput={(e) => setLabor(e.detail.value)} placeholder="0" />
+          </View>
+        </View>
+
+        <Text className="rec-form__label">关联物料与用量(可选)</Text>
+        <View className="rec-form__chips rec-form__chips--supply">
+          {supplyHint && <Text className={`rec-form__empty ${suppliesStatus === 'error' ? 'rec-form__empty--err' : ''}`}>{supplyHint}</Text>}
+          {supplies.map((s) => (
+            <View
+              key={s.id}
+              className={`rec-form__chip rec-form__supply-chip ${supplyId === s.id ? 'rec-form__chip--on' : ''}`}
+              onClick={() => toggleSupply(s.id)}
+            >
+              <Text className="rec-form__supply-name">{s.name}</Text>
+              <Text className="rec-form__supply-meta">余 {s.remaining}{s.unit}</Text>
+            </View>
+          ))}
+        </View>
+        <View className="rec-form__supply-row">
+          <Input
+            className="rec-form__input rec-form__supply-input"
+            type="digit"
+            disabled={!supplyId}
+            value={supplyAmount}
+            onInput={(e) => setSupplyAmount(e.detail.value)}
+            placeholder={selectedSupply ? `用量(${selectedSupply.unit})` : '先选择物料'}
+          />
+          {selectedSupply && <Text className="rec-form__supply-unit">{selectedSupply.unit}</Text>}
+        </View>
       </View>
 
-      <Text className="rec-form__label">农事实录</Text>
-      <Textarea className="rec-form__textarea" value={note} onInput={(e) => setNote(e.detail.value)} placeholder="记录本次农事操作…" />
-      <View className="rec-form__tags">
-        {FARM_ACTIONS.map((a) => (
-          <View key={a} className={`rec-form__tag ${action === a ? 'rec-form__tag--on' : ''}`} onClick={() => setAction(a)}>
-            <Text>{a}</Text>
-          </View>
-        ))}
-      </View>
-      <View className={`rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`} onClick={toggleVoice}>
-        <Icon name="mic" size={20} color={recording ? '#ef4444' : '#94a3b8'} />
-        <Text className="rec-form__voice-text">
-          {transcribing ? '识别中…' : recording ? '点击结束录音' : '语音录入'}
-        </Text>
+      <View className="rec-form__section">
+        <View className="rec-form__section-head">
+          <Text className="rec-form__section-title">作业实录</Text>
+          <Text className="rec-form__section-sub">先选动作再补充说明</Text>
+        </View>
+        <View className="rec-form__tags">
+          {FARM_ACTIONS.map((a) => (
+            <View key={a} className={`rec-form__tag ${action === a ? 'rec-form__tag--on' : ''}`} onClick={() => setAction(a)}>
+              <Text>{a}</Text>
+            </View>
+          ))}
+        </View>
+        <Textarea className="rec-form__textarea" value={note} onInput={(e) => setNote(e.detail.value)} placeholder="记录本次农事操作…" />
+        <View className={`rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`} onClick={toggleVoice}>
+          <Icon name="mic" size={20} color={recording ? '#ef4444' : '#94a3b8'} />
+          <Text className="rec-form__voice-text">
+            {transcribing ? '识别中…' : recording ? '点击结束录音' : '语音录入'}
+          </Text>
+        </View>
       </View>
 
-      <Text className="rec-form__label">现场图片证明</Text>
-      <View className="rec-form__imgs">
-        {images.map((url) => (
-          <Image key={url} className="rec-form__img" src={url} mode="aspectFill" />
-        ))}
-        <View className="rec-form__add" onClick={chooseAndUpload}>
-          {uploading ? <Text className="rec-form__add-loading">上传中…</Text> : <Icon name="camera" size={28} />}
+      <View className="rec-form__section">
+        <View className="rec-form__section-head">
+          <Text className="rec-form__section-title">现场凭证</Text>
+          <Text className="rec-form__section-sub">图片会进入溯源链路</Text>
+        </View>
+        <View className="rec-form__imgs">
+          {images.map((url) => (
+            <Image key={url} className="rec-form__img" src={url} mode="aspectFill" />
+          ))}
+          <View className="rec-form__add" onClick={chooseAndUpload}>
+            {uploading ? <Text className="rec-form__add-loading">上传中…</Text> : <Icon name="camera" size={28} />}
+          </View>
         </View>
       </View>
 

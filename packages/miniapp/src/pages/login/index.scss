@@ -6,7 +6,7 @@
 
   &__hero {
     @include gradient-header;
-    padding: 88px 32px 56px;
+    padding: 86px 32px 82px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -30,16 +30,49 @@
   }
 
   &__subtitle {
+    display: block;
+    max-width: 560px;
     font-size: 24px;
     color: rgba(255, 255, 255, 0.85);
     margin-top: 12px;
     text-align: center;
   }
 
+  &__trust {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  &__trust-item {
+    @include status-pill;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+  }
+
   &__card {
     @include card;
-    margin: -32px 28px 0;
-    padding: 36px 28px;
+    margin: -52px 28px 0;
+    padding: 36px 32px 38px;
+  }
+
+  &__card-head {
+    margin-bottom: 22px;
+  }
+
+  &__card-title {
+    display: block;
+    font-size: 32px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__card-sub {
+    display: block;
+    margin-top: 6px;
+    font-size: 24px;
+    color: $c-text-sub;
   }
 
   &__label {
@@ -47,25 +80,23 @@
     font-size: 24px;
     font-weight: bold;
     color: $c-text-sub;
-    margin: 18px 0 10px;
+    margin: 16px 0 10px;
   }
 
   &__input {
     background: #fff;
     border: 1px solid $c-border;
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 22px 24px;
     font-size: 28px;
     color: $c-text;
   }
 
   &__submit {
-    margin-top: 36px;
-    background: $c-primary;
-    color: #fff;
+    @include primary-action;
+    margin-top: 34px;
     font-size: 30px;
     font-weight: bold;
-    border-radius: 16px;
     padding: 6px 0;
   }
 
@@ -74,9 +105,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 10px;
     padding: 20px 0;
     border-radius: 16px;
     border: 1px solid $c-border;
+    background: #fff;
   }
 
   &__wechat-text {
