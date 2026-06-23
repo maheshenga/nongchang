@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
-import { AuthUser, CreateFieldDto, createFieldSchema, Role } from '@nongchang/shared';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { AuthUser, CreateFieldDto, createFieldSchema, listQuerySchema, ListQuery, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -15,5 +15,7 @@ export class FieldController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser) { return this.svc.list(user); }
+  list(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.list(user, query);
+  }
 }

@@ -111,10 +111,10 @@ describe('BatchService.list 聚合 #全域批次追踪', () => {
     } as any;
     const svc = new BatchService(prisma, new ScopeService());
     const out = await svc.list(merchant);
-    expect(out).toHaveLength(1);
-    expect(out[0].codeCount).toBe(3);
-    expect(out[0].scanTotal).toBe(12);
-    expect(out[0].inputCost).toBe(56);
+    expect((out as any[]).length).toBe(1);
+    expect((out as any[])[0].codeCount).toBe(3);
+    expect((out as any[])[0].scanTotal).toBe(12);
+    expect((out as any[])[0].inputCost).toBe(56);
   });
 
   it('空集:不调用 groupBy/supplyIssue.findMany,返回 []', async () => {

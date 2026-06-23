@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { AuthUser, CreateTraceEventDto } from '@nongchang/shared';
+import { AuthUser, CreateTraceEventDto, ListQuery, Paginated } from '@nongchang/shared';
+import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { BillingService } from '../billing/billing.service';
@@ -44,18 +45,36 @@ export class TraceService {
     });
   }
 
-  async listEvents(user: AuthUser, batchId: string) {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async listEvents(user: AuthUser, batchId: string, query?: ListQuery): Promise<any[] | Paginated<any>> {
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    return this.prisma.traceEvent.findMany({
-      where: { tenantId: user.tenantId, batchId }, orderBy: { occurredAt: 'asc' },
-    });
+    const where = { tenantId: user.tenantId, batchId };
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [items, total] = await this.prisma.$transaction([
+        this.prisma.traceEvent.findMany({ where, orderBy: { occurredAt: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.traceEvent.count({ where }),
+      ]);
+      return { items, total, page, pageSize };
+    }
+    return this.prisma.traceEvent.findMany({ where, orderBy: { occurredAt: 'asc' }, take: 500 });
   }
 
-  /** 列出批次已生成的全部溯源码(含各自扫码次数),最新在前。 */
-  async listCodes(user: AuthUser, batchId: string) {
+  /** 列出批次已生成的全部溯源码(含各自扫码次数),最新在前。
+   *  未分页时默认安全上限 = MAX_CODES_PER_BATCH(与生码上限一致,不会截断合法的全量码列表)。 */
+  async listCodes(user: AuthUser, batchId: string, query?: ListQuery): Promise<any[] | Paginated<any>> {
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    return this.prisma.traceCode.findMany({
-      where: { tenantId: user.tenantId, batchId }, orderBy: { createdAt: 'desc' },
-    });
+    const where = { tenantId: user.tenantId, batchId };
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [items, total] = await this.prisma.$transaction([
+        this.prisma.traceCode.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.traceCode.count({ where }),
+      ]);
+      return { items, total, page, pageSize };
+    }
+    return this.prisma.traceCode.findMany({ where, orderBy: { createdAt: 'desc' }, take: MAX_CODES_PER_BATCH });
   }
 }

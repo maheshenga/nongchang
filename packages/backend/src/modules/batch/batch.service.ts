@@ -1,10 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AuthUser, BatchStatus, CreateBatchDto } from '@nongchang/shared';
+import { AuthUser, BatchStatus, CreateBatchDto, ListQuery, Paginated } from '@nongchang/shared';
+import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 
 const STATUS_ORDER = [BatchStatus.PLANTING, BatchStatus.GROWING, BatchStatus.HARVESTED, BatchStatus.DISTRIBUTED];
+// 未分页时的默认安全上限:防无界结果集。
+const DEFAULT_LIST_CAP = 500;
 
 // 金额列(laborCost/sellPrice)为 Prisma.Decimal,出口统一转 number 以保持前端 API 契约不变。
 function serializeBatch<T extends Record<string, any> | null>(b: T): T {
@@ -34,9 +37,24 @@ export class BatchService {
     return serializeBatch(created);
   }
 
-  async list(user: AuthUser) {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
-    const batches = await this.prisma.batch.findMany({ where });
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [batches, total] = await this.prisma.$transaction([
+        this.prisma.batch.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.batch.count({ where }),
+      ]);
+      return { items: await this.enrich(batches as any[]), total, page, pageSize };
+    }
+    const batches = await this.prisma.batch.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP });
+    return this.enrich(batches as any[]);
+  }
+
+  // 给一页 batches 补 ownerName / 码统计(数量+扫码总数)/ 投入成本。
+  private async enrich(batches: any[]): Promise<any[]> {
     if (batches.length === 0) return [];
     const ids = batches.map((b: any) => b.id);
     const ownerIds = [...new Set(batches.map((b: any) => b.ownerId))];

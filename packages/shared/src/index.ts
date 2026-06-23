@@ -91,6 +91,9 @@ export type { UploadResponse } from './dto/upload.dto';
 
 export type { AuthUser, TokenPair } from './types';
 
+export { listQuerySchema, isPaginated } from './dto/list-query.dto';
+export type { ListQuery, Paginated } from './dto/list-query.dto';
+
 export {
   createAiProviderSchema, updateAiProviderSchema, aiProviderViewSchema,
   aiChatSchema, aiDiagnoseSchema, ossConfigSchema, ossConfigViewSchema,

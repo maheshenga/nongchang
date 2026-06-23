@@ -73,11 +73,11 @@ describe('TraceService.generateCodes 批量', () => {
 });
 
 describe('TraceService.listCodes 已生成码列表', () => {
-  it('batch 在范围内则按 tenant+batch 查询', async () => {
+  it('batch 在范围内则按 tenant+batch 查询(未分页带安全上限 take)', async () => {
     const h = make(true);
     await h.svc.listCodes(merchant, 'b1');
     expect(h.prisma.traceCode.findMany).toHaveBeenCalledWith({
-      where: { tenantId: 't1', batchId: 'b1' }, orderBy: { createdAt: 'desc' },
+      where: { tenantId: 't1', batchId: 'b1' }, orderBy: { createdAt: 'desc' }, take: 10000,
     });
   });
   it('batch 不在范围则抛 Forbidden(不查询)', async () => {

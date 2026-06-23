@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { AuthUser, CreateFieldDto } from '@nongchang/shared';
+import { AuthUser, CreateFieldDto, ListQuery, Paginated } from '@nongchang/shared';
+import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+
+// 未分页时的默认安全上限:防无界结果集。
+const DEFAULT_LIST_CAP = 500;
 
 @Injectable()
 export class FieldService {
@@ -21,9 +25,24 @@ export class FieldService {
     return field;
   }
 
-  async list(user: AuthUser) {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
-    const fields = await this.prisma.field.findMany({ where });
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [fields, total] = await this.prisma.$transaction([
+        this.prisma.field.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.field.count({ where }),
+      ]);
+      return { items: await this.enrich(fields as any[]), total, page, pageSize };
+    }
+    const fields = await this.prisma.field.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP });
+    return this.enrich(fields as any[]);
+  }
+
+  // 给一页 fields 补 ownerName 与经纬度(从 PostGIS location 列提取)。
+  private async enrich(fields: any[]): Promise<any[]> {
     if (fields.length === 0) return [];
     const ownerIds = [...new Set(fields.map((f: any) => f.ownerId))];
     const owners = await this.prisma.user.findMany({

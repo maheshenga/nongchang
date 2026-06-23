@@ -1,9 +1,13 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, Role } from '@nongchang/shared';
+import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, Role, ListQuery, Paginated } from '@nongchang/shared';
+import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+
+// 未分页时的默认安全上限:防无界结果集。
+const DEFAULT_LIST_CAP = 500;
 
 @Injectable()
 export class UserService {
@@ -28,20 +32,49 @@ export class UserService {
     return { ...created, initialPassword };
   }
 
-  list(actor: AuthUser) {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async list(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = this.scopedWhere(actor);
-    return this.prisma.user.findMany({
-      where, select: { id: true, username: true, role: true, agentId: true, displayName: true, status: true },
-    });
+    const select = { id: true, username: true, role: true, agentId: true, displayName: true, status: true };
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [items, total] = await this.prisma.$transaction([
+        this.prisma.user.findMany({ where, select, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.user.count({ where }),
+      ]);
+      return { items, total, page, pageSize };
+    }
+    return this.prisma.user.findMany({ where, select, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP });
   }
 
   // 商户管理屏:仅 role=merchant,带地块数/确权面积聚合,排除待审核 pending。
-  async listMerchants(actor: AuthUser) {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async listMerchants(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = { ...this.scopedWhere(actor), role: Role.MERCHANT, status: { not: 'pending' } };
-    const merchants = await this.prisma.user.findMany({
-      where, orderBy: { createdAt: 'desc' },
-      select: { id: true, username: true, displayName: true, phone: true, status: true, agentId: true, createdAt: true },
-    });
+    const select = { id: true, username: true, displayName: true, phone: true, status: true, agentId: true, createdAt: true };
+    let merchants: any[];
+    let total: number | null = null;
+    let page = 1;
+    let pageSize = 20;
+    if (isPaginated(query)) {
+      page = query.page ?? 1;
+      pageSize = query.pageSize ?? 20;
+      const [rows, count] = await this.prisma.$transaction([
+        this.prisma.user.findMany({ where, orderBy: { createdAt: 'desc' }, select, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.user.count({ where }),
+      ]);
+      merchants = rows;
+      total = count;
+    } else {
+      merchants = await this.prisma.user.findMany({ where, orderBy: { createdAt: 'desc' }, select, take: DEFAULT_LIST_CAP });
+    }
+    const items = await this.enrichMerchants(actor, merchants);
+    return total === null ? items : { items, total, page, pageSize };
+  }
+
+  // 给一页 merchants 补地块数(fieldCount)与确权面积(totalArea)。
+  private async enrichMerchants(actor: AuthUser, merchants: any[]): Promise<any[]> {
     const ids = merchants.map(m => m.id);
     const agg = ids.length
       ? await this.prisma.field.groupBy({

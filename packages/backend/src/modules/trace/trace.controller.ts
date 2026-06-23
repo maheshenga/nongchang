@@ -1,5 +1,5 @@
 import { Body, Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
-import { AuthUser, CreateTraceEventDto, createTraceEventSchema, Role } from '@nongchang/shared';
+import { AuthUser, CreateTraceEventDto, createTraceEventSchema, listQuerySchema, ListQuery, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -24,12 +24,12 @@ export class TraceController {
   }
 
   @Get('codes/:batchId') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
-  listCodes(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string) {
-    return this.svc.listCodes(user, batchId);
+  listCodes(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.listCodes(user, batchId, query);
   }
 
   @Get('events/:batchId')
-  list(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string) {
-    return this.svc.listEvents(user, batchId);
+  listEvents(@CurrentUser() user: AuthUser, @Param('batchId') batchId: string, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.listEvents(user, batchId, query);
   }
 }

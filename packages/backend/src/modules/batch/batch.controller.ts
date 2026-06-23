@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { AuthUser, CreateBatchDto, createBatchSchema, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
+import { AuthUser, CreateBatchDto, createBatchSchema, listQuerySchema, ListQuery, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -15,7 +15,9 @@ export class BatchController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser) { return this.svc.list(user); }
+  list(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.list(user, query);
+  }
 
   @Get('by-code/:code')
   byCode(@CurrentUser() user: AuthUser, @Param('code') code: string) {

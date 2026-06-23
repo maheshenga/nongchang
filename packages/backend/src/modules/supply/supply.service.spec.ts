@@ -17,23 +17,28 @@ function makeService(overrides: any = {}) {
       findMany: async () => [], findFirst: async () => null,
       create: async (a: any) => ({ id: 's-new', ...a.data, createdAt: new Date('2026-06-14T10:00:00Z') }),
       delete: async () => ({}),
+      count: async () => 0,
       ...(overrides.supply ?? {}),
     },
     supplyIssue: {
       count: async () => 0,
       ...(overrides.supplyIssue ?? {}),
     },
-    $transaction: async (fn: any) => fn({
-      supply: {
-        updateMany: async (a: any) => {
-          const lte = a.where.used.lte;
-          if (state.used <= lte) { state.used += a.data.used.increment; return { count: 1 }; }
-          return { count: 0 };
+    $transaction: async (arg: any) => {
+      // 支持两种 Prisma $transaction 形式:回调式(fn(tx))与批量式(Promise.all(arr))。
+      if (Array.isArray(arg)) return Promise.all(arg);
+      return arg({
+        supply: {
+          updateMany: async (a: any) => {
+            const lte = a.where.used.lte;
+            if (state.used <= lte) { state.used += a.data.used.increment; return { count: 1 }; }
+            return { count: 0 };
+          },
+          findUnique: async () => ({ total: state.total, used: state.used }),
         },
-        findUnique: async () => ({ total: state.total, used: state.used }),
-      },
-      supplyIssue: { create: async (a: any) => a.data },
-    }),
+        supplyIssue: { create: async (a: any) => a.data },
+      });
+    },
   };
   return { svc: new SupplyService(prisma as any, new ScopeService()), prisma, state };
 }
@@ -47,7 +52,7 @@ describe('SupplyService.list', () => {
     const res = await svc.list(sysadmin);
     expect(captured.where).toEqual({ tenantId: 't1' });
     expect(captured.orderBy).toEqual({ createdAt: 'desc' });
-    expect(res[0]).toEqual({ id: 's1', name: '复合肥', unit: '包', total: 100, used: 95, remaining: 5, alert: true, createdAt: '2026-06-14T10:00:00.000Z' });
+    expect((res as any[])[0]).toEqual({ id: 's1', name: '复合肥', unit: '包', total: 100, used: 95, remaining: 5, alert: true, createdAt: '2026-06-14T10:00:00.000Z' });
   });
   it('merchant 注入 ownerId 过滤', async () => {
     let captured: any;
@@ -59,6 +64,28 @@ describe('SupplyService.list', () => {
     const { svc } = makeService();
     await expect(svc.list({ userId: 'u', tenantId: 't1', role: Role.MERCHANT, agentId: null, ownerId: null } as AuthUser))
       .rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('SupplyService.list 分页模式', () => {
+  it('传 page=2&pageSize=1:仅查第二页,返回 {items,total,page,pageSize}', async () => {
+    let findManyArgs: any;
+    let countWhere: any;
+    const { svc } = makeService({
+      supply: {
+        findMany: async (a: any) => { findManyArgs = a; return [{ id: 's2', name: 'B', unit: '袋', total: 30, used: 5, createdAt: new Date() }]; },
+        count: async (a: any) => { countWhere = a; return 5; },
+      },
+    });
+    const res = await svc.list(merchant, { page: 2, pageSize: 1 });
+    expect(res).toHaveProperty('items');
+    expect(res).toHaveProperty('total', 5);
+    expect(res).toHaveProperty('page', 2);
+    expect(res).toHaveProperty('pageSize', 1);
+    expect((res as any).items).toHaveLength(1);
+    expect(findManyArgs.skip).toBe(1);
+    expect(findManyArgs.take).toBe(1);
+    expect(countWhere).toEqual({ where: { tenantId: 't1', ownerId: 'm1' } });
   });
 });
 

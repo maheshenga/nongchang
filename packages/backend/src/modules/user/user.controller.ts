@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   AuthUser, CreateUserDto, createUserSchema, ReviewUserInput, reviewUserSchema,
   UpdateUserDto, updateUserSchema, SetUserStatusInput, setUserStatusSchema, Role,
+  listQuerySchema, ListQuery,
 } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,10 +19,14 @@ export class UserController {
   }
 
   @Get() @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN)
-  list(@CurrentUser() user: AuthUser) { return this.svc.list(user); }
+  list(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.list(user, query);
+  }
 
   @Get('merchants') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN)
-  merchants(@CurrentUser() user: AuthUser) { return this.svc.listMerchants(user); }
+  merchants(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.listMerchants(user, query);
+  }
 
   @Get('pending') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN)
   listPending(@CurrentUser() user: AuthUser) { return this.svc.listPending(user); }

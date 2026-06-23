@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
-import { AuthUser, CreateSupplyInput, IssueSupplyInput, createSupplyInputSchema, issueSupplyInputSchema, Role } from '@nongchang/shared';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import { AuthUser, CreateSupplyInput, IssueSupplyInput, createSupplyInputSchema, issueSupplyInputSchema, listQuerySchema, ListQuery, Role } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -10,8 +10,8 @@ export class SupplyController {
   constructor(private svc: SupplyService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.svc.list(user);
+  list(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.list(user, query);
   }
 
   @Post() @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)

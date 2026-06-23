@@ -1,10 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AuthUser, SupplyItem, CreateSupplyInput, IssueSupplyInput, SupplyIssueResponse } from '@nongchang/shared';
+import type { AuthUser, SupplyItem, CreateSupplyInput, IssueSupplyInput, SupplyIssueResponse, ListQuery, Paginated } from '@nongchang/shared';
+import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 
 const LOW_STOCK_THRESHOLD = 10;
+// 未分页时的默认安全上限:防无界结果集。超出需用分页参数翻页。
+const DEFAULT_LIST_CAP = 500;
 
 // 金额/数量列为 Prisma.Decimal,统一用 Decimal 运算后再 toNumber 出口,避免浮点累积误差且保持 API 契约为 number。
 type DecimalLike = Prisma.Decimal | number;
@@ -22,9 +25,19 @@ function toItem(r: SupplyRow): SupplyItem {
 export class SupplyService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
-  async list(user: AuthUser): Promise<SupplyItem[]> {
+  // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
+  async list(user: AuthUser, query?: ListQuery): Promise<SupplyItem[] | Paginated<SupplyItem>> {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
-    const rows = (await this.prisma.supply.findMany({ where, orderBy: { createdAt: 'desc' } })) as SupplyRow[];
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.supply.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.supply.count({ where }),
+      ]);
+      return { items: (rows as SupplyRow[]).map(toItem), total, page, pageSize };
+    }
+    const rows = (await this.prisma.supply.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP })) as SupplyRow[];
     return rows.map(toItem);
   }
 

@@ -7,19 +7,19 @@ import { Role, type AuthUser } from '@nongchang/shared';
 const ctx = (o: Partial<AuthUser>): AuthUser => ({ userId: 'u', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null, ...o });
 
 describe('UserService.list #27', () => {
-  it('agent_admin 有 agentId:where 含 agentId', () => {
+  it('agent_admin 有 agentId:where 含 agentId', async () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
-    new UserService(prisma, new ScopeService()).list(ctx({ agentId: 'a1' }));
+    await new UserService(prisma, new ScopeService()).list(ctx({ agentId: 'a1' }));
     expect(prisma.user.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', agentId: 'a1' });
   });
-  it('agent_admin 缺 agentId:抛 Forbidden(不查库)', () => {
+  it('agent_admin 缺 agentId:抛 Forbidden(不查库)', async () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
-    expect(() => new UserService(prisma, new ScopeService()).list(ctx({ agentId: null }))).toThrow(ForbiddenException);
+    await expect(new UserService(prisma, new ScopeService()).list(ctx({ agentId: null }))).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
-  it('system_admin:where 仅 tenantId(允许整租户)', () => {
+  it('system_admin:where 仅 tenantId(允许整租户)', async () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
-    new UserService(prisma, new ScopeService()).list(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }));
+    await new UserService(prisma, new ScopeService()).list(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }));
     expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1' });
   });
 });
@@ -132,6 +132,6 @@ describe('UserService 管理能力(商户管理)', () => {
     prisma.field.groupBy.mockResolvedValue([{ ownerId: 'm1', _count: { _all: 3 }, _sum: { area: 12.5 } }]);
     const svc = new UserService(prisma, new ScopeService());
     const rows = await svc.listMerchants(sysAdmin);
-    expect(rows[0]).toMatchObject({ id: 'm1', fieldCount: 3, totalArea: 12.5 });
+    expect((rows as any[])[0]).toMatchObject({ id: 'm1', fieldCount: 3, totalArea: 12.5 });
   });
 });
