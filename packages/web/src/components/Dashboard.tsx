@@ -1,5 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, BarChart, Bar } from 'recharts';
-import { Sprout, ScanLine, Smartphone, Layers, AlertTriangle, Thermometer, Bug, Download, FileSpreadsheet, MapPin, Clock, Sparkles, Map, Loader2, Calendar, X, ImageIcon, Mail, AlertOctagon, FileBadge, Image as ImageIcon2, QrCode, PenTool, CloudRainWind, GitCommit, CheckCircle2, CheckCircle, ChevronsRightLeft } from 'lucide-react';
+import { Sprout, ScanLine, Smartphone, Layers, AlertTriangle, Thermometer, Bug, FileSpreadsheet, MapPin, Clock, Sparkles, Map, Loader2, Calendar, X, ImageIcon, Mail, AlertOctagon, FileBadge, Image as ImageIcon2, QrCode, PenTool, CloudRainWind, CheckCircle2, CheckCircle, ChevronsRightLeft } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';

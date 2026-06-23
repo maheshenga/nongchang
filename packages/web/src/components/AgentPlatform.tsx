@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, Store, Activity, TrendingUp, Search, Plus, MapPin, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Users, Store, Activity, TrendingUp, Search, Plus, MapPin, ShieldCheck } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { listMerchants, type MerchantUser } from '../api/agents';
 

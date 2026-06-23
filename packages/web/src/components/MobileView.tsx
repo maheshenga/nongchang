@@ -1,4 +1,4 @@
-import { Camera, MapPin, Send, Droplet, Sun, Wind, CheckCircle2, Bookmark, Wifi, WifiOff, RefreshCw, ScanLine, XCircle, Mic, Database, Sparkles, Loader2, X, FileText, User, ChevronRight, QrCode, Share2, Download, Settings as SettingsIcon, Smartphone as DeviceIcon, WalletCards, HelpCircle, Calendar, CalendarCheck2, Clock, Check, MessageSquare, Leaf } from 'lucide-react';
+import { Camera, MapPin, Send, Droplet, Sun, CheckCircle2, Wifi, WifiOff, RefreshCw, ScanLine, XCircle, Mic, Database, Sparkles, Loader2, X, FileText, User, ChevronRight, QrCode, Share2, Download, Settings as SettingsIcon, Smartphone as DeviceIcon, WalletCards, HelpCircle, CalendarCheck2, Clock, Check, MessageSquare, Leaf } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -209,7 +209,7 @@ export default function MobileView() {
              nextScan = randomBatch.id;
            }
          }
-      } catch (e) {}
+      } catch { /* 非关键操作，静默 */ }
 
       if (isOffline) {
         setOfflineScans(prev => [...prev, nextScan]);
@@ -230,7 +230,7 @@ export default function MobileView() {
         const ctx = canvas.getContext('2d');
         if (ctx) {
            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-           const base64Data = canvas.toDataURL('image/jpeg', 0.8);
+           canvas.toDataURL('image/jpeg', 0.8);
            
            setIsAiAnalyzing(true);
            // Simulate AI analyzing

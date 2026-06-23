@@ -1,9 +1,10 @@
 import { ShieldCheck, Download, MoreHorizontal, AlertTriangle, X, Bell, Thermometer, Search, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
 import { Agent } from '../types';
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 import { useApi } from '../hooks/useApi';
+import { showToast } from '../hooks/useToast';
 import { listAgents, createAgent, type Agent as ApiAgent } from '../api/agents';
 import type { CreateAgentDto } from '@nongchang/shared';
 import DemoBadge from './DemoBadge';
@@ -56,24 +57,23 @@ export default function SystemAdmin() {
   }, []);
 
   const { data: rawAgents, loading: agentsLoading, error: agentsError, reload: reloadAgents } = useApi(listAgents);
-  const agents: Agent[] = (rawAgents ?? []).map(toUiAgent);
+  const agents: Agent[] = useMemo(() => (rawAgents ?? []).map(toUiAgent), [rawAgents]);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
-  const [toastMessage, setToastMessage] = useState('');
   
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState('all');
 
-  const filteredAgents = agents.filter(agent => {
+  const filteredAgents = useMemo(() => agents.filter(agent => {
     const matchQuery = agent.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                        agent.region.toLowerCase().includes(searchQuery.toLowerCase()) ||
                        agent.parent?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = statusFilter === 'all' || agent.status.toLowerCase() === statusFilter.toLowerCase();
     const matchLevel = levelFilter === 'all' || agent.level === levelFilter;
     return matchQuery && matchStatus && matchLevel;
-  });
+  }), [agents, searchQuery, statusFilter, levelFilter]);
 
   const handleSelectAgent = (id: string) => {
     const newSelected = new Set(selectedAgents);
@@ -101,11 +101,6 @@ export default function SystemAdmin() {
   const handleSensitiveAction = (action: string) => {
     setActionPending(action);
     setShowConfirmModal(true);
-  };
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => setToastMessage(''), 3000);
   };
 
   const confirmAction = () => {
@@ -928,13 +923,6 @@ export default function SystemAdmin() {
         </div>
       )}
 
-      {/* Action Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 z-50">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-        </div>
-      )}
     </motion.div>
   );
 }

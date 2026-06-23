@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { loadTianditu } from '../lib/tianditu';
 import type { Field } from '../api/fields';
@@ -19,11 +19,12 @@ export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }:
   const [errMsg, setErrMsg] = useState('');
 
   // 有经纬度的地块才能上图
-  const located = fields.filter((f) => f.lng != null && f.lat != null);
+  const located = useMemo(() => fields.filter((f) => f.lng != null && f.lat != null), [fields]);
 
   // 初始化地图(仅一次)
   useEffect(() => {
     let disposed = false;
+    const markers = markersRef.current;
     loadTianditu(apiKey)
       .then((T) => {
         if (disposed || !containerRef.current) return;
@@ -44,7 +45,7 @@ export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }:
     return () => {
       disposed = true;
       mapRef.current = null;
-      markersRef.current.clear();
+      markers.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -74,7 +75,7 @@ export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }:
 
     const active = located.find((f) => f.id === activeFieldId) ?? located[0];
     if (active) map.panTo(new T.LngLat(active.lng as number, active.lat as number));
-  }, [status, fields, activeFieldId, onSelect]);
+  }, [status, located, activeFieldId, onSelect]);
 
   if (status === 'error') {
     return (

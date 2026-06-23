@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Bell, Shield, Key, MapPin, Database, ChevronRight, User, KeyRound, Check } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Bell, Shield, Database, User, KeyRound, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Settings() {
@@ -19,7 +19,7 @@ export default function Settings() {
   useEffect(() => {
     const saved = localStorage.getItem('agri_settings_profile');
     if (saved) {
-      try { setProfile(JSON.parse(saved)); } catch (e) {}
+      try { setProfile(JSON.parse(saved)); } catch { /* 非关键异步解析，静默 */ }
     }
   }, []);
 

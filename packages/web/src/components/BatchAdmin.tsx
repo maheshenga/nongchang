@@ -2,6 +2,7 @@ import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printe
 import { useState, useMemo, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
+import { showToast } from '../hooks/useToast';
 import { listBatches, createBatch, getBatchLifecycle, deleteBatch, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
 import { generateCodes, listCodes, type TraceCode } from '../api/trace';
@@ -62,7 +63,7 @@ function toViewBatch(b: Batch): ViewBatch {
 
 export default function BatchAdmin() {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches);
-  const batches: ViewBatch[] = (rawBatches ?? []).map(toViewBatch);
+  const batches: ViewBatch[] = useMemo(() => (rawBatches ?? []).map(toViewBatch), [rawBatches]);
   const { data: fields } = useApi(listFields);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
@@ -120,7 +121,6 @@ export default function BatchAdmin() {
   
   // Custom layout config
   const [labelPaddingX, setLabelPaddingX] = useState<number>(16);
-  const [labelPaddingY, setLabelPaddingY] = useState<number>(16);
   const [labelSpacing, setLabelSpacing] = useState<number>(4);
   const [showAntiFakeLogo, setShowAntiFakeLogo] = useState<boolean>(true);
   
@@ -203,30 +203,27 @@ export default function BatchAdmin() {
       format,
       onConfirm: () => {
         setPendingAction(null);
-        if (format === 'excel') {
-          const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
-          const rows = targets.map(b => [
-            b.code, b.type, b.date, b.house, b.owner, b.stage,
-            b.generated, b.scanTotal, b.inputCost, b.laborCost, b.sellPrice,
-            marginText(b.inputCost, b.laborCost, b.sellPrice),
-          ]);
-          downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
-          showToast(`已导出 ${targets.length} 个批次的 Excel 数据报表`);
-        } else {
-          // PDF:走浏览器打印(用户可另存为 PDF)。
-          window.print();
+        setIsExporting(format);
+        try {
+          if (format === 'excel') {
+            const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
+            const rows = targets.map(b => [
+              b.code, b.type, b.date, b.house, b.owner, b.stage,
+              b.generated, b.scanTotal, b.inputCost, b.laborCost, b.sellPrice,
+              marginText(b.inputCost, b.laborCost, b.sellPrice),
+            ]);
+            downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
+            showToast(`已导出 ${targets.length} 个批次的 Excel 数据报表`);
+          } else {
+            // PDF:走浏览器打印(用户可另存为 PDF)。
+            window.print();
+          }
+        } finally {
+          setIsExporting(null);
         }
       },
     });
   };
-
-  const [toastMessage, setToastMessage] = useState('');
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
-  };
-
   const handleExportBatchReport = (id: string) => {
     const batch = batches.find(b => b.id === id);
     setPendingAction({
@@ -979,7 +976,7 @@ export default function BatchAdmin() {
       {/* Profit Analysis Plugin Modal */}
       {/* Compliance Scan Report Modal */}
       {showComplianceReport && (
-         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+         <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="合规探针">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
                <div className="flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50 p-6 border-b border-emerald-100/50 relative overflow-hidden">
                   <ShieldCheck className="absolute -left-4 -bottom-4 w-24 h-24 text-emerald-500/10 -rotate-12" />
@@ -1046,7 +1043,7 @@ export default function BatchAdmin() {
       )}
 
       {showProfitModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="删除确认">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-purple-100/50">
               <div className="p-6 border-b border-purple-100/50 bg-gradient-to-r from-purple-50 to-fuchsia-50 flex items-center justify-between relative overflow-hidden">
                  <TrendingUp className="absolute -right-4 -top-4 w-32 h-32 text-purple-500/5 rotate-12" />
@@ -1155,7 +1152,7 @@ export default function BatchAdmin() {
                  </button>
                  <button
                     onClick={() => pendingAction.onConfirm()}
-                    disabled={generating}
+                    disabled={generating || isExporting !== null || isExportingReport !== null}
                     className={`px-5 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-colors disabled:opacity-50 ${pendingAction.type === 'export' ? 'bg-indigo-600 hover:bg-indigo-700' : pendingAction.type === 'report' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                  >
                     {generating ? '生成中…' : `确认 ${pendingAction.type === 'generate' ? '生成' : '导出'}`}
@@ -1340,13 +1337,6 @@ export default function BatchAdmin() {
         </div>
       )}
 
-      {/* Action Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-8 fade-in duration-300 z-50">
-          <ShieldCheck className="w-5 h-5 text-indigo-400" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -1392,30 +1382,32 @@ function CreateBatchModal({
   };
 
   return (
-    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
+    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
+         role="dialog" aria-modal="true" aria-labelledby="createBatchTitle"
+         onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
       <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
-        <h3 className="font-bold text-slate-800 text-lg">新建批次</h3>
+        <h3 id="createBatchTitle" className="font-bold text-slate-800 text-lg">新建批次</h3>
         {fields.length === 0 && <p className="text-amber-600 text-sm">请先创建地块后再建批次。</p>}
-        <label className="block text-xs font-bold text-slate-500">所属地块
-          <select value={fieldId} onChange={(e) => setFieldId(e.target.value)} required
+        <label htmlFor="create-batch-field" className="block text-xs font-bold text-slate-500">所属地块
+          <select id="create-batch-field" value={fieldId} onChange={(e) => setFieldId(e.target.value)} required autoFocus
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
             {fields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </label>
-        <label className="block text-xs font-bold text-slate-500">批次号
-          <input value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required
+        <label htmlFor="create-batch-batchNo" className="block text-xs font-bold text-slate-500">批次号
+          <input id="create-batch-batchNo" value={batchNo} onChange={(e) => setBatchNo(e.target.value)} required
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </label>
-        <label className="block text-xs font-bold text-slate-500">品种
-          <input value={cropName} onChange={(e) => setCropName(e.target.value)} required
+        <label htmlFor="create-batch-cropName" className="block text-xs font-bold text-slate-500">品种
+          <input id="create-batch-cropName" value={cropName} onChange={(e) => setCropName(e.target.value)} required
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </label>
-        <label className="block text-xs font-bold text-slate-500">种植日期
-          <input type="date" value={plantDate} onChange={(e) => setPlantDate(e.target.value)} required
+        <label htmlFor="create-batch-plantDate" className="block text-xs font-bold text-slate-500">种植日期
+          <input id="create-batch-plantDate" type="date" value={plantDate} onChange={(e) => setPlantDate(e.target.value)} required
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </label>
-        <label className="block text-xs font-bold text-slate-500">预计收获
-          <input type="date" value={expectedHarvest} onChange={(e) => setExpectedHarvest(e.target.value)} required
+        <label htmlFor="create-batch-harvest" className="block text-xs font-bold text-slate-500">预计收获
+          <input id="create-batch-harvest" type="date" value={expectedHarvest} onChange={(e) => setExpectedHarvest(e.target.value)} required
             className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </label>
         {err && <p className="text-rose-500 text-xs">{err}</p>}
