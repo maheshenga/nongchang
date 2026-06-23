@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   loginSchema, refreshSchema, wechatLoginSchema, wechatRegisterSchema,
   updateMeSchema, changePasswordSchema,
@@ -9,23 +10,30 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
 
+// 凭据类端点(登录/微信登录/注册)的防撞库限流:每 IP 60s 内最多 10 次。
+// 测试环境放到极高阈值,避免 e2e 中跨文件大量登录误触限流。
+const CREDENTIAL_LIMIT = process.env.NODE_ENV === 'test' ? 100_000 : 10;
+
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
   @Post('login')
   login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto) {
     return this.auth.login(dto);
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
   @Post('wechat')
   loginWechat(@Body(new ZodValidationPipe(wechatLoginSchema)) dto: WechatLoginDto) {
     return this.auth.loginWechat(dto);
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
   @Post('wechat/register')
   registerWechat(@Body(new ZodValidationPipe(wechatRegisterSchema)) dto: WechatRegisterDto) {
     return this.auth.registerWechat(dto);

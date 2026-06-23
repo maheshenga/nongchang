@@ -42,4 +42,11 @@ export function validateEnv(): void {
   if (!process.env.APP_ENCRYPTION_KEY) {
     throw new Error('[启动校验] 缺少 APP_ENCRYPTION_KEY(用于加密第三方凭据)');
   }
+
+  // 免支付兜底入账(ALLOW_MANUAL_PAY=true)会绕过真实支付渠道直接给账户充值,
+  // 仅供本地联调。生产环境一旦误置为 true,任意 agent_admin/merchant 即可给自己白送额度,
+  // 故在此把"生产禁用"从注释约定升级为启动期硬熔断。
+  if (isProd && process.env.ALLOW_MANUAL_PAY === 'true') {
+    throw new Error('[启动校验] 生产环境禁止开启 ALLOW_MANUAL_PAY(免支付兜底入账会绕过真实支付),请置空或设为 false');
+  }
 }

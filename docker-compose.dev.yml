@@ -5,7 +5,7 @@
 #   清库: docker compose -f docker-compose.dev.yml down -v
 #
 # 连接串(供 packages/backend/.env 的 DATABASE_URL):
-#   postgresql://nongchang:nongchang@localhost:5432/nongchang?schema=public
+#   postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
 #
 # pgAdmin 管理界面: http://localhost:5050
 #   登录邮箱: admin@admin.com   密码: admin
@@ -21,7 +21,9 @@ services:
       POSTGRES_PASSWORD: nongchang
       POSTGRES_DB: nongchang
     ports:
-      - "5432:5432"
+      # 宿主 5432 被 WSL 内的另一个 Postgres(经 wslrelay 占用 127.0.0.1/::1)抢占,
+      # localhost 会解析到那个库导致认证失败;故容器映射到宿主 5544 规避冲突。
+      - "5544:5432"
     volumes:
       - nongchang_pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ClsModule } from 'nestjs-cls';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -34,6 +35,15 @@ import { RolesGuard } from './common/guards/roles.guard';
     // read JWT secrets from .env at runtime.
     ConfigModule.forRoot({ isGlobal: true }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
+    // 全局限流:默认每 IP 60s 内最多 120 次请求,挡撞库/刷量/低成本 DoS。
+    // 测试环境(NODE_ENV=test)放到极高阈值,避免 e2e 中密集请求误触限流导致脆弱失败。
+    // 单端点更严的限制(如登录、公开扫码)由控制器上的 @Throttle 覆盖。
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: process.env.NODE_ENV === 'test' ? 100_000 : 120,
+      },
+    ]),
     PrismaModule,
     AuthModule,
     AgentModule,
@@ -59,6 +69,8 @@ import { RolesGuard } from './common/guards/roles.guard';
   ],
   providers: [
     ScopeService,
+    // ThrottlerGuard 在认证守卫之前执行,使匿名端点(登录/公开扫码)也受限流保护。
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
