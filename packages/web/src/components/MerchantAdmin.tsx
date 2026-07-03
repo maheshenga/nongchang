@@ -5,6 +5,11 @@ import { Crop } from '../types';
 import { useApi } from '../hooks/useApi';
 import { listBatches, type Batch } from '../api/batches';
 import { generateCodes } from '../api/trace';
+import type { AppTab } from '../navigation';
+
+interface MerchantAdminProps {
+  onNavigate?: (tab: AppTab) => void;
+}
 
 function toCrop(b: Batch): Crop {
   return {
@@ -18,7 +23,9 @@ function toCrop(b: Batch): Crop {
   };
 }
 
-export default function MerchantAdmin() {
+export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
+  void onNavigate;
+
   const { data: rawBatches, loading, error, reload } = useApi(listBatches);
   const crops: Crop[] = (rawBatches ?? []).map(toCrop);
   const [selectedCropIds, setSelectedCropIds] = useState<Set<string>>(new Set());

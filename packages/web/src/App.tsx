@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { QrCode, Bell, Sparkles, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import AppLogin from './components/AppLogin';
@@ -6,9 +6,7 @@ import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
 
-type MerchantAdminProps = { onNavigate: (tab: AppTab) => void };
-
-const MerchantAdmin = lazy(() => import('./components/MerchantAdmin')) as LazyExoticComponent<ComponentType<MerchantAdminProps>>;
+const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
 const FarmRecords = lazy(() => import('./components/FarmRecords'));
 const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));

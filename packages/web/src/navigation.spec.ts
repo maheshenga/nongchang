@@ -23,5 +23,6 @@ describe('production navigation', () => {
     expect(isDemoTab('warehouse')).toBe(true);
     expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('fields');
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
+    expect(firstAllowedTab('agent_admin', 'fields')).toBe('merchantFiles');
   });
 });
