@@ -4,7 +4,7 @@ import type { UserGroupView, UserGroupInput } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
 import { listUserGroups, createUserGroup, updateUserGroup, deleteUserGroup } from '../api/user-group';
 
-// 与后端 permissions.ts 保持一致的权限点
+// 保存给后续精细权限上线使用；当前接口鉴权仍只按角色执行。
 const PERMISSION_OPTIONS: { value: string; label: string }[] = [
   { value: 'record:create', label: '创建农事记录' },
   { value: 'record:view', label: '查看农事记录' },
@@ -77,13 +77,13 @@ export default function UserGroups() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-slate-800">
           <div className="p-1.5 bg-violet-100 text-violet-600 rounded-lg"><Users className="w-4 h-4" /></div>
-          <h2 className="font-bold text-base">用户组与权限</h2>
+          <h2 className="font-bold text-base">用户分组</h2>
         </div>
         <button onClick={openCreate} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">
           <Plus className="w-4 h-4" /> 新建用户组
         </button>
       </div>
-      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。权限为叠加式:管理员不受限,普通用户按组内权限放行。</p>
+      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。当前系统仍以角色作为接口鉴权依据；下方权限备注暂不参与接口放行，仅作为后续精细权限上线前的分组元数据。</p>
 
       {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
       {error && (
@@ -105,7 +105,7 @@ export default function UserGroups() {
                 <tr>
                   <th className="text-left px-5 py-3 font-bold">名称</th>
                   <th className="text-left px-5 py-3 font-bold">默认组</th>
-                  <th className="text-left px-5 py-3 font-bold">权限</th>
+                  <th className="text-left px-5 py-3 font-bold">权限备注</th>
                   <th className="text-right px-5 py-3 font-bold">操作</th>
                 </tr>
               </thead>
@@ -114,7 +114,7 @@ export default function UserGroups() {
                   <tr key={g.id} className="hover:bg-slate-50/50">
                     <td className="px-5 py-3 font-bold text-slate-700">{g.name}</td>
                     <td className="px-5 py-3">{g.isDefault ? <span className="text-emerald-600 font-bold">是</span> : <span className="text-slate-400">—</span>}</td>
-                    <td className="px-5 py-3 text-slate-500">{g.permissions.length ? g.permissions.length + ' 项' : '无'}</td>
+                    <td className="px-5 py-3 text-slate-500">{g.permissions.length ? g.permissions.length + ' 项' : '未备注'}</td>
                     <td className="px-5 py-3 text-right space-x-3">
                       <button onClick={() => openEdit(g)} className="text-emerald-600 hover:text-emerald-700 font-bold">编辑</button>
                       <button onClick={() => void onDelete(g)} className="text-rose-500 hover:text-rose-600 font-bold inline-flex items-center gap-1">
@@ -139,7 +139,7 @@ export default function UserGroups() {
             <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">名称</label>
-                <input className={inputCls} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="如:记录员" required />
+                <input aria-label="名称" className={inputCls} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="如:记录员" required />
               </div>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={edit.isDefault} onChange={(e) => setEdit({ ...edit, isDefault: e.target.checked })}
@@ -147,7 +147,7 @@ export default function UserGroups() {
                 <span className="text-sm text-slate-700 font-bold">设为默认组(微信新用户进入此组)</span>
               </label>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-2">权限点</label>
+                <label className="block text-xs font-bold text-slate-600 mb-2">权限备注（暂不参与接口鉴权）</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {PERMISSION_OPTIONS.map((p) => (
                     <label key={p.value} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 rounded-lg px-3 py-2">
