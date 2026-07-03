@@ -1,14 +1,14 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { QrCode, Layers, FileSpreadsheet, Truck, Bell, Sparkles, Map, Settings as SettingsIcon, Users, Store, LogOut, Plug, UserCog, LayoutTemplate, UserCheck, Sprout, Wallet } from 'lucide-react';
+import { useState, useEffect, lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react';
+import { QrCode, Bell, Sparkles, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
+import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
 
-const Dashboard = lazy(() => import('./components/Dashboard'));
-const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
-const MobileView = lazy(() => import('./components/MobileView'));
-const SystemAdmin = lazy(() => import('./components/SystemAdmin'));
+type MerchantAdminProps = { onNavigate: (tab: AppTab) => void };
+
+const MerchantAdmin = lazy(() => import('./components/MerchantAdmin')) as LazyExoticComponent<ComponentType<MerchantAdminProps>>;
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
 const FarmRecords = lazy(() => import('./components/FarmRecords'));
 const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));
@@ -42,18 +42,13 @@ const ViewSkeleton = () => (
   </div>
 );
 
-type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin';
-
-type NavItem = { id: string; label: string; icon: any };
-type NavCategory = { category: string; items: NavItem[] };
-
 export default function App() {
   const { user, profile, isAuthenticated, logout } = useAuth();
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'fields' | 'merchant' | 'batches' | 'records' | 'mobile' | 'warehouse' | 'logistics' | 'settings' | 'agents' | 'merchantFiles' | 'aiProviders' | 'aiOssSettings' | 'integrations' | 'userGroups' | 'pendingUsers' | 'quickTemplates' | 'aiAssistant' | 'phenology' | 'billing'>('fields');
-  const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<AppTab>('fields');
+  const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
@@ -106,98 +101,16 @@ export default function App() {
     setActiveTab('fields');
   };
 
-  // Define nav items for each role
-  const SYSTEM_ADMIN_NAV: NavCategory[] = [
-    {
-      category: '平台组织管理',
-      items: [
-        { id: 'agents', label: '代理商管理', icon: Users },
-        { id: 'merchantFiles', label: '商户管理与档案', icon: Store },
-      ]
-    },
-    {
-      category: '生产与供应链',
-      items: [
-        { id: 'fields', label: '数字地块与 IoT', icon: Map },
-        { id: 'records', label: '农事实操记录', icon: FileSpreadsheet },
-        { id: 'phenology', label: '标准物候模型', icon: Sprout },
-        { id: 'batches', label: '全域批次追踪', icon: Layers },
-        { id: 'logistics', label: '农资投入品管理', icon: Truck },
-      ]
-    },
-    {
-      category: '系统',
-      items: [
-        { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
-        { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
-        { id: 'billing', label: '算力与额度', icon: Wallet },
-        { id: 'aiOssSettings', label: 'AI 与存储设置', icon: SettingsIcon },
-        { id: 'integrations', label: '第三方集成', icon: Plug },
-        { id: 'userGroups', label: '用户组与权限', icon: UserCog },
-        { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
-        { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
-        { id: 'settings', label: '系统设置', icon: SettingsIcon },
-      ]
-    }
-  ];
-
-  const AGENT_ADMIN_NAV: NavCategory[] = [
-    {
-      category: '代理商中心',
-      items: [
-        { id: 'merchantFiles', label: '旗下商家管理', icon: Store },
-      ]
-    },
-    {
-      category: '业务与系统',
-      items: [
-        { id: 'batches', label: '辖区批次追踪', icon: Layers },
-        { id: 'billing', label: '算力与额度', icon: Wallet },
-        { id: 'userGroups', label: '用户组与权限', icon: UserCog },
-        { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
-        { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
-        { id: 'settings', label: '代理商设置', icon: SettingsIcon },
-      ]
-    }
-  ];
-
-  const MERCHANT_ADMIN_NAV: NavCategory[] = [
-    {
-      category: '生产与档案',
-      items: [
-        { id: 'fields', label: '我的地块管理', icon: Map },
-        { id: 'merchant', label: '我的芍药档案', icon: QrCode },
-        { id: 'records', label: '农事实操', icon: FileSpreadsheet },
-        { id: 'batches', label: '我的批次记录', icon: Layers },
-      ]
-    },
-    {
-      category: '系统',
-      items: [
-        { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
-        { id: 'settings', label: '商家设置', icon: SettingsIcon },
-      ]
-    }
-  ];
-
-  const getNavItems = () => {
-    switch (systemRole) {
-      case 'system_admin': return SYSTEM_ADMIN_NAV;
-      case 'agent_admin': return AGENT_ADMIN_NAV;
-      case 'merchant_admin': return MERCHANT_ADMIN_NAV;
-      default: return SYSTEM_ADMIN_NAV;
-    }
-  };
-
-  const navItems = getNavItems();
+  const navRole = systemRole ?? 'system_admin';
+  const navItems = getNavItems(navRole);
 
   // 默认/兜底:若当前 activeTab 不在该角色导航内(如已下线的 dashboard),自动跳到首个可用页。
   useEffect(() => {
-    const allIds = navItems.flatMap((c) => c.items.map((i) => i.id));
-    if (allIds.length > 0 && !allIds.includes(activeTab)) {
-      setActiveTab(navItems[0].items[0].id as any);
+    const fallbackTab = firstAllowedTab(navRole, activeTab);
+    if (fallbackTab !== activeTab) {
+      setActiveTab(fallbackTab);
     }
-  }, [navItems, activeTab]);
+  }, [navRole, activeTab]);
 
   if (traceCode) {
     return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;
@@ -251,7 +164,7 @@ export default function App() {
                    return (
                      <button
                        key={item.id}
-                       onClick={() => setActiveTab(item.id as any)}
+                       onClick={() => setActiveTab(item.id)}
                        className={`w-full flex items-center gap-3 p-2.5 lg:px-4 lg:py-2.5 group-hover:px-4 group-hover:py-2.5 rounded-xl transition-all duration-200 text-sm font-medium relative overflow-hidden flex-nowrap
                          ${isActive 
                            ? 'text-white' 
@@ -340,14 +253,11 @@ export default function App() {
         <section className={`flex-1 overflow-auto relative ${isPresentationMode ? 'p-0' : 'p-4 md:p-8'}`}>
           <Suspense fallback={<ViewSkeleton />}>
             <div className="h-full relative">
-              {mountedTabs.has('dashboard') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'dashboard' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Dashboard /></div>}
               {mountedTabs.has('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
               {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
-              {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin /></div>}
+              {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
               {mountedTabs.has('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
               {mountedTabs.has('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
-              {mountedTabs.has('mobile') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'mobile' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MobileView /></div>}
-              {mountedTabs.has('warehouse') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'warehouse' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemAdmin /></div>}
               {mountedTabs.has('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
               {mountedTabs.has('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
               {mountedTabs.has('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
