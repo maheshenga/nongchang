@@ -33,8 +33,10 @@
 pnpm install
 pnpm build:shared
 pnpm build:backend
+psql "$DATABASE_URL" -f packages/backend/prisma/audit-data-consistency.sql
 pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 migrate dev
 ```
+`audit-data-consistency.sql` 应返回 0 行。若返回跨商家/跨租户脏数据或重复微信 appId,先备份并清洗数据,再执行迁移。
 可选:初始化演示数据:
 ```bash
 pnpm --filter @nongchang/backend prisma:seed

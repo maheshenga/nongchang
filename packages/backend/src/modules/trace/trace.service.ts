@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateTraceEventDto, ListQuery, Paginated } from '@nongchang/shared';
@@ -22,16 +22,20 @@ export class TraceService {
     const ref = { refType: 'trace.generate', refId: batchId };
     // 先扣额度(余额不足直接 403 短路);建码失败则退还,避免「扣了费但没生成码」。
     await this.billing.consume(user, 'CODE', count, ref);
+    const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
     try {
-      const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
-      await this.prisma.traceCode.createMany({
-        data: codes.map((code) => ({ tenantId: user.tenantId, batchId, code })),
+      await this.prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${batchId} FOR UPDATE`;
+        if (locked.length === 0) throw new NotFoundException('批次不存在');
+        await tx.traceCode.createMany({
+          data: codes.map((code) => ({ tenantId: user.tenantId, batchId, code })),
+        });
       });
-      return await this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, code: { in: codes } } });
     } catch (err) {
       await this.billing.refund(user, 'CODE', count, ref);
       throw err;
     }
+    return this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, code: { in: codes } } });
   }
 
   async addEvent(user: AuthUser, dto: CreateTraceEventDto) {

@@ -118,10 +118,10 @@ export class IntegrationConfigService {
 
   // 微信登录:用 appId 全局反查租户 + 解密 secret(仅启用)
   async findTenantByWechatAppId(appId: string): Promise<WechatTenantLookup | null> {
-    const row = (await this.prisma.integrationConfig.findUnique({
-      where: { appId },
+    const row = (await this.prisma.integrationConfig.findFirst({
+      where: { appId, provider: 'wechat' },
     })) as IntegrationRow | null;
-    if (!row || row.provider !== 'wechat' || !row.enabled || !row.secretEnc) return null;
+    if (!row || !row.enabled || !row.secretEnc) return null;
     return { tenantId: row.tenantId, secret: this.enc.decrypt(row.secretEnc) };
   }
 

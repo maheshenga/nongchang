@@ -23,6 +23,8 @@ function make(batchInScope = true) {
       create: vi.fn().mockResolvedValue({ id: 'te1' }),
       findMany: vi.fn().mockResolvedValue([]),
     },
+    $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+    $transaction: vi.fn(async (fn: any) => fn(prisma)),
   };
   return { svc: new TraceService(prisma as any, new ScopeService(), billing as any), prisma, created, billing };
 }
@@ -99,6 +101,13 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
+  it('写入成功但后续读取失败时不应退款', async () => {
+    const h = make(true);
+    h.prisma.traceCode.findMany.mockRejectedValueOnce(new Error('read failed'));
+    await expect(h.svc.generateCodes(merchant, 'b1', 2)).rejects.toThrow('read failed');
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 2, { refType: 'trace.generate', refId: 'b1' });
+    expect(h.billing.refund).not.toHaveBeenCalled();
+  });
   it('batch 不在范围则不扣费', async () => {
     const h = make(false);
     await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
@@ -110,5 +119,24 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     await expect(h.svc.generateCodes(merchant, 'b1', 4)).rejects.toThrow('db down');
     expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
     expect(h.billing.refund).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
+  });
+
+  it('建码前在同一事务内锁定 batch 行', async () => {
+    const h = make(true);
+    const calls: string[] = [];
+    h.prisma.$queryRaw.mockImplementation(() => {
+      calls.push('lock-batch');
+      return Promise.resolve([{ id: 'b1' }]);
+    });
+    h.prisma.traceCode.createMany.mockImplementation(async ({ data }: any) => {
+      calls.push('create-codes');
+      h.created.push(...data);
+      return { count: data.length };
+    });
+
+    await h.svc.generateCodes(merchant, 'b1', 2);
+
+    expect(h.prisma.$transaction).toHaveBeenCalled();
+    expect(calls).toEqual(['lock-batch', 'create-codes']);
   });
 });

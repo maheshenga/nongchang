@@ -24,10 +24,15 @@ function makeService(overrides: any = {}) {
       count: async () => 0,
       ...(overrides.supplyIssue ?? {}),
     },
+    batch: {
+      findFirst: async () => ({ id: BATCH, ownerId: 'm1', tenantId: 't1' }),
+      ...(overrides.batch ?? {}),
+    },
     $transaction: async (arg: any) => {
       // 支持两种 Prisma $transaction 形式:回调式(fn(tx))与批量式(Promise.all(arr))。
       if (Array.isArray(arg)) return Promise.all(arg);
       return arg({
+        $queryRaw: async () => [{ id: BATCH }],
         supply: {
           updateMany: async (a: any) => {
             const lte = a.where.used.lte;
@@ -123,6 +128,35 @@ describe('SupplyService.issue', () => {
     const { svc } = makeService({ supply: { findFirst: async () => null } });
     await expect(svc.issue(merchant, 'other', { batchId: BATCH, amount: 1 }))
       .rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('batch 不属于 supply owner 时拒绝领用且不扣库存', async () => {
+    const { svc, state } = makeService({
+      supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1', tenantId: 't1', total: 100, used: 20 }) },
+      batch: { findFirst: async () => null },
+    });
+    state.total = 100; state.used = 20;
+    await expect(svc.issue(sysadmin, 's1', { batchId: BATCH, amount: 30 }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(state.used).toBe(20);
+  });
+  it('写入事务内先锁 batch 再更新 supply,避免与批次删除死锁', async () => {
+    const calls: string[] = [];
+    const { svc, state } = makeService({
+      supply: { findFirst: async () => ({ id: 's1', ownerId: 'm1', tenantId: 't1', total: 100, used: 20 }) },
+    });
+    state.total = 100; state.used = 20;
+    (svc as any).prisma.$transaction = async (fn: any) => fn({
+      $queryRaw: async () => { calls.push('lock-batch'); return [{ id: BATCH }]; },
+      supply: {
+        updateMany: async () => { calls.push('update-supply'); state.used += 30; return { count: 1 }; },
+        findUnique: async () => ({ total: state.total, used: state.used }),
+      },
+      supplyIssue: { create: async () => { calls.push('create-issue'); return {}; } },
+    });
+
+    await svc.issue(merchant, 's1', { batchId: BATCH, amount: 30 });
+
+    expect(calls).toEqual(['lock-batch', 'update-supply', 'create-issue']);
   });
 });
 

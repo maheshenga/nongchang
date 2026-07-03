@@ -22,7 +22,7 @@ describe('api/auth loginWechat', () => {
     expect(taro.login).not.toHaveBeenCalled();
   });
 
-  it('calls Taro.login, posts appId+code, stores token', async () => {
+  it('calls Taro.login, posts appId+code, stores token pair', async () => {
     const { taro, auth } = await loadFresh('wx_test_appid');
     taro.login.mockResolvedValue({ code: 'jscode_123' });
     taro.request.mockResolvedValue(okResp({ accessToken: 'at_1', refreshToken: 'rt_1' }));
@@ -34,6 +34,74 @@ describe('api/auth loginWechat', () => {
     expect(arg.method).toBe('POST');
     expect(arg.data).toEqual({ appId: 'wx_test_appid', code: 'jscode_123' });
     expect(taro.setStorageSync).toHaveBeenCalledWith('access_token', 'at_1');
+    expect(taro.setStorageSync).toHaveBeenCalledWith('refresh_token', 'rt_1');
+  });
+
+  it('password login stores token pair', async () => {
+    const { taro, auth } = await loadFresh('wx_test_appid');
+    taro.request.mockResolvedValue(okResp({ accessToken: 'at_2', refreshToken: 'rt_2' }));
+
+    await auth.login('DEMO', 'merchantA', 'password123');
+
+    const arg = taro.request.mock.calls[0][0];
+    expect(arg.url).toMatch(/\/auth\/login$/);
+    expect(arg.data).toEqual({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    expect(taro.setStorageSync).toHaveBeenCalledWith('access_token', 'at_2');
+    expect(taro.setStorageSync).toHaveBeenCalledWith('refresh_token', 'rt_2');
+  });
+
+  it('password login 401 does not refresh a stale previous session', async () => {
+    const { taro, auth } = await loadFresh('wx_test_appid');
+    taro.getStorageSync.mockImplementation((key: string) => (
+      key === 'access_token' ? 'old-access' : key === 'refresh_token' ? 'old-refresh' : ''
+    ));
+    taro.request.mockResolvedValueOnce({
+      statusCode: 401,
+      data: { message: '账号或密码错误' },
+    });
+
+    await expect(auth.login('DEMO', 'bad', 'wrong')).rejects.toThrow('账号或密码错误');
+
+    expect(taro.request).toHaveBeenCalledTimes(1);
+    const arg = taro.request.mock.calls[0][0];
+    expect(arg.url).toMatch(/\/auth\/login$/);
+    expect(arg.header.Authorization).toBeUndefined();
+    expect(taro.setStorageSync).not.toHaveBeenCalled();
+  });
+
+  it('wechat register 401 does not refresh a stale previous session', async () => {
+    const { taro, auth } = await loadFresh('wx_test_appid');
+    taro.getStorageSync.mockImplementation((key: string) => (
+      key === 'access_token' ? 'old-access' : key === 'refresh_token' ? 'old-refresh' : ''
+    ));
+    taro.login.mockResolvedValue({ code: 'jscode_register' });
+    taro.request.mockResolvedValueOnce({
+      statusCode: 401,
+      data: { message: '微信注册失败' },
+    });
+
+    await expect(auth.registerWechat('新用户', '13900001111')).rejects.toThrow('微信注册失败');
+
+    expect(taro.request).toHaveBeenCalledTimes(1);
+    const arg = taro.request.mock.calls[0][0];
+    expect(arg.url).toMatch(/\/auth\/wechat\/register$/);
+    expect(arg.header.Authorization).toBeUndefined();
+    expect(taro.setStorageSync).not.toHaveBeenCalled();
+  });
+
+  it('wechat register success clears any stale previous session', async () => {
+    const { taro, auth } = await loadFresh('wx_test_appid');
+    taro.getStorageSync.mockImplementation((key: string) => (
+      key === 'access_token' ? 'old-access' : key === 'refresh_token' ? 'old-refresh' : ''
+    ));
+    taro.login.mockResolvedValue({ code: 'jscode_register' });
+    taro.request.mockResolvedValueOnce(okResp({ status: 'pending' }));
+
+    await auth.registerWechat('新用户', '13900001111');
+
+    expect(taro.removeStorageSync).toHaveBeenCalledWith('access_token');
+    expect(taro.removeStorageSync).toHaveBeenCalledWith('refresh_token');
+    expect(taro.setStorageSync).not.toHaveBeenCalled();
   });
 
   it('throws when Taro.login returns no code', async () => {

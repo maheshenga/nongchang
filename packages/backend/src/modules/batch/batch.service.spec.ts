@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { BatchService } from './batch.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { Role, BatchStatus, type AuthUser, type CreateBatchDto } from '@nongchang/shared';
@@ -53,6 +54,25 @@ describe('BatchService.create #23', () => {
     const svc = new BatchService(prisma, new ScopeService());
     await expect(svc.create(merchant, dto)).rejects.toThrow();
     expect(created).toBeUndefined();
+  });
+
+  it('sysadmin:fieldId 在租户内但不属于目标 owner 时拒绝创建', async () => {
+    let created: any;
+    const fieldFindFirst = vi.fn(async ({ where }: any) => (
+      where.ownerId ? null : { id: 'f1', ownerId: 'otherOwner' }
+    ));
+    const prisma = {
+      batch: { create: async (a: any) => { created = a; return { id: 'b1', ...a.data }; } },
+      field: { findFirst: fieldFindFirst },
+      user: { findFirst: vi.fn().mockResolvedValue({ id: 'someoneElse' }), findMany: vi.fn().mockResolvedValue([]) },
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await expect(svc.create(sysadmin, dto)).rejects.toThrow();
+    expect(created).toBeUndefined();
+    expect(fieldFindFirst).toHaveBeenCalledWith({
+      where: { id: 'f1', tenantId: 't1', ownerId: 'someoneElse' },
+      select: { id: true },
+    });
   });
 });
 
@@ -246,7 +266,17 @@ describe('BatchService.lifecycle #全域批次追踪', () => {
 
 describe('BatchService.remove 删除批次', () => {
   it('无溯源码则连带删农事记录后删批次', async () => {
-    const tx = vi.fn().mockResolvedValue([{ count: 2 }, { id: 'b1' }]);
+    const txTraceCodeCount = vi.fn().mockResolvedValue(0);
+    const tx = vi.fn(async (fn: any) => fn({
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+      traceCode: { count: txTraceCodeCount, deleteMany: vi.fn() },
+      traceScan: { count: vi.fn(), deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      batch: { delete: vi.fn() },
+    }));
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
       farmRecord: { deleteMany: vi.fn() },
@@ -254,19 +284,30 @@ describe('BatchService.remove 删除批次', () => {
       traceEvent: { deleteMany: vi.fn() },
       traceCredential: { deleteMany: vi.fn() },
       traceCode: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
-      supplyIssue: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
       user: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: tx,
     } as any;
     const svc = new BatchService(prisma, new ScopeService());
     const out = await svc.remove(merchant, 'b1');
     expect(out).toEqual({ id: 'b1' });
-    expect(prisma.traceCode.count).toHaveBeenCalledWith({ where: { batchId: 'b1' } });
+    expect(prisma.traceCode.count).not.toHaveBeenCalled();
+    expect(txTraceCodeCount).toHaveBeenCalledWith({ where: { batchId: 'b1' } });
     expect(tx).toHaveBeenCalled();
   });
 
-  it('已签发溯源码且非强制则拒绝删除(不进事务)', async () => {
-    const tx = vi.fn();
+  it('已签发溯源码且非强制则在锁后拒绝删除', async () => {
+    const txDelete = vi.fn();
+    const tx = vi.fn(async (fn: any) => fn({
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+      traceCode: { count: vi.fn().mockResolvedValue(3), deleteMany: vi.fn() },
+      traceScan: { count: vi.fn(), deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn(), deleteMany: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      batch: { delete: txDelete },
+    }));
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
       farmRecord: { deleteMany: vi.fn() },
@@ -276,11 +317,21 @@ describe('BatchService.remove 删除批次', () => {
     } as any;
     const svc = new BatchService(prisma, new ScopeService());
     await expect(svc.remove(merchant, 'b1')).rejects.toThrow();
-    expect(tx).not.toHaveBeenCalled();
+    expect(tx).toHaveBeenCalled();
+    expect(txDelete).not.toHaveBeenCalled();
   });
 
   it('已签发溯源码但 force=true 且未被扫码则强制连带清理后删除', async () => {
-    const tx = vi.fn().mockResolvedValue([]);
+    const tx = vi.fn(async (fn: any) => fn({
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+      traceCode: { count: vi.fn().mockResolvedValue(5), deleteMany: vi.fn() },
+      traceScan: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      batch: { delete: vi.fn() },
+    }));
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
       farmRecord: { deleteMany: vi.fn() },
@@ -288,7 +339,7 @@ describe('BatchService.remove 删除批次', () => {
       traceEvent: { deleteMany: vi.fn() },
       traceCredential: { deleteMany: vi.fn() },
       traceCode: { count: vi.fn().mockResolvedValue(5), deleteMany: vi.fn() },
-      supplyIssue: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
       user: { findMany: vi.fn().mockResolvedValue([]) },
       $transaction: tx,
     } as any;
@@ -298,8 +349,128 @@ describe('BatchService.remove 删除批次', () => {
     expect(tx).toHaveBeenCalled();
   });
 
+  it('force 删除含农资领用的批次时先回滚 supply.used 再删台账', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const deleteMany = vi.fn();
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      traceScan: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      traceCode: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
+      supplyIssue: {
+        findMany: vi.fn().mockResolvedValue([
+          { supplyId: 's1', amount: 10 },
+          { supplyId: 's1', amount: 5 },
+          { supplyId: 's2', amount: 2 },
+        ]),
+        deleteMany,
+      },
+      supply: { updateMany },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(async (fn: any) => fn({
+        $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+        traceScan: { deleteMany: vi.fn() },
+        traceEvent: { deleteMany: vi.fn() },
+        traceCredential: { deleteMany: vi.fn() },
+        traceCode: { count: vi.fn().mockResolvedValue(0), deleteMany: vi.fn() },
+        supply: { updateMany },
+        supplyIssue: {
+          findMany: vi.fn().mockResolvedValue([
+            { supplyId: 's1', amount: 10 },
+            { supplyId: 's1', amount: 5 },
+            { supplyId: 's2', amount: 2 },
+          ]),
+          deleteMany,
+        },
+        farmRecord: { deleteMany: vi.fn() },
+        batch: { delete: vi.fn() },
+      })),
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await svc.remove(merchant, 'b1', true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 's1', used: { gte: expect.any(Prisma.Decimal) } },
+      data: { used: { decrement: expect.any(Prisma.Decimal) } },
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 's2', used: { gte: expect.any(Prisma.Decimal) } },
+      data: { used: { decrement: expect.any(Prisma.Decimal) } },
+    });
+    expect(deleteMany).toHaveBeenCalledWith({ where: { batchId: 'b1' } });
+  });
+
+  it('force 删除时在同一事务内锁定 batch 后再读取并删除农资领用台账', async () => {
+    const calls: string[] = [];
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }) },
+      traceCode: { count: vi.fn().mockResolvedValue(0) },
+      supplyIssue: {
+        findMany: vi.fn(() => { calls.push('outer-findMany'); return Promise.resolve([]); }),
+      },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(async (fn: any) => fn({
+        $queryRaw: vi.fn(() => { calls.push('lock-batch'); return Promise.resolve([{ id: 'b1' }]); }),
+        traceCode: {
+          count: vi.fn(() => { calls.push('tx-code-count'); return Promise.resolve(0); }),
+          deleteMany: vi.fn(),
+        },
+        supplyIssue: {
+          findMany: vi.fn(() => { calls.push('tx-findMany'); return Promise.resolve([]); }),
+          deleteMany: vi.fn(() => { calls.push('delete-issues'); return Promise.resolve({ count: 0 }); }),
+        },
+        traceScan: { deleteMany: vi.fn() },
+        traceEvent: { deleteMany: vi.fn() },
+        traceCredential: { deleteMany: vi.fn() },
+        farmRecord: { deleteMany: vi.fn() },
+        batch: { delete: vi.fn() },
+      })),
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await svc.remove(merchant, 'b1', true);
+    expect(calls).toEqual(['lock-batch', 'tx-code-count', 'tx-findMany', 'delete-issues']);
+    expect(prisma.supplyIssue.findMany).not.toHaveBeenCalled();
+  });
+
+  it('删除资格检查在锁定 batch 后的同一事务内完成', async () => {
+    const calls: string[] = [];
+    const prisma = {
+      batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }) },
+      traceCode: { count: vi.fn().mockResolvedValue(0) },
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(async (fn: any) => fn({
+        $queryRaw: vi.fn(() => { calls.push('lock-batch'); return Promise.resolve([{ id: 'b1' }]); }),
+        traceCode: {
+          count: vi.fn(() => { calls.push('tx-code-count'); return Promise.resolve(0); }),
+          deleteMany: vi.fn(),
+        },
+        traceScan: { count: vi.fn(), deleteMany: vi.fn() },
+        traceEvent: { deleteMany: vi.fn() },
+        traceCredential: { deleteMany: vi.fn() },
+        supplyIssue: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
+        farmRecord: { deleteMany: vi.fn() },
+        batch: { delete: vi.fn() },
+      })),
+    } as any;
+    const svc = new BatchService(prisma, new ScopeService());
+    await svc.remove(merchant, 'b1');
+    expect(prisma.traceCode.count).not.toHaveBeenCalled();
+    expect(calls).toEqual(['lock-batch', 'tx-code-count']);
+  });
+
   it('溯源码已被扫码流通则即使 force 也禁止硬删(防溯源死链)', async () => {
-    const tx = vi.fn();
+    const txDelete = vi.fn();
+    const tx = vi.fn(async (fn: any) => fn({
+      $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+      traceCode: { count: vi.fn().mockResolvedValue(5), deleteMany: vi.fn() },
+      traceScan: { count: vi.fn().mockResolvedValue(7), deleteMany: vi.fn() },
+      traceEvent: { deleteMany: vi.fn() },
+      traceCredential: { deleteMany: vi.fn() },
+      supplyIssue: { findMany: vi.fn(), deleteMany: vi.fn() },
+      farmRecord: { deleteMany: vi.fn() },
+      batch: { delete: txDelete },
+    }));
     const prisma = {
       batch: { findFirst: vi.fn().mockResolvedValue({ id: 'b1' }), delete: vi.fn() },
       traceScan: { count: vi.fn().mockResolvedValue(7), deleteMany: vi.fn() },
@@ -309,7 +480,8 @@ describe('BatchService.remove 删除批次', () => {
     } as any;
     const svc = new BatchService(prisma, new ScopeService());
     await expect(svc.remove(merchant, 'b1', true)).rejects.toThrow();
-    expect(tx).not.toHaveBeenCalled();
+    expect(tx).toHaveBeenCalled();
+    expect(txDelete).not.toHaveBeenCalled();
   });
 
   it('越权 → Forbidden 且不查码数', async () => {

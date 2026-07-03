@@ -17,11 +17,19 @@ function makeService(overrides: any = {}) {
   };
   const supplyIssue = { aggregate: async () => ({ _sum: { amount: overrides.quota ?? 0 } }) };
   const prisma = {
-    batch: { findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }) },
+    batch: { findFirst: async ({ where }: any = {}) => {
+      if (overrides.batchScoped === false) return null;
+      if (where?.fieldId && overrides.batchFieldMatches === false) return null;
+      return { id: 'b1', ownerId: 'm1', fieldId: FIELD };
+    } },
     field: { findFirst: async () => (overrides.fieldScoped === false ? null : { id: 'f1' }) },
     farmRecord,
     supplyIssue,
-    supply: { findFirst: async () => (overrides.supplyScoped === false ? null : { id: 'sup1' }) },
+    supply: { findFirst: async ({ where }: any = {}) => {
+      if (overrides.supplyScoped === false) return null;
+      if (where?.ownerId && overrides.supplyOwnerMatches === false) return null;
+      return { id: 'sup1', ownerId: 'm1' };
+    } },
     // 核销路径用事务 + FOR UPDATE 行锁;tx 复用同一组 mock 表。
     $queryRaw: async () => [{ id: 'sup1' }],
     $transaction: async (fn: any) => fn({ farmRecord, supplyIssue, $queryRaw: async () => [{ id: 'sup1' }] }),
@@ -56,6 +64,12 @@ describe('FarmRecordService.create 核销', () => {
     await expect(h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 }))
       .rejects.toBeInstanceOf(ForbiddenException);
   });
+  it('supply 在作用域内但不属于 batch owner 时拒绝核销', async () => {
+    const h = makeService({ quota: 100, consumed: 0, supplyOwnerMatches: false });
+    await expect(h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.created).toBeUndefined();
+  });
   it('batch 不在作用域内:抛 Forbidden(不创建)', async () => {
     const h = makeService({ batchScoped: false });
     await expect(h.svc.create(merchant, { ...base })).rejects.toBeInstanceOf(ForbiddenException);
@@ -65,6 +79,31 @@ describe('FarmRecordService.create 核销', () => {
     const h = makeService({ fieldScoped: false });
     await expect(h.svc.create(merchant, { ...base })).rejects.toBeInstanceOf(ForbiddenException);
     expect(h.created).toBeUndefined();
+  });
+  it('field 在作用域内但不属于 batch 时拒绝创建', async () => {
+    const h = makeService({ batchFieldMatches: false });
+    await expect(h.svc.create(merchant, { ...base })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(h.created).toBeUndefined();
+  });
+  it('带 supply 核销时在事务内先锁 batch 再锁 supply,避免与批次删除死锁', async () => {
+    const calls: string[] = [];
+    const h = makeService({ quota: 100, consumed: 0 });
+    (h.svc as any).prisma.$transaction = async (fn: any) => fn({
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        const sql = String(strings[0]);
+        calls.push(sql.includes('batches') ? 'lock-batch' : 'lock-supply');
+        return [{ id: sql.includes('batches') ? BATCH : 'sup1' }];
+      },
+      supplyIssue: { aggregate: async () => ({ _sum: { amount: 100 } }) },
+      farmRecord: {
+        aggregate: async () => ({ _sum: { supplyAmount: 0 } }),
+        create: async (a: any) => { calls.push('create-record'); return { id: 'fr1', ...a.data }; },
+      },
+    });
+
+    await h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 });
+
+    expect(calls).toEqual(['lock-batch', 'lock-supply', 'create-record']);
   });
 });
 

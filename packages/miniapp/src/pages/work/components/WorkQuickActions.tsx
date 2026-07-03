@@ -43,7 +43,7 @@ function WorkQuickActions({ templates, aiBalance, onOpenAi, onOpenForm }: Props)
         <Icon name="camera" color="#059669" size={28} />
         <Text className="work__quick-text">拍照诊断</Text>
       </View>
-      <View className="work__quick-item" onClick={() => onOpenForm(null)}>
+      <View className="work__quick-item" onClick={() => Taro.showToast({ title: '请在下方填写农事记录', icon: 'none' })}>
         <Icon name="plus" color="#0ea5e9" size={28} />
         <Text className="work__quick-text">手写农事</Text>
       </View>

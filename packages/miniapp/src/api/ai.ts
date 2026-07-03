@@ -1,6 +1,4 @@
-import Taro from '@tarojs/taro';
-import { request, BASE_URL } from './request';
-import { getToken } from '../store/auth';
+import { request, uploadMultipart } from './request';
 import type { AiChatResponse, AiDiagnoseResponse, AiTranscribeResponse, AiAdviceInput } from '@nongchang/shared';
 
 export async function aiChat(message: string): Promise<string> {
@@ -26,13 +24,7 @@ export async function aiDiagnose(imageUrl: string, note?: string): Promise<strin
 
 // 上传录音文件到后端转写(走 Taro.uploadFile,multipart)。
 export async function transcribeVoice(filePath: string): Promise<string> {
-  const token = getToken();
-  const res = await Taro.uploadFile({
-    url: `${BASE_URL}/ai/transcribe`,
-    filePath,
-    name: 'file',
-    header: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await uploadMultipart('/ai/transcribe', filePath);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     const msg = (() => {
       try { return (JSON.parse(res.data) as { message?: string }).message; } catch { return undefined; }

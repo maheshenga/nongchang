@@ -61,7 +61,13 @@ export class SupplyService {
 
   async issue(user: AuthUser, id: string, input: IssueSupplyInput): Promise<SupplyIssueResponse> {
     const sup = await this.scopedSupply(user, id);
+    const batch = await this.prisma.batch.findFirst({
+      where: { id: input.batchId, tenantId: user.tenantId, ownerId: sup.ownerId },
+      select: { id: true },
+    });
+    if (!batch) throw new ForbiddenException('批次不属于该农资归属商家,拒绝领用');
     const result = await this.prisma.$transaction(async (tx: any) => {
+      await tx.$queryRaw`SELECT id FROM batches WHERE id = ${input.batchId} FOR UPDATE`;
       // 条件原子自增:仅当 used + amount <= total(即 used <= total - amount)才扣减,
       // 避免事务外读快照导致的 lost update 超卖。count===0 即超量熔断。
       const upd = await tx.supply.updateMany({

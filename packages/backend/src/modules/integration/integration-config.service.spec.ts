@@ -21,6 +21,12 @@ function makePrisma() {
         }
         return null;
       },
+      findFirst: async ({ where }: any) => (
+        rows.find(r =>
+          (where.appId === undefined || r.appId === where.appId) &&
+          (where.provider === undefined || r.provider === where.provider)
+        ) ?? null
+      ),
       upsert: async ({ where, create, update }: any) => {
         const idx = rows.findIndex(r => r.tenantId === where.tenantId_provider.tenantId && r.provider === where.tenantId_provider.provider);
         if (idx >= 0) { rows[idx] = { ...rows[idx], ...update }; return rows[idx]; }
@@ -71,6 +77,13 @@ describe('IntegrationConfigService', () => {
     const r = await svc.findTenantByWechatAppId('wxAPP');
     expect(r?.tenantId).toBe('t1');
     expect(r?.secret).toBe('SECRET1234');
+  });
+
+  it('findTenantByWechatAppId 只匹配微信 provider,不被同 appId 的其他 provider 挡住', async () => {
+    prisma.rows.push({ tenantId: 't2', provider: 'tianditu', appId: 'shared-app', enabled: true });
+    await svc.upsertWechat(user, { appId: 'shared-app', secret: 'SECRET1234', enabled: true });
+    const r = await svc.findTenantByWechatAppId('shared-app');
+    expect(r).toEqual({ tenantId: 't1', secret: 'SECRET1234' });
   });
 
   it('findTenantByWechatAppId 未启用返回 null', async () => {

@@ -304,9 +304,11 @@ model IntegrationConfig {
 
   // 每租户每类型一条 → upsert
   @@unique([tenantId, provider])
-  // 微信 appId 全局唯一:微信登录时用 appId 反查租户(匿名请求定位锚点)
-  @@unique([appId])
+  // 微信 appId 全局唯一由 partial unique index 约束:
+  // 见迁移 20260703223000_wechat_appid_partial_unique。
+  // 非微信 provider 允许复用 app_id/key,避免天地图/支付宝配置被全局唯一误伤。
   @@index([tenantId])
+  @@index([provider, appId])
   @@map("integration_configs")
 }
 

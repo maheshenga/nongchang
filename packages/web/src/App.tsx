@@ -48,7 +48,7 @@ type NavItem = { id: string; label: string; icon: any };
 type NavCategory = { category: string; items: NavItem[] };
 
 export default function App() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, profile, isAuthenticated, logout } = useAuth();
   const systemRole: SystemRole | null = user
     ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
     : null;
@@ -318,7 +318,7 @@ export default function App() {
             <div onClick={() => setProfileOpen(true)} title="个人账号设置" className="flex items-center gap-3 cursor-pointer group">
               <div className="flex flex-col items-end">
                 <span className="text-sm font-bold text-slate-700 group-hover:text-emerald-600 transition-colors">
-                  {systemRole === 'system_admin' ? '李总管' : systemRole === 'agent_admin' ? '西南大区代理' : '大理基地主理人'}
+                  {profile?.displayName ?? '已登录用户'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                   {systemRole === 'system_admin' ? 'Super Admin' : systemRole === 'agent_admin' ? 'Agent' : 'Merchant'}

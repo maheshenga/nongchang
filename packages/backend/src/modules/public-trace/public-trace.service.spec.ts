@@ -4,7 +4,7 @@ import { PublicTraceService } from './public-trace.service';
 
 function makePrisma(overrides: any = {}) {
   const { coords, ...rest } = overrides;
-  return {
+  const prisma: any = {
     traceCode: {
       findUnique: vi.fn().mockResolvedValue({ id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-X', scanCount: 4 }),
       update: vi.fn().mockResolvedValue({ scanCount: 5 }),
@@ -21,6 +21,7 @@ function makePrisma(overrides: any = {}) {
     agent: { findUnique: vi.fn().mockResolvedValue({ id: 'a1', region: '云南' }) },
     // 经纬度通过 ST_X/ST_Y 原生查询提取,默认无坐标。
     $queryRawUnsafe: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
+    $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
     traceEvent: {
       findMany: vi.fn().mockResolvedValue([
         { type: 'origin', title: '种苗', actor: '李', location: '大理', occurredAt: new Date('2023-04-12T09:30:00Z'), payload: { desc: 'x' } },
@@ -32,8 +33,11 @@ function makePrisma(overrides: any = {}) {
         { id: 'cr1', batchId: 'b1', type: 'certificate', title: '有机认证', issuer: '认证中心', serialNo: 'OC-1', issuedAt: new Date('2026-06-01T00:00:00Z'), fileUrl: 'https://oss/cert.pdf', createdAt: new Date() },
       ]),
     },
+    traceScan: { create: vi.fn().mockResolvedValue({ id: 'scan1' }) },
     ...rest,
-  } as any;
+  };
+  prisma.$transaction = rest.$transaction ?? vi.fn(async (fn: any) => fn(prisma));
+  return prisma;
 }
 
 describe('PublicTraceService.getByCode', () => {
@@ -131,5 +135,23 @@ describe('PublicTraceService.getByCode', () => {
     expect(res.tiandituKey).toBeNull();
     expect(res.batch.fieldLng).toBeNull();
     expect(prisma.integrationConfig?.findUnique).toBeUndefined();
+  });
+
+  it('记录扫码前先在事务内锁定 batch 行', async () => {
+    const calls: string[] = [];
+    const prisma = makePrisma({
+      $queryRaw: vi.fn(() => { calls.push('lock-batch'); return Promise.resolve([{ id: 'b1' }]); }),
+      traceCode: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-X', scanCount: 4 }),
+        update: vi.fn(() => { calls.push('update-code'); return Promise.resolve({ scanCount: 5 }); }),
+      },
+      traceScan: {
+        create: vi.fn(() => { calls.push('create-scan'); return Promise.resolve({ id: 'scan1' }); }),
+      },
+    });
+    const svc = new PublicTraceService(prisma);
+    await svc.getByCode('ORC-X', { ip: '127.0.0.1', userAgent: 'vitest' });
+    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(calls).toEqual(['lock-batch', 'update-code', 'create-scan']);
   });
 });

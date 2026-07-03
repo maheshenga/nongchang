@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { X, User, KeyRound, Loader2, CheckCircle2 } from 'lucide-react';
 import type { MeProfileView } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
 import { getMe, updateMe, changePassword } from '../api/auth';
+import { useAuth } from '../auth/auth-context';
 
 const ROLE_LABEL: Record<string, string> = {
   system_admin: '总管理员', agent_admin: '代理商', merchant: '商家',
@@ -13,8 +14,14 @@ const inputCls = 'mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-
 // 个人账号设置:任意角色自助查看资料、修改昵称/手机号、修改登录密码。
 export default function ProfileSettings({ onClose }: { onClose: () => void }) {
   const meApi = useApi(getMe);
-  const me: MeProfileView | null = meApi.data;
+  const { updateProfile } = useAuth();
+  const [localMe, setLocalMe] = useState<MeProfileView | null>(null);
+  const me: MeProfileView | null = localMe ?? meApi.data;
   const [tab, setTab] = useState<'profile' | 'password'>('profile');
+
+  useEffect(() => {
+    setLocalMe(meApi.data);
+  }, [meApi.data]);
 
   return (
     <div
@@ -42,14 +49,17 @@ export default function ProfileSettings({ onClose }: { onClose: () => void }) {
         {meApi.loading && <div className="flex items-center justify-center gap-2 py-8 text-slate-400 text-sm"><Loader2 className="w-4 h-4 animate-spin" /> 加载中…</div>}
         {meApi.error && <p className="text-rose-500 text-sm py-4">{meApi.error}</p>}
 
-        {me && tab === 'profile' && <ProfileForm me={me} onSaved={() => void meApi.reload()} />}
+        {me && tab === 'profile' && <ProfileForm me={me} onSaved={(updated) => {
+          setLocalMe(updated);
+          updateProfile(updated);
+        }} />}
         {me && tab === 'password' && <PasswordForm />}
       </div>
     </div>
   );
 }
 
-function ProfileForm({ me, onSaved }: { me: MeProfileView; onSaved: () => void }) {
+function ProfileForm({ me, onSaved }: { me: MeProfileView; onSaved: (me: MeProfileView) => void }) {
   const [displayName, setDisplayName] = useState(me.displayName);
   const [phone, setPhone] = useState(me.phone ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -62,9 +72,11 @@ function ProfileForm({ me, onSaved }: { me: MeProfileView; onSaved: () => void }
     if (displayName.trim().length < 2) { setErr('昵称至少 2 个字'); return; }
     setSubmitting(true);
     try {
-      await updateMe({ displayName: displayName.trim(), phone: phone.trim() || null });
+      const updated = await updateMe({ displayName: displayName.trim(), phone: phone.trim() || null });
+      setDisplayName(updated.displayName);
+      setPhone(updated.phone ?? '');
       setOk(true);
-      onSaved();
+      onSaved(updated);
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : '保存失败');
     } finally {

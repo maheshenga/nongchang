@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { Role, type AuthUser } from '@nongchang/shared';
@@ -13,6 +13,7 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
   const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
   const tx = {
     creditAccount: {
+      upsert: async () => ({ ...accountRow, ...state }),
       updateMany: async (a: any) => {
         const field = a.data.aiBalance ? 'aiBalance' : 'codeBalance';
         const op = a.data.aiBalance ?? a.data.codeBalance;
@@ -80,6 +81,12 @@ describe('BillingService.allocate', () => {
     };
     const tx: any = {
       creditAccount: {
+        upsert: async (a: any) => {
+          if (a.where.tenantId_ownerType_ownerId.ownerType === 'PLATFORM') {
+            return { id: 'accP', ownerType: 'PLATFORM', ownerId: 'PLATFORM', tenantId: 't1', ...fromState };
+          }
+          return { id: 'accA', ownerType: 'AGENT', ownerId: 'a1', tenantId: 't1', ...toState };
+        },
         updateMany: async (a: any) => {
           const acc = a.where.id === 'accP' ? fromState : toState;
           if (a.data.aiBalance?.decrement != null) {
@@ -117,6 +124,7 @@ describe('BillingService.summary', () => {
   it('返回当前用户账户余额', async () => {
     const prisma: any = {
       creditAccount: {
+        upsert: async () => ({ id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 }),
         findFirst: async () => ({ id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 }),
         findUnique: async () => ({ id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 }),
         create: async () => ({}),
@@ -126,6 +134,22 @@ describe('BillingService.summary', () => {
     const svc = new BillingService(prisma);
     const s = await svc.summary(merchant);
     expect(s).toEqual({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 5, codeBalance: 8 });
+  });
+
+  it('并发首次读取同一账户时不应因重复建账失败', async () => {
+    const account = { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1', aiBalance: 0, codeBalance: 0 };
+    const prisma: any = {
+      creditAccount: {
+        findFirst: async () => null,
+        findUnique: async () => account,
+        create: async () => { throw new Error('create should not be used'); },
+        upsert: vi.fn().mockResolvedValue(account),
+      },
+    };
+    const svc = new BillingService(prisma);
+    const [a, b] = await Promise.all([svc.summary(merchant), svc.summary(merchant)]);
+    expect(a).toEqual({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 0, codeBalance: 0 });
+    expect(b).toEqual({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 0, codeBalance: 0 });
   });
 });
 
@@ -298,7 +322,11 @@ describe('BillingService.payOrder', () => {
     };
     const prisma: any = {
       creditOrder: { findFirst: async () => ({ ...orderRow }) },
-      creditAccount: { findFirst: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }), create: async () => ({ id: 'acc1', ...state }) },
+      creditAccount: {
+        upsert: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }),
+        findFirst: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }),
+        create: async () => ({ id: 'acc1', ...state }),
+      },
       creditPlan: { findUnique: async () => null },
       $transaction: async (fn: any) => fn(tx),
     };
@@ -363,7 +391,11 @@ describe('BillingService.settleOrder 回调赢得竞态', () => {
       creditLedger: { create: async (a: any) => { ledgers.push(a.data); return a.data; } },
     };
     const prisma: any = {
-      creditAccount: { findFirst: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }), create: async () => ({ id: 'acc1', ...state }) },
+      creditAccount: {
+        upsert: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }),
+        findFirst: async () => ({ id: 'acc1', ownerType: orderRow.ownerType, ownerId: orderRow.ownerId, tenantId: 't1', ...state }),
+        create: async () => ({ id: 'acc1', ...state }),
+      },
       $transaction: async (fn: any) => fn(tx),
     };
     return { prisma, state, ledgers, orderRow };

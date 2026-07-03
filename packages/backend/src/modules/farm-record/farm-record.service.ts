@@ -16,6 +16,11 @@ export class FarmRecordService {
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
     await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
+    const batch = await this.prisma.batch.findFirst({
+      where: { id: dto.batchId, tenantId: user.tenantId, fieldId: dto.fieldId },
+      select: { id: true, ownerId: true },
+    });
+    if (!batch) throw new ForbiddenException('地块不属于该批次,拒绝创建农事记录');
     const data = {
       tenantId: user.tenantId, batchId: dto.batchId, fieldId: dto.fieldId,
       operatorId: user.userId, action: dto.action,
@@ -30,13 +35,15 @@ export class FarmRecordService {
       const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
       const sup = await this.prisma.supply.findFirst({
         where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
-        select: { id: true },
+        select: { id: true, ownerId: true },
       });
       if (!sup) throw new ForbiddenException('农资不在可操作范围内');
+      if (sup.ownerId !== batch.ownerId) throw new ForbiddenException('农资不属于该批次归属商家,拒绝核销');
       // 配额核销:读累计用量、判 110%、再写,三步必须原子。
       // 否则并发提交在"读"与"写"之间无锁(TOCTOU),可双双通过校验导致超额核销。
       // 用事务 + 对该 supply 行 FOR UPDATE 行锁串行化同一农资的并发核销。
       const created = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM batches WHERE id = ${dto.batchId} FOR UPDATE`;
         // 锁定 supply 行:并发核销同一农资的事务在此排队,保证后到者读到前者已提交的用量。
         await tx.$queryRaw`SELECT id FROM supplies WHERE id = ${dto.supplyId} FOR UPDATE`;
         const quotaAgg = await tx.supplyIssue.aggregate({

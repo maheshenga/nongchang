@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, BatchStatus, CreateBatchDto, ListQuery, Paginated } from '@nongchang/shared';
 import { isPaginated } from '@nongchang/shared';
@@ -26,6 +26,11 @@ export class BatchService {
     const ownerId = await this.scope.resolveOwnerId(this.prisma, user, dto.ownerId);
     // 校验 fieldId 归属:防止引用他人地块,避免公开溯源页泄露受害方地块名称与经纬度。
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
+    const field = await this.prisma.field.findFirst({
+      where: { id: dto.fieldId, tenantId: user.tenantId, ownerId },
+      select: { id: true },
+    });
+    if (!field) throw new ForbiddenException('地块不属于目标商家,拒绝创建批次');
     const created = await this.prisma.batch.create({
       data: {
         tenantId: user.tenantId, ownerId, fieldId: dto.fieldId,
@@ -109,25 +114,45 @@ export class BatchService {
    *  但只要任一溯源码已被扫描(进入公众流通),即使 force 也禁止硬删——否则实物上的码会变成 404 死链,破坏溯源可信度。 */
   async remove(user: AuthUser, id: string, force = false) {
     await this.scope.assertInScope(this.prisma, user, 'batch', id);
-    const codeCount = await this.prisma.traceCode.count({ where: { batchId: id } });
-    if (codeCount > 0 && !force) {
-      throw new BadRequestException('该批次已签发溯源码,不可删除');
-    }
-    if (codeCount > 0 && force) {
-      const scannedCount = await this.prisma.traceScan.count({ where: { batchId: id } });
-      if (scannedCount > 0) {
-        throw new BadRequestException('该批次的溯源码已被扫码流通,禁止硬删除(会造成实物溯源死链)');
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${id} FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('批次不存在');
+      const codeCount = await tx.traceCode.count({ where: { batchId: id } });
+      if (codeCount > 0 && !force) {
+        throw new BadRequestException('该批次已签发溯源码,不可删除');
       }
-    }
-    await this.prisma.$transaction([
-      this.prisma.traceScan.deleteMany({ where: { batchId: id } }),
-      this.prisma.traceEvent.deleteMany({ where: { batchId: id } }),
-      this.prisma.traceCredential.deleteMany({ where: { batchId: id } }),
-      this.prisma.traceCode.deleteMany({ where: { batchId: id } }),
-      this.prisma.supplyIssue.deleteMany({ where: { batchId: id } }),
-      this.prisma.farmRecord.deleteMany({ where: { batchId: id } }),
-      this.prisma.batch.delete({ where: { id } }),
-    ]);
+      if (codeCount > 0 && force) {
+        const scannedCount = await tx.traceScan.count({ where: { batchId: id } });
+        if (scannedCount > 0) {
+          throw new BadRequestException('该批次的溯源码已被扫码流通,禁止硬删除(会造成实物溯源死链)');
+        }
+      }
+      const issues = await tx.supplyIssue.findMany({
+        where: { batchId: id },
+        select: { supplyId: true, amount: true },
+      });
+      const restoreBySupply = new Map<string, Prisma.Decimal>();
+      for (const issue of issues as Array<{ supplyId: string; amount: Prisma.Decimal | number }>) {
+        restoreBySupply.set(
+          issue.supplyId,
+          (restoreBySupply.get(issue.supplyId) ?? new Prisma.Decimal(0)).plus(issue.amount),
+        );
+      }
+      for (const [supplyId, amount] of restoreBySupply) {
+        const upd = await tx.supply.updateMany({
+          where: { id: supplyId, used: { gte: amount } },
+          data: { used: { decrement: amount } },
+        });
+        if (upd.count === 0) throw new BadRequestException('农资库存台账异常,拒绝删除批次');
+      }
+      await tx.traceScan.deleteMany({ where: { batchId: id } });
+      await tx.traceEvent.deleteMany({ where: { batchId: id } });
+      await tx.traceCredential.deleteMany({ where: { batchId: id } });
+      await tx.traceCode.deleteMany({ where: { batchId: id } });
+      await tx.supplyIssue.deleteMany({ where: { batchId: id } });
+      await tx.farmRecord.deleteMany({ where: { batchId: id } });
+      await tx.batch.delete({ where: { id } });
+    });
     return { id };
   }
 

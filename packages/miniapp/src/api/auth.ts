@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 import { request } from './request';
-import { setToken } from '../store/auth';
+import { clearToken, setTokens } from '../store/auth';
 import { WX_APPID } from '../config/env';
 import type { TokenPair, MeProfileView } from '@nongchang/shared';
 
@@ -9,8 +9,9 @@ export async function login(tenantCode: string, username: string, password: stri
     url: '/auth/login',
     method: 'POST',
     data: { tenantCode, username, password },
+    auth: false,
   });
-  setToken(res.accessToken);
+  setTokens(res);
 }
 
 // 微信一键登录:wx.login 取 code → 后端用 appId 反查租户并 jscode2session 换 openid。
@@ -22,8 +23,9 @@ export async function loginWechat(): Promise<void> {
     url: '/auth/wechat',
     method: 'POST',
     data: { appId: WX_APPID, code },
+    auth: false,
   });
-  setToken(res.accessToken);
+  setTokens(res);
 }
 
 // 微信自助注册:微信授权取 code + 补全资料,提交后落 pending 待后台审核,不下发 token。
@@ -35,7 +37,9 @@ export async function registerWechat(displayName: string, phone?: string): Promi
     url: '/auth/wechat/register',
     method: 'POST',
     data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) },
+    auth: false,
   });
+  clearToken();
 }
 
 // ── 个人账号 ──

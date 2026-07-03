@@ -84,7 +84,8 @@ export default function Work() {
     : '基地 A区 · 白芍种植组';
   const balanceLow = !!summary && (summary.aiBalance < LOW_BALANCE || summary.codeBalance < LOW_BALANCE);
 
-  const handleOpenForm = useCallback((tpl: QuickTemplateView | undefined) => {
+  const handleOpenForm = useCallback((tpl: QuickTemplateView | null) => {
+    if (!tpl) return;
     formRef.current?.applyTemplate(tpl);
   }, []);
 

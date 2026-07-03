@@ -14,7 +14,7 @@ export class SupplyController {
     return this.svc.list(user, query);
   }
 
-  @Post() @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  @Post() @Roles(Role.MERCHANT)
   create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createSupplyInputSchema)) dto: CreateSupplyInput) {
     return this.svc.create(user, dto);
   }

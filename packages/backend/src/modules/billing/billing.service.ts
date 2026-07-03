@@ -31,9 +31,12 @@ export class BillingService {
 
   async ensureAccount(ownerType: CreditOwnerType, ownerId: string, tenantId: string) {
     // 必须带 tenantId:PLATFORM 账户用固定 ownerId='PLATFORM',若漏 tenantId 会命中其它租户的平台账户造成串账。
-    const found = await this.prisma.creditAccount.findFirst({ where: { tenantId, ownerType, ownerId } });
-    if (found) return found;
-    return this.prisma.creditAccount.create({ data: { ownerType, ownerId, tenantId } });
+    // 用原子 upsert 避免并发首触时先查后建的重复创建竞态。
+    return this.prisma.creditAccount.upsert({
+      where: { tenantId_ownerType_ownerId: { tenantId, ownerType, ownerId } },
+      create: { ownerType, ownerId, tenantId },
+      update: {},
+    });
   }
 
   // 原子条件递减 + 写流水。余额不足抛 Forbidden(硬熔断)。
