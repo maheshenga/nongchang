@@ -1,16 +1,22 @@
 import { PackageSearch, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Role } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
 import { listSupplies, createSupply, issueSupply, deleteSupply } from '../api/supply';
+import { listBatches } from '../api/batches';
+import { useAuth } from '../auth/auth-context';
 
 export default function LogisticsTracker() {
+  const { user } = useAuth();
+  const isMerchant = user?.role === Role.MERCHANT;
   const { data: supplies, loading: suppliesLoading, error: suppliesError, reload: reloadSupplies } = useApi(listSupplies);
+  const { data: batches, loading: batchesLoading, error: batchesError } = useApi(listBatches);
   const [showInboundModal, setShowInboundModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
 
   // Issue/registration form states
-  const [issuePayload, setIssuePayload] = useState({ supplyId: '', amount: 0, targetBatch: '' });
+  const [issuePayload, setIssuePayload] = useState({ supplyId: '', amount: 0, batchId: '' });
   const [inboundPayload, setInboundPayload] = useState({ name: '', amount: 0, unit: '箱' });
 
   const [toastMessage, setToastMessage] = useState('');
@@ -21,12 +27,13 @@ export default function LogisticsTracker() {
   };
 
   const handleIssueSubmit = async () => {
+    if (!isMerchant) return showToast('当前视图只读');
     if (!issuePayload.supplyId || issuePayload.amount <= 0) return showToast('请输入完整信息');
-    if (!issuePayload.targetBatch) return showToast('请填写关联批次号');
+    if (!issuePayload.batchId) return showToast('请选择关联批次');
     try {
-      await issueSupply(issuePayload.supplyId, { batchId: issuePayload.targetBatch, amount: issuePayload.amount });
+      await issueSupply(issuePayload.supplyId, { batchId: issuePayload.batchId, amount: issuePayload.amount });
       setShowOutboundModal(false);
-      setIssuePayload({ supplyId: '', amount: 0, targetBatch: '' });
+      setIssuePayload({ supplyId: '', amount: 0, batchId: '' });
       showToast('领用单下发成功');
       await reloadSupplies();
     } catch (e: any) {
@@ -35,6 +42,7 @@ export default function LogisticsTracker() {
   };
 
   const handleInboundSubmit = async () => {
+    if (!isMerchant) return showToast('当前视图只读');
     if (!inboundPayload.name || inboundPayload.amount <= 0) return showToast('请输入完整信息');
     try {
       await createSupply({ name: inboundPayload.name, unit: inboundPayload.unit, amount: inboundPayload.amount });
@@ -70,12 +78,18 @@ export default function LogisticsTracker() {
                 <p className="text-xs text-slate-500 mt-1">系统已将农事实操(扫码打卡)自动与此库存领用扣减关联对账,防止超量违规使用。</p>
              </div>
              <div className="flex gap-3">
-                <button onClick={() => setShowInboundModal(true)} className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-50 transition-all shadow-sm">
-                   入库登记
-                </button>
-                <button onClick={() => setShowOutboundModal(true)} className="flex items-center gap-1.5 bg-cyan-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-cyan-700 transition-all hover:-translate-y-0.5">
-                   <Plus className="w-4 h-4" /> 领用下达
-                </button>
+                {isMerchant ? (
+                  <>
+                    <button onClick={() => setShowInboundModal(true)} className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-50 transition-all shadow-sm">
+                       入库登记
+                    </button>
+                    <button onClick={() => setShowOutboundModal(true)} className="flex items-center gap-1.5 bg-cyan-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm hover:bg-cyan-700 transition-all hover:-translate-y-0.5">
+                       <Plus className="w-4 h-4" /> 领用下达
+                    </button>
+                  </>
+                ) : (
+                  <span className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-500 text-xs font-bold border border-slate-200">只读视图</span>
+                )}
              </div>
           </div>
 
@@ -129,22 +143,24 @@ export default function LogisticsTracker() {
                               <div className={`h-full rounded-full transition-all duration-1000 ${item.alert ? 'bg-red-500' : 'bg-cyan-500'}`} style={{ width: `${(item.used / item.total) * 100}%` }}></div>
                            </div>
                         </div>
-                        <button
-                          onClick={async () => {
-                            if (window.confirm('确认删除此农资记录吗?')) {
-                              try {
-                                await deleteSupply(item.id);
-                                showToast(`已删除农资档案:${item.name}`);
-                                await reloadSupplies();
-                              } catch (e: any) {
-                                showToast(e?.message || '删除失败');
+                        {isMerchant && (
+                          <button
+                            onClick={async () => {
+                              if (window.confirm('确认删除此农资记录吗?')) {
+                                try {
+                                  await deleteSupply(item.id);
+                                  showToast(`已删除农资档案:${item.name}`);
+                                  await reloadSupplies();
+                                } catch (e: any) {
+                                  showToast(e?.message || '删除失败');
+                                }
                               }
-                            }
-                          }}
-                          className="ml-4 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-[10px] font-bold transition-colors border border-red-200"
-                        >
-                          删除
-                        </button>
+                            }}
+                            className="ml-4 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-[10px] font-bold transition-colors border border-red-200"
+                          >
+                            删除
+                          </button>
+                        )}
                      </div>
                   </motion.div>
                ))}
@@ -201,8 +217,21 @@ export default function LogisticsTracker() {
                     </select>
                  </div>
                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1">关联溯源批次号 (自动对账校验)</label>
-                    <input type="text" value={issuePayload.targetBatch} onChange={(e) => setIssuePayload({...issuePayload, targetBatch: e.target.value})} className="w-full px-3 py-2 border rounded-lg text-sm font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="OB-2024-..." />
+                    <label className="block text-xs font-bold text-slate-500 mb-1">关联生产批次</label>
+                    <select
+                      value={issuePayload.batchId}
+                      onChange={(e) => setIssuePayload({...issuePayload, batchId: e.target.value})}
+                      disabled={batchesLoading}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                       <option value="">-- 请选择批次 --</option>
+                       {(batches ?? []).map(batch => (
+                         <option key={batch.id} value={batch.id}>
+                           {batch.batchNo} - {batch.cropName}{batch.ownerName ? ` / ${batch.ownerName}` : ''}
+                         </option>
+                       ))}
+                    </select>
+                    {batchesError && <p className="text-xs text-red-600 mt-1">批次加载失败:{batchesError}</p>}
                  </div>
                  <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1">本次下达/领用数量</label>
