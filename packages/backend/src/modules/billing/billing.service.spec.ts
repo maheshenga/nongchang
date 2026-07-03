@@ -31,7 +31,14 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
       findFirst: async () => ({ ...accountRow, ...state }),
       findUnique: async () => ({ ...accountRow, ...state }),
     },
-    creditLedger: { create: async (a: any) => { ledgers.push(a.data); return a.data; } },
+    creditLedger: {
+      findFirst: async (a: any) => ledgers.find((l) =>
+        l.accountId === a.where.accountId &&
+        l.reason === a.where.reason &&
+        l.idempotencyKey === a.where.idempotencyKey,
+      ) ?? null,
+      create: async (a: any) => { ledgers.push(a.data); return a.data; },
+    },
   };
   const prisma: any = {
     ...tx,
@@ -58,6 +65,18 @@ describe('BillingService.consume', () => {
     const { svc } = makeService({ aiBalance: 10 });
     const bad = { ...merchant, ownerId: null } as AuthUser;
     await expect(svc.consume(bad, 'AI', 1, {})).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('同一幂等键重复消费时不二次扣减', async () => {
+    const { svc, state, ledgers } = makeService({ aiBalance: 10 });
+    const ref = { refType: 'ai.chat', idempotencyKey: 'credit:t1:u3:ai.chat:1' } as any;
+
+    await svc.consume(merchant, 'AI', 3, ref);
+    await svc.consume(merchant, 'AI', 3, ref);
+
+    expect(state.aiBalance).toBe(7);
+    expect(ledgers).toHaveLength(1);
+    expect(ledgers[0]).toMatchObject({ reason: 'CONSUME', idempotencyKey: ref.idempotencyKey });
   });
 });
 

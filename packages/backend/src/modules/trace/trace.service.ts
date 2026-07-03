@@ -19,7 +19,11 @@ export class TraceService {
       throw new ForbiddenException(`生成数量须为 1~${MAX_CODES_PER_BATCH} 的整数`);
     }
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    const ref = { refType: 'trace.generate', refId: batchId };
+    const ref = {
+      refType: 'trace.generate',
+      refId: batchId,
+      idempotencyKey: `trace.generate:${user.tenantId}:${user.userId}:${batchId}:${count}`,
+    };
     // 先扣额度(余额不足直接 403 短路);建码失败则退还,避免「扣了费但没生成码」。
     await this.billing.consume(user, 'CODE', count, ref);
     const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);

@@ -93,7 +93,17 @@ describe('TraceService.generateCodes 扣费插桩', () => {
   it('生成成功后扣 CODE = count', async () => {
     const h = make(true);
     await h.svc.generateCodes(merchant, 'b1', 5);
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 5, { refType: 'trace.generate', refId: 'b1' });
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 5, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+  });
+  it('同一生码请求使用稳定幂等键', async () => {
+    const h = make(true);
+    await h.svc.generateCodes(merchant, 'b1', 5);
+    await h.svc.generateCodes(merchant, 'b1', 5);
+
+    const firstRef = h.billing.consume.mock.calls[0][3];
+    const secondRef = h.billing.consume.mock.calls[1][3];
+    expect(firstRef.idempotencyKey).toBe('trace.generate:t1:op1:b1:5');
+    expect(secondRef.idempotencyKey).toBe(firstRef.idempotencyKey);
   });
   it('余额不足则不创建码', async () => {
     const h = make(true);
@@ -105,7 +115,7 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     const h = make(true);
     h.prisma.traceCode.findMany.mockRejectedValueOnce(new Error('read failed'));
     await expect(h.svc.generateCodes(merchant, 'b1', 2)).rejects.toThrow('read failed');
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 2, { refType: 'trace.generate', refId: 'b1' });
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 2, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.refund).not.toHaveBeenCalled();
   });
   it('batch 不在范围则不扣费', async () => {
@@ -117,8 +127,8 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     const h = make(true);
     h.prisma.traceCode.createMany.mockRejectedValueOnce(new Error('db down'));
     await expect(h.svc.generateCodes(merchant, 'b1', 4)).rejects.toThrow('db down');
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
-    expect(h.billing.refund).toHaveBeenCalledWith(merchant, 'CODE', 4, { refType: 'trace.generate', refId: 'b1' });
+    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.refund).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
   });
 
   it('建码前在同一事务内锁定 batch 行', async () => {

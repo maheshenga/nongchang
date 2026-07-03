@@ -402,11 +402,13 @@ model CreditLedger {
   reason       LedgerReason
   refType      String?        @map("ref_type")
   refId        String?        @map("ref_id")
+  idempotencyKey String?      @map("idempotency_key")
   operatorId   String?        @map("operator_id")
   note         String?
   createdAt    DateTime       @default(now()) @map("created_at")
 
   @@index([accountId, createdAt])
+  @@unique([accountId, reason, idempotencyKey])
   @@map("credit_ledgers")
 }
 

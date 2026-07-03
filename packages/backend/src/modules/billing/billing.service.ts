@@ -9,7 +9,7 @@ import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
 
-interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string }
+interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
 
 @Injectable()
 export class BillingService {
@@ -45,6 +45,13 @@ export class BillingService {
     const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
     const field = BALANCE_FIELD[resource];
     return this.prisma.$transaction(async (tx) => {
+      if (ref.idempotencyKey) {
+        const existing = await tx.creditLedger.findFirst({
+          where: { accountId: acct.id, reason: 'CONSUME', idempotencyKey: ref.idempotencyKey },
+          select: { balanceAfter: true },
+        });
+        if (existing) return { balanceAfter: existing.balanceAfter };
+      }
       const upd = await tx.creditAccount.updateMany({
         where: { id: acct.id, [field]: { gte: amount } },
         data: { [field]: { decrement: amount } },
@@ -60,6 +67,7 @@ export class BillingService {
           accountId: acct.id, resource, delta: -amount, balanceAfter, reason: 'CONSUME',
           refType: ref.refType ?? null, refId: ref.refId ?? null,
           operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+          idempotencyKey: ref.idempotencyKey ?? null,
         },
       });
       return { balanceAfter };
