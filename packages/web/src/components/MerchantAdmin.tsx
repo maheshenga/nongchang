@@ -18,14 +18,12 @@ function toCrop(b: Batch): Crop {
     batchNo: b.batchNo,
     plantDate: b.plantDate.slice(0, 10),
     expectedHarvest: b.expectedHarvest.slice(0, 10),
-    qrCodesGenerated: 0,
+    qrCodesGenerated: b.codeCount,
     status: b.status as Crop['status'],
   };
 }
 
 export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
-  void onNavigate;
-
   const { data: rawBatches, loading, error, reload } = useApi(listBatches);
   const crops: Crop[] = (rawBatches ?? []).map(toCrop);
   const [selectedCropIds, setSelectedCropIds] = useState<Set<string>>(new Set());
@@ -74,6 +72,26 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
       );
       setCropCodes(Object.fromEntries(entries.filter(([, code]) => code)));
       setShowPrintPreview(true);
+    } catch (e) {
+      showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
+    } finally {
+      setGeneratingPrint(false);
+    }
+  };
+
+  const generateForActiveCrop = async () => {
+    if (!activeCrop) return;
+    if (!Number.isInteger(qrAmount) || qrAmount < 1 || qrAmount > 10000) {
+      showToast('赋码数量需为 1-10000 的整数');
+      return;
+    }
+    setGeneratingPrint(true);
+    try {
+      const codes = await generateCodes(activeCrop.id, qrAmount);
+      const firstCode = codes[0]?.code;
+      if (firstCode) setCropCodes((current) => ({ ...current, [activeCrop.id]: firstCode }));
+      showToast(`已生成 ${codes.length} 个溯源码`);
+      await reload();
     } catch (e) {
       showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
     } finally {
@@ -188,17 +206,18 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                   {generatingPrint ? '生成中…' : `打印追溯标签 (${selectedCropIds.size})`}
                 </button>
                 <button
-                  onClick={() => setShowH5Editor(true)}
-                  className="flex items-center gap-2 bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-sm"
+                  disabled
+                  title="模板定制未在当前生产页开放"
+                  className="flex items-center gap-2 bg-slate-100 text-slate-400 border border-slate-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm cursor-not-allowed"
                 >
                   <Settings2 className="w-4 h-4" />
-                  定制专属溯源模板
+                  模板定制未开通
                 </button>
               </div>
             )}
           </div>
           <button
-            onClick={() => showToast('请前往「批次管理」新增繁育批次')}
+            onClick={() => onNavigate?.('batches')}
             className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -263,16 +282,24 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap items-center gap-2">
                        <button
-                         onClick={() => showToast('状态流转待后端接入')}
-                         className="text-slate-600 hover:text-white hover:bg-slate-800 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                         disabled
+                         title="请在批次管理中执行状态流转"
+                         className="text-slate-400 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg cursor-not-allowed"
                        >
-                         进入下一阶段
+                         到批次管理流转
                        </button>
-                       <button className="text-emerald-700 hover:text-white hover:bg-emerald-600 font-bold text-[10px] bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
-                        生成赋码
+                       <button
+                         onClick={() => setSelectedCropIds(new Set([crop.id]))}
+                         className="text-emerald-700 hover:text-white hover:bg-emerald-600 font-bold text-[10px] bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+                       >
+                        选择后生成
                       </button>
-                      <button className="text-indigo-700 hover:text-white hover:bg-indigo-600 font-bold text-[10px] bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
-                        发货流向绑定 <span className="font-normal opacity-70 ml-0.5">(防窜货)</span>
+                      <button
+                        disabled
+                        title="发货流向绑定未在当前页开放"
+                        className="text-indigo-300 font-bold text-[10px] bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg cursor-not-allowed"
+                      >
+                        发货流向绑定未开通
                       </button>
                       <button className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 font-bold text-[10px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white transition-colors shadow-sm">
                         生命周期追溯档案
@@ -287,10 +314,11 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                         出入库单 PDF
                       </button>
                       <button
-                        onClick={() => showToast('删除批次待后端接入')}
-                        className="flex items-center gap-1 text-red-600 hover:text-white hover:bg-red-600 font-bold text-[10px] border border-red-200 bg-red-50 rounded-lg px-3 py-1.5 transition-colors shadow-sm"
+                        disabled
+                        title="请在批次管理中删除批次"
+                        className="flex items-center gap-1 text-red-300 font-bold text-[10px] border border-red-100 bg-red-50 rounded-lg px-3 py-1.5 cursor-not-allowed"
                       >
-                        注销批次
+                        到批次管理删除
                       </button>
                     </div>
                   </td>
@@ -362,9 +390,13 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                   <span className="text-xs font-bold text-slate-700">平台系统预计扣除额度</span>
                   <span className="font-mono font-black text-red-600 text-base">¥ {(qrAmount * 0.05).toFixed(2)}</span>
                 </div>
-                <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-bold text-sm transition-all shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-2 focus:ring-4 focus:ring-emerald-500/30">
+                <button
+                  onClick={() => void generateForActiveCrop()}
+                  disabled={generatingPrint}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-bold text-sm transition-all shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-2 focus:ring-4 focus:ring-emerald-500/30 disabled:opacity-50"
+                >
                   <Printer className="w-4 h-4" />
-                  确认赋码操作并导出打印文件
+                  {generatingPrint ? '生成中...' : '生成溯源码'}
                 </button>
               </div>
             </div>
