@@ -32,7 +32,6 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
       # 测试用密钥(非生产);APP_ENCRYPTION_KEY 需合法 32 字节 hex64。
       JWT_SECRET: ci-jwt-secret-not-for-production-use-only
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-not-for-production-use
@@ -59,19 +58,32 @@ jobs:
 
       - name: Prisma generate + migrate
         working-directory: packages/backend
+        env:
+          DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
         run: |
           pnpm exec prisma generate
           pnpm exec prisma migrate deploy
 
       - name: Seed database
         working-directory: packages/backend
+        env:
+          DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
         run: pnpm prisma:seed
 
       - name: Backend build (typecheck via nest build)
+        env:
+          DATABASE_URL: postgresql://unit:unit@127.0.0.1:1/unit?schema=public
         run: pnpm build:backend
 
       - name: Web typecheck
         run: pnpm --filter web lint
 
-      - name: Test all packages
-        run: pnpm -r test
+      - name: Unit tests
+        env:
+          DATABASE_URL: postgresql://unit:unit@127.0.0.1:1/unit?schema=public
+        run: pnpm test:unit
+
+      - name: Backend e2e tests
+        env:
+          DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
+        run: pnpm test:e2e

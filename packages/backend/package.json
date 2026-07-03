@@ -2,10 +2,13 @@
   "name": "@nongchang/backend",
   "version": "0.0.0",
   "scripts": {
-    "build": "nest build",
+    "build": "prisma generate && nest build",
     "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
-    "test": "vitest run",
+    "test": "prisma generate && vitest run",
+    "test:unit": "prisma generate && vitest run",
+    "test:e2e": "prisma generate && tsx test/check-e2e-db.ts && vitest run -c vitest.e2e.config.ts",
+    "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts"

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ShoppingCart, Zap, QrCode, Loader2, Check, Clock, CreditCard, X } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { listCreditPlans, listOrders, createOrder, createPayment, cancelOrder } from '../api/billing';
+import { redirectToAlipayUrl, submitAlipayForm } from '../utils/alipay-form';
 import type { CreditPlanView, CreditResource, CreditOrderView } from '@nongchang/shared';
 
 function errMsg(e: unknown): string {
@@ -22,19 +23,14 @@ function isMobile(): boolean {
 // 发起支付宝支付:PC 跳转 payUrl;WAP 写入表单 HTML 自动提交。支付完成后支付宝异步回调入账。
 function launchAlipay(payUrl: string | null, formHtml: string | null) {
   if (payUrl) {
-    window.location.href = payUrl;
+    redirectToAlipayUrl(payUrl);
     return;
   }
   if (formHtml) {
-    // 注入临时容器提交表单;提交后立即移除,避免残留表单堆积或二次误提交。
-    const div = document.createElement('div');
-    div.style.display = 'none';
-    div.innerHTML = formHtml;
-    document.body.appendChild(div);
-    const form = div.querySelector('form');
-    if (form) form.submit();
-    setTimeout(() => { div.remove(); }, 0);
+    submitAlipayForm(formHtml);
+    return;
   }
+  throw new Error('Invalid Alipay payment payload');
 }
 
 // 自助购买额度:套餐选购(固定套餐 + 自定义数量)+ 订单列表(待支付可去支付/取消)。

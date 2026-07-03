@@ -6,7 +6,9 @@
     "build:backend": "pnpm --filter @nongchang/backend build",
     "build": "pnpm build:shared && pnpm build:backend",
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
-    "test": "pnpm --filter @nongchang/backend test"
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm build:shared && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
+    "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e"
   },
   "engines": {
     "node": ">=20"
@@ -20,13 +22,5 @@
     "globals": "^17.6.0",
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.61.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "prisma",
-      "@prisma/engines",
-      "@swc/core"
-    ]
   }
 }
