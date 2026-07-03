@@ -19,12 +19,12 @@ export class SupplyController {
     return this.svc.create(user, dto);
   }
 
-  @Post(':id/issue') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  @Post(':id/issue') @Roles(Role.MERCHANT)
   issue(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(new ZodValidationPipe(issueSupplyInputSchema)) dto: IssueSupplyInput) {
     return this.svc.issue(user, id, dto);
   }
 
-  @Delete(':id') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  @Delete(':id') @Roles(Role.MERCHANT)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.svc.remove(user, id);
   }
