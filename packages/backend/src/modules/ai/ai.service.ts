@@ -1,4 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser, AiAdviceInput, AiAskInput } from '@nongchang/shared';
 import { AiProviderService, EnabledAiProvider } from '../ai-provider/ai-provider.service';
 import { IntegrationConfigService } from '../integration/integration-config.service';
@@ -26,7 +27,7 @@ export class AiService {
       messages: [{ role: 'user', content: message }],
     };
     // 先扣费(余额不足直接 403,不浪费外部付费调用),外部失败再退款。
-    const ref = { refType: 'ai.chat' };
+    const ref = { refType: 'ai.chat', idempotencyKey: this.idempotencyKey('ai.chat', user, message) };
     await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
     const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, body));
     return { answer };
@@ -42,7 +43,7 @@ export class AiService {
     const prompt = `你是农技专家。作物:${batch?.cropName};当前状态:${batch?.status};已种植${elapsed}天;标准全周期${totalDays || '未知'}天。近期农事:${records.map((r) => r.action).join('、') || '无'}。请给出未来一周的浇水、施肥、病虫害防治建议,简明分点。`;
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
-    const ref = { refType: 'ai.advice', refId: input.batchId };
+    const ref = { refType: 'ai.advice', refId: input.batchId, idempotencyKey: `ai.advice:${user.tenantId}:${user.userId}:${input.batchId}` };
     await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
     const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
     return { answer };
@@ -55,7 +56,7 @@ export class AiService {
     const prompt = `以下是用户可见的批次数据:${ctx || '无数据'}。请根据数据回答问题:${input.question}`;
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
-    const ref = { refType: 'ai.ask' };
+    const ref = { refType: 'ai.ask', idempotencyKey: this.idempotencyKey('ai.ask', user, input.question) };
     await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
     const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
     return { answer };
@@ -78,7 +79,7 @@ export class AiService {
         },
       ],
     };
-    const ref = { refType: 'ai.diagnose' };
+    const ref = { refType: 'ai.diagnose', idempotencyKey: this.idempotencyKey('ai.diagnose', user, `${imgUrl}\n${input.note ?? ''}`) };
     await this.billing.consume(user, 'AI', AI_WEIGHT.diagnose, ref);
     const result = await this.callWithRefund(user, AI_WEIGHT.diagnose, ref, () => this.callChatCompletions(p, body));
     return { result };
@@ -88,7 +89,7 @@ export class AiService {
     if (!audio || audio.length === 0) throw new BadRequestException('音频为空');
     const creds = await this.integrations.getEnabledXfyun(user.tenantId);
     if (!creds) throw new BadRequestException('未配置讯飞语音');
-    const ref = { refType: 'ai.transcribe' };
+    const ref = { refType: 'ai.transcribe', idempotencyKey: this.idempotencyKey('ai.transcribe', user, audio) };
     // consume 在 try 外:余额不足的 403 直接透出,不被降级成 502。
     await this.billing.consume(user, 'AI', AI_WEIGHT.transcribe, ref);
     try {
@@ -102,13 +103,18 @@ export class AiService {
   }
 
   // 已扣费后执行外部调用,失败则退款再抛出原错误,避免「扣了费但没拿到结果」。
-  private async callWithRefund<T>(user: AuthUser, amount: number, ref: { refType?: string; refId?: string }, fn: () => Promise<T>): Promise<T> {
+  private async callWithRefund<T>(user: AuthUser, amount: number, ref: { refType?: string; refId?: string; idempotencyKey?: string }, fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (err) {
       await this.billing.refund(user, 'AI', amount, ref);
       throw err;
     }
+  }
+
+  private idempotencyKey(kind: string, user: AuthUser, value: string | Buffer): string {
+    const digest = createHash('sha256').update(value).digest('hex').slice(0, 16);
+    return `${kind}:${user.tenantId}:${user.userId}:${digest}`;
   }
 
   private async callChatCompletions(p: EnabledAiProvider, body: unknown): Promise<string> {

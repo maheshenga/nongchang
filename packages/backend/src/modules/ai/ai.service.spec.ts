@@ -9,6 +9,7 @@ function providerSvc(enabled: any) { return { getEnabled: async () => enabled } 
 function integrationSvc(xfyun: any = null) { return { getEnabledXfyun: async () => xfyun } as any; }
 function billingSvc() { return { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }), refund: vi.fn().mockResolvedValue({ balanceAfter: 0 }) } as any; }
 const noProv = providerSvc(null);
+const keyPattern = (kind: string) => new RegExp(`^${kind.replace('.', '\\.')}:t1:u1:[a-f0-9]{16}$`);
 
 describe('AiService', () => {
   beforeEach(() => vi.unstubAllGlobals());
@@ -86,8 +87,20 @@ describe('AiService 扣费插桩', () => {
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
     const res = await svc.chat(user, '你好');
     expect(res.answer).toBe('答');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
+    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
+      refType: 'ai.chat',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
+    }));
     expect(refund).not.toHaveBeenCalled();
+  });
+  it('chat repeats use the same idempotency key for the same payload', async () => {
+    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+    const billing: any = { consume, refund: vi.fn() };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+    await svc.chat(user, 'same-payload');
+    await svc.chat(user, 'same-payload');
+    expect(consume.mock.calls[0][3].idempotencyKey).toBe(consume.mock.calls[1][3].idempotencyKey);
   });
   it('余额不足(consume 抛 403)时不发起外部调用', async () => {
     const consume = vi.fn(async () => { throw new Error('额度不足'); });
@@ -108,7 +121,32 @@ describe('AiService 扣费插桩', () => {
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
     await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
     expect(consume).toHaveBeenCalledTimes(1);
-    expect(refund).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, { refType: 'ai.chat' });
+    expect(refund).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
+      refType: 'ai.chat',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
+    }));
+  });
+  it('diagnose consume ref includes a stable idempotency key', async () => {
+    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+    const billing: any = { consume, refund: vi.fn() };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: 'vm' }), integrationSvc(), billing, {} as any, {} as any);
+    await svc.diagnose(user, { imageBase64: 'AAAA', note: 'leaf' });
+    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.diagnose, expect.objectContaining({
+      refType: 'ai.diagnose',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.diagnose')),
+    }));
+  });
+  it('transcribe consume ref includes a stable idempotency key', async () => {
+    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+    const billing: any = { consume, refund: vi.fn() };
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
+    const factory = makeWsFactory([{ code: 0, data: { status: 2, result: { ws: [{ cw: [{ w: 'ok' }] }] } } }]);
+    await svc.transcribe(user, Buffer.from('audio'), factory);
+    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.transcribe, expect.objectContaining({
+      refType: 'ai.transcribe',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.transcribe')),
+    }));
   });
 });
 
@@ -126,7 +164,11 @@ describe('AiService.advice', () => {
     (globalThis as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: '建议浇水' } }] }) });
     const res = await svc.advice(user, { batchId: 'b1' });
     expect(res.answer).toContain('建议');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, { refType: 'ai.advice', refId: 'b1' });
+    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, {
+      refType: 'ai.advice',
+      refId: 'b1',
+      idempotencyKey: 'ai.advice:t1:u1:b1',
+    });
   });
 });
 
@@ -142,7 +184,10 @@ describe('AiService.ask', () => {
     (globalThis as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: '已为你汇总' } }] }) });
     const res = await svc.ask(user, { question: '当前有哪些批次' });
     expect(res.answer).toContain('汇总');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, { refType: 'ai.ask' });
+    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, expect.objectContaining({
+      refType: 'ai.ask',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.ask')),
+    }));
   });
 });
 
