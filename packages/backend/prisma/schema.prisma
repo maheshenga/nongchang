@@ -43,7 +43,7 @@ model User {
   username     String
   passwordHash String   @map("password_hash")
   phone        String?
-  wxOpenid     String?  @unique @map("wx_openid")
+  wxOpenid     String?  @map("wx_openid")
   displayName  String   @map("display_name")
   status       String   @default("active")
   groupId      String?  @map("group_id")
@@ -59,6 +59,7 @@ model User {
   supplyIssues SupplyIssue[]
 
   @@unique([tenantId, username])
+  @@unique([tenantId, wxOpenid])
   @@index([tenantId])
   @@index([agentId])
   @@index([groupId])

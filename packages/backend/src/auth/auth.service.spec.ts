@@ -170,12 +170,22 @@ describe('AuthService.refresh', () => {
 
 const wxFetch = (body: any) => vi.fn().mockResolvedValue({ json: async () => body });
 
-function makeWechatService(opts: { lookup?: any; existingUser?: any }) {
+function makeWechatService(opts: { lookup?: any; existingUser?: any; users?: any[] }) {
   const jwt = new JwtService({ secret: 'test' });
   const created: any[] = [];
+  const users = opts.users ?? (opts.existingUser ? [opts.existingUser] : []);
+  const findByTenantOpenid = (tenantId: string, wxOpenid: string) => (
+    users.find(u => u.tenantId === tenantId && u.wxOpenid === wxOpenid) ?? null
+  );
   const prisma = {
     user: {
-      findFirst: vi.fn().mockResolvedValue(opts.existingUser ?? null),
+      findUnique: vi.fn().mockImplementation(async ({ where }: any) => {
+        if (where.tenantId_wxOpenid) {
+          return findByTenantOpenid(where.tenantId_wxOpenid.tenantId, where.tenantId_wxOpenid.wxOpenid);
+        }
+        return null;
+      }),
+      findFirst: vi.fn().mockImplementation(async ({ where }: any) => findByTenantOpenid(where.tenantId, where.wxOpenid)),
       create: vi.fn().mockImplementation(async ({ data }: any) => { const u = { id: 'newu', ...data }; created.push(u); return u; }),
     },
   } as any;
@@ -208,6 +218,28 @@ describe('AuthService.loginWechat', () => {
     const res = await svc.loginWechat({ code: 'c', appId: 'wxX' });
     expect(res.accessToken).toBeTypeOf('string');
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('same wxOpenid in another tenant does not affect current tenant login', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'SHARED_OPENID' }));
+    const { svc, prisma } = makeWechatService({
+      lookup: { tenantId: 't2', secret: 's2' },
+      users: [
+        { id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SHARED_OPENID', tenant: activeTenant },
+        { id: 'u2', tenantId: 't2', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SHARED_OPENID', tenant: activeTenant },
+      ],
+    });
+
+    const res = await svc.loginWechat({ code: 'c', appId: 'wxTenant2' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.userId).toBe('u2');
+    expect(payload.tenantId).toBe('t2');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { tenantId_wxOpenid: { tenantId: 't2', wxOpenid: 'SHARED_OPENID' } },
+      include: { tenant: { select: { status: true } } },
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 
   it('未注册 openid 抛 NotFound(引导去注册),绝不自动建号', async () => {
@@ -292,6 +324,25 @@ describe('AuthService.registerWechat', () => {
     await expect(svc.registerWechat({ appId: 'wxX', code: 'c', displayName: '王五' }))
       .rejects.toBeInstanceOf(ConflictException);
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+  it('same wxOpenid in another tenant does not block current tenant registration', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'CROSS_TENANT_OPENID' }));
+    const { svc, prisma, created } = makeWechatService({
+      lookup: { tenantId: 't2', secret: 's2' },
+      users: [
+        { id: 'u1', tenantId: 't1', wxOpenid: 'CROSS_TENANT_OPENID', status: 'active' },
+      ],
+    });
+
+    await expect(svc.registerWechat({ appId: 'wxTenant2', code: 'c', displayName: 'Zhao Liu' }))
+      .resolves.toEqual({ status: 'pending' });
+    expect(created).toHaveLength(1);
+    expect(created[0].tenantId).toBe('t2');
+    expect(created[0].wxOpenid).toBe('CROSS_TENANT_OPENID');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { tenantId_wxOpenid: { tenantId: 't2', wxOpenid: 'CROSS_TENANT_OPENID' } },
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 });
 

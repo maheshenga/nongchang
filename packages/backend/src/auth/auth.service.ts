@@ -59,8 +59,8 @@ export class AuthService {
     const openid = await this.exchangeWxCode(dto.appId, lookup.secret, dto.code);
 
     // 3. 按 (tenantId, wxOpenid) 查用户;未注册→引导注册,待审核→拒绝
-    const user = await this.prisma.user.findFirst({
-      where: { tenantId: lookup.tenantId, wxOpenid: openid },
+    const user = await this.prisma.user.findUnique({
+      where: { tenantId_wxOpenid: { tenantId: lookup.tenantId, wxOpenid: openid } },
       include: { tenant: { select: { status: true } } },
     });
     if (!user) throw new NotFoundException('账号未注册');
@@ -76,8 +76,8 @@ export class AuthService {
 
     const openid = await this.exchangeWxCode(dto.appId, lookup.secret, dto.code);
 
-    const existing = await this.prisma.user.findFirst({
-      where: { tenantId: lookup.tenantId, wxOpenid: openid },
+    const existing = await this.prisma.user.findUnique({
+      where: { tenantId_wxOpenid: { tenantId: lookup.tenantId, wxOpenid: openid } },
     });
     if (existing) throw new ConflictException('该微信已注册');
 
