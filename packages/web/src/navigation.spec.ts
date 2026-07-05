@@ -6,6 +6,7 @@ const ALL_ROLES: SystemRole[] = [
   'agent_admin',
   'merchant_admin',
   'platform_admin',
+  'member',
 ];
 
 const idsFor = (role: SystemRole) =>
@@ -45,5 +46,11 @@ describe('production navigation', () => {
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
     expect(firstAllowedTab('agent_admin', 'fields')).toBe('merchantFiles');
     expect(firstAllowedTab('platform_admin', 'dashboard')).toBe('tenants');
+  });
+
+  it('limits ordinary members to local settings only', () => {
+    expect(idsFor('member')).toEqual(['settings']);
+    expect(firstAllowedTab('member', 'fields')).toBe('settings');
+    expect(firstAllowedTab('member', 'settings')).toBe('settings');
   });
 });

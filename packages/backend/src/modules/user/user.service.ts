@@ -14,7 +14,7 @@ export class UserService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
   async create(actor: AuthUser, dto: CreateUserDto) {
-    let agentId = dto.agentId ?? null;
+    let agentId = dto.role === Role.MEMBER ? null : (dto.agentId ?? null);
     if (actor.role === Role.AGENT_ADMIN) {
       if (dto.role !== Role.MERCHANT) throw new ForbiddenException('代理商只能创建商家账号');
       if (!actor.agentId) throw new ForbiddenException('Agent admin is missing agentId');
@@ -136,7 +136,7 @@ export class UserService {
   }
 
   async listPending(actor: AuthUser) {
-    const where = { ...this.scopedWhere(actor), status: 'pending' };
+    const where = { ...this.scopedWhere(actor), role: Role.MERCHANT, status: 'pending' };
     return this.prisma.user.findMany({
       where, orderBy: { createdAt: 'desc' },
       select: { id: true, displayName: true, phone: true, createdAt: true },
@@ -145,7 +145,7 @@ export class UserService {
 
   async review(actor: AuthUser, userId: string, dto: ReviewUserInput) {
     const target = await this.prisma.user.findFirst({
-      where: { ...this.scopedWhere(actor), id: userId, status: 'pending' },
+      where: { ...this.scopedWhere(actor), id: userId, role: Role.MERCHANT, status: 'pending' },
     });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
     const status = dto.action === 'approve' ? 'active' : 'rejected';

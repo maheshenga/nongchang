@@ -349,6 +349,7 @@ enum Role {
   system_admin
   agent_admin
   merchant
+  member
 }
 
 enum CreditOwnerType {

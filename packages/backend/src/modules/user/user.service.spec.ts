@@ -28,12 +28,12 @@ describe('UserService.listPending', () => {
   it('system_admin:查本租户 status=pending', async () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
     await new UserService(prisma, new ScopeService()).listPending(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }));
-    expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1', status: 'pending' });
+    expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1', role: Role.MERCHANT, status: 'pending' });
   });
   it('agent_admin:where 含 agentId + status pending', async () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
     await new UserService(prisma, new ScopeService()).listPending(ctx({ agentId: 'a1' }));
-    expect(prisma.user.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', agentId: 'a1', status: 'pending' });
+    expect(prisma.user.findMany.mock.calls[0][0].where).toMatchObject({ tenantId: 't1', role: Role.MERCHANT, agentId: 'a1', status: 'pending' });
   });
   it('agent_admin 缺 agentId:抛 Forbidden(不查库)', async () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
@@ -47,6 +47,7 @@ describe('UserService.review', () => {
   it('approve:目标在范围内 → status 置 active', async () => {
     const prisma = { user: { findFirst: vi.fn().mockResolvedValue(pendingUser), update: vi.fn().mockResolvedValue({}) } } as any;
     await new UserService(prisma, new ScopeService()).review(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }), 'p1', { action: 'approve' });
+    expect(prisma.user.findFirst.mock.calls[0][0].where).toEqual({ tenantId: 't1', id: 'p1', role: Role.MERCHANT, status: 'pending' });
     expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'p1' }, data: { status: 'active' } }));
   });
   it('reject:status 置 rejected', async () => {
@@ -134,6 +135,15 @@ describe('UserService 管理能力(商户管理)', () => {
     expect(parsed.success).toBe(false);
   });
 
+  it('createUserSchema accepts ordinary member role', () => {
+    const parsed = createUserSchema.safeParse({
+      username: 'member9',
+      role: Role.MEMBER,
+      displayName: 'Member 9',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('listMerchants 聚合 fieldCount/totalArea', async () => {
     const prisma = makePrisma();
     prisma.user.findMany.mockResolvedValue([
@@ -171,5 +181,74 @@ describe('UserService 管理能力(商户管理)', () => {
       select: { id: true },
     });
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('system_admin creates member with null agentId even when dto includes agentId', async () => {
+    const prisma = makePrisma();
+    prisma.user.create.mockResolvedValue({
+      id: 'mem1',
+      username: 'member1',
+      role: Role.MEMBER,
+      agentId: null,
+      displayName: 'Member 1',
+    });
+    const svc = new UserService(prisma, new ScopeService());
+
+    await svc.create(sysAdmin, {
+      username: 'member1',
+      role: Role.MEMBER,
+      agentId: '00000000-0000-0000-0000-000000000011',
+      displayName: 'Member 1',
+    });
+
+    expect(prisma.agent?.findFirst).toBeUndefined();
+    expect(prisma.user.create.mock.calls[0][0].data).toMatchObject({
+      tenantId: 't1',
+      role: Role.MEMBER,
+      agentId: null,
+      username: 'member1',
+      displayName: 'Member 1',
+    });
+  });
+
+  it('agent_admin cannot create ordinary members', async () => {
+    const prisma = makePrisma();
+    const svc = new UserService(prisma, new ScopeService());
+
+    await expect(svc.create(ctx({ agentId: 'a1' }), {
+      username: 'member2',
+      role: Role.MEMBER,
+      displayName: 'Member 2',
+    })).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('list includes members for tenant admins without treating them as merchants', async () => {
+    const prisma = makePrisma();
+    prisma.user.findMany.mockResolvedValue([
+      { id: 'mem1', username: 'member1', role: Role.MEMBER, agentId: null, displayName: 'Member 1', status: 'active' },
+    ]);
+    const svc = new UserService(prisma, new ScopeService());
+
+    const rows = await svc.list(sysAdmin);
+
+    expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1' });
+    expect((rows as any[])[0].role).toBe(Role.MEMBER);
+  });
+
+  it('listMerchants excludes ordinary members', async () => {
+    const prisma = makePrisma();
+    prisma.user.findMany.mockResolvedValue([]);
+    prisma.field.groupBy.mockResolvedValue([]);
+    const svc = new UserService(prisma, new ScopeService());
+
+    await svc.listMerchants(sysAdmin);
+
+    expect(prisma.user.findMany.mock.calls[0][0].where).toMatchObject({
+      tenantId: 't1',
+      role: Role.MERCHANT,
+      status: { not: 'pending' },
+    });
   });
 });

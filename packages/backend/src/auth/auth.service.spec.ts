@@ -74,6 +74,17 @@ describe('AuthService.login', () => {
     await expect(svc.login({ tenantCode: 'DEMO', username: 'agent', password: 'password123' }))
       .rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('member password login issues token payload with ownerId null', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({ id: 'mem1', tenantId: 't1', role: 'member', agentId: null, status: 'active', passwordHash: hash });
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'member1', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.role).toBe('member');
+    expect(payload.agentId).toBeNull();
+    expect(payload.ownerId).toBeNull();
+  });
 });
 
 describe('AuthService.refresh', () => {
@@ -127,6 +138,33 @@ describe('AuthService.refresh', () => {
     } as any;
     const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('refresh rebuilds member payload with ownerId null', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const prisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'mem1',
+          tenantId: 't1',
+          role: 'member',
+          agentId: null,
+          status: 'active',
+          tenant: activeTenant,
+        }),
+      },
+    } as any;
+    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
+    const input = await jwt.signAsync(
+      { userId: 'mem1', tenantId: 't1', role: 'member', agentId: null, ownerId: null },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    const res = await svc.refresh(input);
+    const payload = jwt.verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.role).toBe('member');
+    expect(payload.ownerId).toBeNull();
   });
 });
 

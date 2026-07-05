@@ -1,10 +1,10 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { QrCode, Bell, Sparkles, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
-import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
+import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
@@ -51,14 +51,21 @@ function roleDisplay(role: SystemRole | null): { title: string; subtitle: string
   if (role === 'agent_admin') {
     return { title: 'Agent Admin', subtitle: '代理商管理专员', badge: '代理商', short: 'Agent' };
   }
+  if (role === 'member') {
+    return { title: 'Member', subtitle: '普通会员账号', badge: '普通会员', short: 'Member' };
+  }
   return { title: 'Merchant', subtitle: '商户专属工作台', badge: '商家', short: 'Merchant' };
+}
+
+function toSystemRole(role: string): SystemRole {
+  if (role === 'merchant') return 'merchant_admin';
+  if (isSystemRole(role)) return role;
+  return 'member';
 }
 
 export default function App() {
   const { user, profile, isAuthenticated, logout } = useAuth();
-  const systemRole: SystemRole | null = user
-    ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
-    : null;
+  const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('fields');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
   const [isPresentationMode, setIsPresentationMode] = useState(false);
@@ -68,11 +75,19 @@ export default function App() {
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
   const roleInfo = roleDisplay(systemRole);
+  const allowedTabs = useMemo(() => navItems.flatMap(category => category.items.map(item => item.id)), [navItems]);
 
   useEffect(() => {
     const allowedTab = firstAllowedTab(navRole, activeTab);
-    setMountedTabs(prev => new Set(prev).add(allowedTab));
-  }, [navRole, activeTab]);
+    setMountedTabs(prev => {
+      const next = new Set<AppTab>();
+      for (const tab of prev) {
+        if (allowedTabs.includes(tab)) next.add(tab);
+      }
+      next.add(allowedTab);
+      return next;
+    });
+  }, [navRole, activeTab, allowedTabs]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -143,6 +158,8 @@ export default function App() {
       </Suspense>
     );
   }
+
+  const isMounted = (tab: AppTab) => mountedTabs.has(tab) && allowedTabs.includes(tab);
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
@@ -266,24 +283,24 @@ export default function App() {
         <section className={`flex-1 overflow-auto relative ${isPresentationMode ? 'p-0' : 'p-4 md:p-8'}`}>
           <Suspense fallback={<ViewSkeleton />}>
             <div className="h-full relative">
-              {mountedTabs.has('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
-              {mountedTabs.has('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
-              {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
-              {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
-              {mountedTabs.has('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
-              {mountedTabs.has('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
-              {mountedTabs.has('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
-              {mountedTabs.has('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
-              {mountedTabs.has('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
-              {mountedTabs.has('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
-              {mountedTabs.has('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
-              {mountedTabs.has('integrations') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'integrations' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><IntegrationSettings /></div>}
-              {mountedTabs.has('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
-              {mountedTabs.has('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
-              {mountedTabs.has('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
-              {mountedTabs.has('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
-              {mountedTabs.has('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
-              {mountedTabs.has('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
+              {isMounted('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
+              {isMounted('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
+              {isMounted('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
+              {isMounted('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
+              {isMounted('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
+              {isMounted('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
+              {isMounted('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
+              {isMounted('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
+              {isMounted('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
+              {isMounted('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
+              {isMounted('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
+              {isMounted('integrations') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'integrations' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><IntegrationSettings /></div>}
+              {isMounted('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
+              {isMounted('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
+              {isMounted('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
+              {isMounted('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
+              {isMounted('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
+              {isMounted('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
             </div>
           </Suspense>
         </section>
