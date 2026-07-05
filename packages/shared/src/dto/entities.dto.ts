@@ -3,12 +3,11 @@ import { BatchStatus, FarmRecordSource, Role, TraceEventType } from '../enums';
 
 export const createUserSchema = z.object({
   username: z.string().min(3).max(64),
-  password: z.string().min(6).max(128).optional(),
   role: z.enum([Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT]),
   agentId: z.string().uuid().nullable().optional(),
   phone: z.string().max(20).optional(),
   displayName: z.string().max(64),
-});
+}).strict();
 export type CreateUserDto = z.infer<typeof createUserSchema>;
 
 export const createAgentSchema = z.object({

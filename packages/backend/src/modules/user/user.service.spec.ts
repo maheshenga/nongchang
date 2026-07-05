@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { UserService } from './user.service';
 import { ScopeService } from '../../common/scope/scope.service';
-import { Role, type AuthUser } from '@nongchang/shared';
+import { Role, createUserSchema, type AuthUser } from '@nongchang/shared';
 
 const ctx = (o: Partial<AuthUser>): AuthUser => ({ userId: 'u', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null, ...o });
 
@@ -122,6 +122,16 @@ describe('UserService 管理能力(商户管理)', () => {
     const r = await svc.create(sysAdmin, { username: 'u9', password: 'ignored', role: Role.MERCHANT, displayName: '商户9' } as any);
     expect(typeof r.initialPassword).toBe('string');
     expect(r.initialPassword.length).toBeGreaterThan(6);
+  });
+
+  it('createUserSchema 不接受 password 假字段', () => {
+    const parsed = createUserSchema.safeParse({
+      username: 'u9',
+      password: 'ignored',
+      role: Role.MERCHANT,
+      displayName: '商户9',
+    });
+    expect(parsed.success).toBe(false);
   });
 
   it('listMerchants 聚合 fieldCount/totalArea', async () => {

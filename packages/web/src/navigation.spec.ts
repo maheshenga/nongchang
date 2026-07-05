@@ -17,6 +17,10 @@ describe('production navigation', () => {
     }
   });
 
+  it('does not expose pending user review to agent admins without agent-bound registration', () => {
+    expect(idsFor('agent_admin')).not.toContain('pendingUsers');
+  });
+
   it('classifies legacy demo tabs and falls back to the first allowed tab', () => {
     expect(isDemoTab('dashboard')).toBe(true);
     expect(isDemoTab('mobile')).toBe(true);

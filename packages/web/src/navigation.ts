@@ -89,7 +89,6 @@ const AGENT_ADMIN_NAV: NavCategory[] = [
       { id: 'batches', label: '辖区批次追踪', icon: Layers },
       { id: 'billing', label: '算力与额度', icon: Wallet },
       { id: 'userGroups', label: '用户分组', icon: UserCog },
-      { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
       { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
       { id: 'settings', label: '本地偏好', icon: SettingsIcon },
     ],
