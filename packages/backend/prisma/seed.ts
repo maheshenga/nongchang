@@ -9,6 +9,22 @@ const prisma = new PrismaClient();
 async function main() {
   const pwd = await bcrypt.hash('password123', 10);
 
+  const platformTenant =
+    (await prisma.tenant.findFirst({ where: { code: 'PLATFORM' } })) ??
+    (await prisma.tenant.create({ data: { name: 'Platform Tenant', code: 'PLATFORM' } }));
+  await prisma.user.upsert({
+    where: { tenantId_username: { tenantId: platformTenant.id, username: 'platform' } },
+    update: { role: 'platform_admin', displayName: 'Platform Admin', agentId: null, status: 'active' },
+    create: {
+      tenantId: platformTenant.id,
+      username: 'platform',
+      passwordHash: pwd,
+      role: 'platform_admin',
+      displayName: 'Platform Admin',
+      status: 'active',
+    },
+  });
+
   // 租户:按名复用,避免每次执行新建。code='DEMO' 作为登录机构编码锚点。
   const tenant =
     (await prisma.tenant.findFirst({ where: { name: 'Demo Tenant' } })) ??

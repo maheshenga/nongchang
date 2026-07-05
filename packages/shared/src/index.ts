@@ -4,6 +4,21 @@ export { loginSchema, refreshSchema, meProfileViewSchema, updateMeSchema, change
 export type { LoginDto, RefreshDto, MeProfileView, UpdateMeDto, ChangePasswordDto } from './dto/auth.dto';
 
 export {
+  tenantStatusSchema,
+  createTenantSchema,
+  setTenantStatusSchema,
+  tenantListItemSchema,
+  createTenantResponseSchema,
+} from './dto/tenant.dto';
+export type {
+  TenantStatus,
+  CreateTenantDto,
+  SetTenantStatusInput,
+  TenantListItem,
+  CreateTenantResponse,
+} from './dto/tenant.dto';
+
+export {
   createUserSchema,
   createAgentSchema,
   createFieldSchema,

@@ -11,6 +11,7 @@ import { BatchModule } from './modules/batch/batch.module';
 import { FarmRecordModule } from './modules/farm-record/farm-record.module';
 import { TraceModule } from './modules/trace/trace.module';
 import { UserModule } from './modules/user/user.module';
+import { TenantModule } from './modules/tenant/tenant.module';
 import { PublicTraceModule } from './modules/public-trace/public-trace.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { AntiFakeModule } from './modules/anti-fake/anti-fake.module';
@@ -52,6 +53,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     FarmRecordModule,
     TraceModule,
     UserModule,
+    TenantModule,
     PublicTraceModule,
     UploadModule,
     AntiFakeModule,

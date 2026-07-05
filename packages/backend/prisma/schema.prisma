@@ -345,6 +345,7 @@ model QuickTemplate {
 // 组织三层角色:与 @nongchang/shared 的 Role 常量(system_admin/agent_admin/merchant)对齐。
 // DB 枚举把非法 role 写入挡在数据库层(此前为裸 String)。
 enum Role {
+  platform_admin
   system_admin
   agent_admin
   merchant
