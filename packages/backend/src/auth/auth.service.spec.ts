@@ -54,6 +54,26 @@ describe('AuthService.login', () => {
     const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash }, stubIntegrations(), stubGroups(), { id: 't1', status: 'suspended' });
     await expect(svc.login({ tenantCode: 'DEMO', username: 'p', password: 'password123' })).rejects.toBeInstanceOf(ForbiddenException);
   });
+  it('rejects password login when agent_admin linked agent is suspended', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const prisma = {
+      tenant: { findUnique: vi.fn().mockResolvedValue(activeTenantRow) },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u-agent',
+          tenantId: 't1',
+          role: 'agent_admin',
+          agentId: 'a-suspended',
+          status: 'active',
+          passwordHash: hash,
+        }),
+      },
+      agent: { findFirst: vi.fn().mockResolvedValue({ id: 'a-suspended', status: 'suspended' }) },
+    } as any;
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    await expect(svc.login({ tenantCode: 'DEMO', username: 'agent', password: 'password123' }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+  });
 });
 
 describe('AuthService.refresh', () => {
@@ -89,6 +109,24 @@ describe('AuthService.refresh', () => {
   it('租户停用抛 Unauthorized(#22 吊销)', async () => {
     const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', tenant: { status: 'suspended' } });
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('rejects refresh when agent_admin linked agent is missing', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const prisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u-agent',
+          tenantId: 't1',
+          role: 'agent_admin',
+          agentId: 'a-missing',
+          status: 'active',
+          tenant: activeTenant,
+        }),
+      },
+      agent: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as any;
+    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
+    await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 
@@ -157,6 +195,27 @@ describe('AuthService.loginWechat', () => {
       existingUser: { id: 'u7', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SUSPOPENID', tenant: { status: 'suspended' } },
     });
     await expect(svc.loginWechat({ code: 'c', appId: 'wxX' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+  it('rejects WeChat login when agent_admin linked agent is suspended', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'AGENTOPENID' }));
+    const { svc, prisma } = makeWechatService({
+      lookup: { tenantId: 't1', secret: 's' },
+      existingUser: {
+        id: 'u-agent',
+        tenantId: 't1',
+        role: 'agent_admin',
+        agentId: 'a-suspended',
+        status: 'active',
+        wxOpenid: 'AGENTOPENID',
+        tenant: activeTenant,
+      },
+    });
+    prisma.agent = { findFirst: vi.fn().mockResolvedValue({ status: 'suspended' }) };
+    await expect(svc.loginWechat({ code: 'c', appId: 'wxX' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.agent.findFirst).toHaveBeenCalledWith({
+      where: { id: 'a-suspended', tenantId: 't1' },
+      select: { status: true },
+    });
   });
 });
 

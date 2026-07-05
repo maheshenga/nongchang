@@ -144,4 +144,32 @@ describe('UserService 管理能力(商户管理)', () => {
     const rows = await svc.listMerchants(sysAdmin);
     expect((rows as any[])[0]).toMatchObject({ id: 'm1', fieldCount: 3, totalArea: 12.5 });
   });
+
+  it('rejects agent_admin merchant creation when actor agentId is missing', async () => {
+    const prisma = makePrisma();
+    const svc = new UserService(prisma, new ScopeService());
+    await expect(svc.create(ctx({ agentId: null }), {
+      username: 'm10',
+      role: Role.MERCHANT,
+      displayName: 'Merchant 10',
+    })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('system_admin validates create dto agentId belongs to the current tenant', async () => {
+    const prisma = makePrisma();
+    prisma.agent = { findFirst: vi.fn().mockResolvedValue(null) };
+    const svc = new UserService(prisma, new ScopeService());
+    await expect(svc.create(sysAdmin, {
+      username: 'm11',
+      role: Role.MERCHANT,
+      agentId: '00000000-0000-0000-0000-000000000011',
+      displayName: 'Merchant 11',
+    })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.agent.findFirst).toHaveBeenCalledWith({
+      where: { id: '00000000-0000-0000-0000-000000000011', tenantId: 't1' },
+      select: { id: true },
+    });
+    expect(prisma.user.create).not.toHaveBeenCalled();
+  });
 });

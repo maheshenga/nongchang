@@ -17,7 +17,15 @@ export class UserService {
     let agentId = dto.agentId ?? null;
     if (actor.role === Role.AGENT_ADMIN) {
       if (dto.role !== Role.MERCHANT) throw new ForbiddenException('代理商只能创建商家账号');
+      if (!actor.agentId) throw new ForbiddenException('Agent admin is missing agentId');
       agentId = actor.agentId;
+    }
+    if (agentId) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: agentId, tenantId: actor.tenantId },
+        select: { id: true },
+      });
+      if (!agent) throw new ForbiddenException('Agent does not exist in the current tenant');
     }
     const initialPassword = randomBytes(8).toString('base64url');
     const passwordHash = await bcrypt.hash(initialPassword, 10);

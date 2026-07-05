@@ -45,6 +45,7 @@ export class AuthService {
     if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
     if (user.status !== 'active') throw new ForbiddenException('账号待审核或已停用');
     if (tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
+    await this.assertActiveAgent(user);
 
     return this.issueTokens(this.toAuthUser(user));
   }
@@ -65,6 +66,7 @@ export class AuthService {
     if (!user) throw new NotFoundException('账号未注册');
     if (user.status !== 'active') throw new ForbiddenException('账号审核中');
     if (user.tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
+    await this.assertActiveAgent(user);
     return this.issueTokens(this.toAuthUser(user));
   }
 
@@ -136,6 +138,7 @@ export class AuthService {
     if (!user || user.status !== 'active' || user.tenant.status !== 'active') {
       throw new UnauthorizedException('刷新令牌无效');
     }
+    await this.assertActiveAgent(user);
     return this.issueTokens(this.toAuthUser(user));
   }
 
@@ -169,6 +172,16 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
     await this.prisma.user.update({ where: { id: actor.userId }, data: { passwordHash } });
     return { ok: true };
+  }
+
+  private async assertActiveAgent(user: { tenantId: string; role: string; agentId: string | null }) {
+    if (user.role !== Role.AGENT_ADMIN) return;
+    if (!user.agentId) throw new ForbiddenException('Agent admin ownership is invalid');
+    const agent = await this.prisma.agent.findFirst({
+      where: { id: user.agentId, tenantId: user.tenantId },
+      select: { status: true },
+    });
+    if (!agent || agent.status !== 'active') throw new ForbiddenException('Linked agent is suspended');
   }
 
   private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null }): AuthUser {
