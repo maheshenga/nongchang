@@ -83,7 +83,7 @@ export default function UserGroups() {
           <Plus className="w-4 h-4" /> 新建用户组
         </button>
       </div>
-      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入:创建农事记录、查看农事记录。管理员与未接入接口仍按角色与业务范围鉴权。</p>
+      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入:创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。</p>
 
       {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
       {error && (

@@ -3,6 +3,14 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+const CONNECTED_GROUP_PERMISSIONS = [
+  'record:create',
+  'record:view',
+  'field:view',
+  'batch:view',
+  'trace:view',
+] as const;
+
 // 幂等种子:可在已填充的数据库上反复执行,始终把演示数据恢复到规范状态。
 // 以稳定唯一键(username / traceCode.code / batchNo)定位既有实体并复用,
 // 缺失则补建;额度账户按规范值恢复,演示链路按 7 节点重建。
@@ -35,12 +43,12 @@ async function main() {
 
   const recordPermissionGroup = await prisma.userGroup.upsert({
     where: { tenantId_name: { tenantId: tenant.id, name: '默认用户组' } },
-    update: { isDefault: true, permissions: ['record:create', 'record:view'] },
+    update: { isDefault: true, permissions: [...CONNECTED_GROUP_PERMISSIONS] },
     create: {
       tenantId: tenant.id,
       name: '默认用户组',
       isDefault: true,
-      permissions: ['record:create', 'record:view'],
+      permissions: [...CONNECTED_GROUP_PERMISSIONS],
     },
   });
   await prisma.userGroup.updateMany({

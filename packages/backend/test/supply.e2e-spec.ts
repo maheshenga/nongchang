@@ -5,6 +5,14 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+const CONNECTED_GROUP_PERMISSIONS = [
+  'record:create',
+  'record:view',
+  'field:view',
+  'batch:view',
+  'trace:view',
+] as const;
+
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
@@ -33,12 +41,12 @@ describe('Supply e2e', () => {
     const userB = await prisma.user.findFirst({ where: { username: 'merchantB' } });
     const recordGroup = await prisma.userGroup.upsert({
       where: { tenantId_name: { tenantId: userA!.tenantId, name: 'e2e记录权限组' } },
-      update: { permissions: ['record:create', 'record:view'] },
+      update: { permissions: [...CONNECTED_GROUP_PERMISSIONS] },
       create: {
         tenantId: userA!.tenantId,
         name: 'e2e记录权限组',
         isDefault: false,
-        permissions: ['record:create', 'record:view'],
+        permissions: [...CONNECTED_GROUP_PERMISSIONS],
       },
     });
     await prisma.user.updateMany({

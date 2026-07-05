@@ -41,7 +41,7 @@ describe('UserGroups permission enforcement wording', () => {
 
     expect(screen.getByRole('heading', { name: '用户分组' })).toBeTruthy();
     expect(screen.getByText(/经营角色在已接入接口会按用户组权限放行/)).toBeTruthy();
-    expect(screen.getByText(/当前已接入:创建农事记录、查看农事记录/)).toBeTruthy();
+    expect(screen.getByText(/创建农事记录、查看农事记录、查看地块、查看批次、查看溯源/)).toBeTruthy();
     expect(screen.getByText(/管理员与未接入接口仍按角色与业务范围鉴权/)).toBeTruthy();
     expect(screen.queryByText(/当前系统仍以角色作为接口鉴权依据/)).toBeNull();
     expect(screen.queryByText(/暂不参与接口放行/)).toBeNull();
