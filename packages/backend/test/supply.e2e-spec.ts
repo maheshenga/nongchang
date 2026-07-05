@@ -30,6 +30,21 @@ describe('Supply e2e', () => {
     tokenA = await login(app, 'merchantA');
     tokenB = await login(app, 'merchantB');
     const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
+    const userB = await prisma.user.findFirst({ where: { username: 'merchantB' } });
+    const recordGroup = await prisma.userGroup.upsert({
+      where: { tenantId_name: { tenantId: userA!.tenantId, name: 'e2e记录权限组' } },
+      update: { permissions: ['record:create', 'record:view'] },
+      create: {
+        tenantId: userA!.tenantId,
+        name: 'e2e记录权限组',
+        isDefault: false,
+        permissions: ['record:create', 'record:view'],
+      },
+    });
+    await prisma.user.updateMany({
+      where: { id: { in: [userA!.id, userB!.id] } },
+      data: { groupId: recordGroup.id },
+    });
     const batchA = await prisma.batch.findFirst({ where: { ownerId: userA!.id } });
     batchAId = batchA!.id;
   });

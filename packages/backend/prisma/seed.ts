@@ -33,6 +33,21 @@ async function main() {
     await prisma.tenant.update({ where: { id: tenant.id }, data: { code: 'DEMO' } });
   }
 
+  const recordPermissionGroup = await prisma.userGroup.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: '默认用户组' } },
+    update: { isDefault: true, permissions: ['record:create', 'record:view'] },
+    create: {
+      tenantId: tenant.id,
+      name: '默认用户组',
+      isDefault: true,
+      permissions: ['record:create', 'record:view'],
+    },
+  });
+  await prisma.userGroup.updateMany({
+    where: { tenantId: tenant.id, id: { not: recordPermissionGroup.id }, isDefault: true },
+    data: { isDefault: false },
+  });
+
   // 代理商:无唯一约束,按 租户+名 复用。
   async function ensureAgent(name: string, region: string) {
     return (
@@ -44,11 +59,11 @@ async function main() {
   const agentB = await ensureAgent('华东大区代理', '上海');
 
   // 用户:username 现为租户内唯一,upsert 用 (tenantId, username) 复合键幂等。
-  async function ensureUser(username: string, data: { role: Role; displayName: string; agentId?: string }) {
+  async function ensureUser(username: string, data: { role: Role; displayName: string; agentId?: string; groupId?: string | null }) {
     return prisma.user.upsert({
       where: { tenantId_username: { tenantId: tenant.id, username } },
-      update: { role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },
-      create: { tenantId: tenant.id, username, passwordHash: pwd, role: data.role, displayName: data.displayName, agentId: data.agentId ?? null },
+      update: { role: data.role, displayName: data.displayName, agentId: data.agentId ?? null, groupId: data.groupId ?? null },
+      create: { tenantId: tenant.id, username, passwordHash: pwd, role: data.role, displayName: data.displayName, agentId: data.agentId ?? null, groupId: data.groupId ?? null },
     });
   }
   await ensureUser('sysadmin', { role: 'system_admin', displayName: '李总管' });
@@ -58,6 +73,11 @@ async function main() {
   const merchantB = await ensureUser('merchantB', { role: 'merchant', displayName: '上海基地', agentId: agentB.id });
 
   // 地块:无唯一约束,按 租户+归属+名 复用。
+  await prisma.user.updateMany({
+    where: { id: { in: [merchantA.id, merchantB.id] } },
+    data: { groupId: recordPermissionGroup.id },
+  });
+
   async function ensureField(ownerId: string, name: string, area: number) {
     return (
       (await prisma.field.findFirst({ where: { tenantId: tenant.id, ownerId, name } })) ??

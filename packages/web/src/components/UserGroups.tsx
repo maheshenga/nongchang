@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { Users, RefreshCw, Plus, Trash2, X } from 'lucide-react';
-import type { UserGroupView, UserGroupInput } from '@nongchang/shared';
+import { Permission, type UserGroupView, type UserGroupInput } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
 import { listUserGroups, createUserGroup, updateUserGroup, deleteUserGroup } from '../api/user-group';
 
-// 保存给后续精细权限上线使用；当前接口鉴权仍只按角色执行。
+// 经营角色在已接入接口会按这些权限放行；管理员与未接入接口仍按角色与业务范围鉴权。
 const PERMISSION_OPTIONS: { value: string; label: string }[] = [
-  { value: 'record:create', label: '创建农事记录' },
-  { value: 'record:view', label: '查看农事记录' },
-  { value: 'trace:view', label: '查看溯源' },
-  { value: 'batch:view', label: '查看批次' },
-  { value: 'field:view', label: '查看地块' },
+  { value: Permission.RECORD_CREATE, label: '创建农事记录' },
+  { value: Permission.RECORD_VIEW, label: '查看农事记录' },
+  { value: Permission.TRACE_VIEW, label: '查看溯源' },
+  { value: Permission.BATCH_VIEW, label: '查看批次' },
+  { value: Permission.FIELD_VIEW, label: '查看地块' },
 ];
 
 interface EditState {
@@ -83,7 +83,7 @@ export default function UserGroups() {
           <Plus className="w-4 h-4" /> 新建用户组
         </button>
       </div>
-      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。当前系统仍以角色作为接口鉴权依据；下方权限备注暂不参与接口放行，仅作为后续精细权限上线前的分组元数据。</p>
+      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入:创建农事记录、查看农事记录。管理员与未接入接口仍按角色与业务范围鉴权。</p>
 
       {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
       {error && (
@@ -105,7 +105,7 @@ export default function UserGroups() {
                 <tr>
                   <th className="text-left px-5 py-3 font-bold">名称</th>
                   <th className="text-left px-5 py-3 font-bold">默认组</th>
-                  <th className="text-left px-5 py-3 font-bold">权限备注</th>
+                  <th className="text-left px-5 py-3 font-bold">接口权限</th>
                   <th className="text-right px-5 py-3 font-bold">操作</th>
                 </tr>
               </thead>
@@ -114,7 +114,7 @@ export default function UserGroups() {
                   <tr key={g.id} className="hover:bg-slate-50/50">
                     <td className="px-5 py-3 font-bold text-slate-700">{g.name}</td>
                     <td className="px-5 py-3">{g.isDefault ? <span className="text-emerald-600 font-bold">是</span> : <span className="text-slate-400">—</span>}</td>
-                    <td className="px-5 py-3 text-slate-500">{g.permissions.length ? g.permissions.length + ' 项' : '未备注'}</td>
+                    <td className="px-5 py-3 text-slate-500">{g.permissions.length ? g.permissions.length + ' 项' : '未配置'}</td>
                     <td className="px-5 py-3 text-right space-x-3">
                       <button onClick={() => openEdit(g)} className="text-emerald-600 hover:text-emerald-700 font-bold">编辑</button>
                       <button onClick={() => void onDelete(g)} className="text-rose-500 hover:text-rose-600 font-bold inline-flex items-center gap-1">
@@ -147,7 +147,7 @@ export default function UserGroups() {
                 <span className="text-sm text-slate-700 font-bold">设为默认组(微信新用户进入此组)</span>
               </label>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-2">权限备注（暂不参与接口鉴权）</label>
+                <label className="block text-xs font-bold text-slate-600 mb-2">接口权限（部分接口已接入）</label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {PERMISSION_OPTIONS.map((p) => (
                     <label key={p.value} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 rounded-lg px-3 py-2">

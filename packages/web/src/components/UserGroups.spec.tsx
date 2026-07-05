@@ -34,20 +34,20 @@ beforeEach(() => {
   deleteUserGroupMock.mockResolvedValue({ ok: true });
 });
 
-describe('UserGroups production wording', () => {
-  it('does not claim group permission metadata is enforced authorization', async () => {
+describe('UserGroups permission enforcement wording', () => {
+  it('states that only connected interfaces enforce selected group permissions', async () => {
     render(<UserGroups />);
     await screen.findByText('记录员');
 
     expect(screen.getByRole('heading', { name: '用户分组' })).toBeTruthy();
-    expect(screen.getByText(/当前系统仍以角色作为接口鉴权依据/)).toBeTruthy();
-    expect(screen.getByText(/权限备注暂不参与接口放行/)).toBeTruthy();
-    expect(screen.queryByText(/用户组与权限/)).toBeNull();
-    expect(screen.queryByText(/按组内权限放行/)).toBeNull();
-    expect(screen.queryByText(/叠加式/)).toBeNull();
+    expect(screen.getByText(/经营角色在已接入接口会按用户组权限放行/)).toBeTruthy();
+    expect(screen.getByText(/当前已接入:创建农事记录、查看农事记录/)).toBeTruthy();
+    expect(screen.getByText(/管理员与未接入接口仍按角色与业务范围鉴权/)).toBeTruthy();
+    expect(screen.queryByText(/当前系统仍以角色作为接口鉴权依据/)).toBeNull();
+    expect(screen.queryByText(/暂不参与接口放行/)).toBeNull();
   });
 
-  it('still saves permission metadata for future rollout', async () => {
+  it('saves selected permissions used by connected interfaces', async () => {
     render(<UserGroups />);
     await screen.findByText('记录员');
 
