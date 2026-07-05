@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { firstAllowedTab, flattenNavItems, getNavItems, isDemoTab } from './navigation';
+import { firstAllowedTab, flattenNavItems, getNavItems, isDemoTab, type SystemRole } from './navigation';
 
-const idsFor = (role: 'system_admin' | 'agent_admin' | 'merchant_admin') =>
+const ALL_ROLES: SystemRole[] = [
+  'system_admin',
+  'agent_admin',
+  'merchant_admin',
+  'platform_admin',
+];
+
+const idsFor = (role: SystemRole) =>
   flattenNavItems(getNavItems(role)).map((item) => item.id);
 
 describe('production navigation', () => {
@@ -10,10 +17,19 @@ describe('production navigation', () => {
   });
 
   it('keeps demo-only surfaces out of role navigation', () => {
-    for (const role of ['system_admin', 'agent_admin', 'merchant_admin'] as const) {
+    for (const role of ALL_ROLES) {
       expect(idsFor(role)).not.toContain('dashboard');
       expect(idsFor(role)).not.toContain('mobile');
       expect(idsFor(role)).not.toContain('warehouse');
+    }
+  });
+
+  it('limits platform admins to tenant lifecycle navigation', () => {
+    const platformIds = idsFor('platform_admin');
+
+    expect(platformIds).toEqual(['tenants']);
+    for (const tenantInternalTab of ['billing', 'merchantFiles', 'agents', 'fields', 'userGroups', 'pendingUsers'] as const) {
+      expect(platformIds).not.toContain(tenantInternalTab);
     }
   });
 
@@ -28,5 +44,6 @@ describe('production navigation', () => {
     expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('fields');
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
     expect(firstAllowedTab('agent_admin', 'fields')).toBe('merchantFiles');
+    expect(firstAllowedTab('platform_admin', 'dashboard')).toBe('tenants');
   });
 });

@@ -24,6 +24,7 @@ const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
 const AiAssistant = lazy(() => import('./components/AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
 const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
+const TenantManagement = lazy(() => import('./components/TenantManagement'));
 const PayResult = lazy(() => import('./components/PayResult'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 
@@ -40,6 +41,19 @@ const ViewSkeleton = () => (
   </div>
 );
 
+function roleDisplay(role: SystemRole | null): { title: string; subtitle: string; badge: string; short: string } {
+  if (role === 'platform_admin') {
+    return { title: 'Platform Admin', subtitle: '平台运营账户', badge: '平台管理员', short: 'Platform' };
+  }
+  if (role === 'system_admin') {
+    return { title: 'Super Admin', subtitle: '企业版授权账户', badge: '总管理员', short: 'Super Admin' };
+  }
+  if (role === 'agent_admin') {
+    return { title: 'Agent Admin', subtitle: '代理商管理专员', badge: '代理商', short: 'Agent' };
+  }
+  return { title: 'Merchant', subtitle: '商户专属工作台', badge: '商家', short: 'Merchant' };
+}
+
 export default function App() {
   const { user, profile, isAuthenticated, logout } = useAuth();
   const systemRole: SystemRole | null = user
@@ -51,10 +65,14 @@ export default function App() {
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const navRole = systemRole ?? 'system_admin';
+  const navItems = getNavItems(navRole);
+  const roleInfo = roleDisplay(systemRole);
 
   useEffect(() => {
-    setMountedTabs(prev => new Set(prev).add(activeTab));
-  }, [activeTab]);
+    const allowedTab = firstAllowedTab(navRole, activeTab);
+    setMountedTabs(prev => new Set(prev).add(allowedTab));
+  }, [navRole, activeTab]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -99,9 +117,6 @@ export default function App() {
     setActiveTab('fields');
   };
 
-  const navRole = systemRole ?? 'system_admin';
-  const navItems = getNavItems(navRole);
-
   // 默认/兜底:若当前 activeTab 不在该角色导航内(如已下线的 dashboard),自动跳到首个可用页。
   useEffect(() => {
     const fallbackTab = firstAllowedTab(navRole, activeTab);
@@ -144,8 +159,8 @@ export default function App() {
           <div className="bg-white/5 border border-white/10 rounded-xl p-1.5 lg:px-4 lg:py-3 flex items-center gap-3 backdrop-blur-sm cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap group-hover:px-4 group-hover:py-3">
             <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 font-bold text-xs ring-1 ring-emerald-500/50 shrink-0 transition-all">A</div>
             <div className="flex-1 opacity-0 w-0 lg:w-auto overflow-hidden group-hover:w-auto group-hover:opacity-100 lg:opacity-100 transition-all duration-300">
-              <div className="text-xs font-medium text-emerald-100">{systemRole === 'system_admin' ? 'Super Admin' : systemRole === 'agent_admin' ? 'Agent Admin' : 'Merchant'}</div>
-              <div className="text-[10px] text-emerald-500/80">{systemRole === 'system_admin' ? '企业版授权账户' : systemRole === 'agent_admin' ? '代理商管理专员' : '商户专属工作台'}</div>
+              <div className="text-xs font-medium text-emerald-100">{roleInfo.title}</div>
+              <div className="text-[10px] text-emerald-500/80">{roleInfo.subtitle}</div>
             </div>
           </div>
         </div>
@@ -216,7 +231,7 @@ export default function App() {
               </h2>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 bg-gradient-to-r from-blue-50 to-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-md border border-indigo-100/50 shadow-sm">
-                 {systemRole === 'system_admin' ? '总管理员' : systemRole === 'agent_admin' ? '代理商' : '商家'}
+                 {roleInfo.badge}
               </span>
             </div>
           </div>
@@ -232,7 +247,7 @@ export default function App() {
                   {profile?.displayName ?? '已登录用户'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  {systemRole === 'system_admin' ? 'Super Admin' : systemRole === 'agent_admin' ? 'Agent' : 'Merchant'}
+                  {roleInfo.short}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -252,6 +267,7 @@ export default function App() {
           <Suspense fallback={<ViewSkeleton />}>
             <div className="h-full relative">
               {mountedTabs.has('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
+              {mountedTabs.has('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
               {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
               {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
               {mountedTabs.has('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}

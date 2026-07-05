@@ -1,4 +1,5 @@
 import {
+  Building2,
   FileSpreadsheet,
   Layers,
   LayoutTemplate,
@@ -17,9 +18,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-export type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin';
+export type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin' | 'platform_admin';
 
 export type AppTab =
+  | 'tenants'
   | 'fields'
   | 'merchant'
   | 'batches'
@@ -43,6 +45,13 @@ export type AnyTab = AppTab | LegacyDemoTab;
 
 export type NavItem = { id: AppTab; label: string; icon: LucideIcon };
 export type NavCategory = { category: string; items: NavItem[] };
+
+const PLATFORM_ADMIN_NAV: NavCategory[] = [
+  {
+    category: '平台运营',
+    items: [{ id: 'tenants', label: '租户管理', icon: Building2 }],
+  },
+];
 
 const SYSTEM_ADMIN_NAV: NavCategory[] = [
   {
@@ -116,6 +125,7 @@ const MERCHANT_ADMIN_NAV: NavCategory[] = [
 ];
 
 const NAV_BY_ROLE: Record<SystemRole, NavCategory[]> = {
+  platform_admin: PLATFORM_ADMIN_NAV,
   system_admin: SYSTEM_ADMIN_NAV,
   agent_admin: AGENT_ADMIN_NAV,
   merchant_admin: MERCHANT_ADMIN_NAV,
