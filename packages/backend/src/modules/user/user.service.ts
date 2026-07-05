@@ -120,8 +120,10 @@ export class UserService {
     if (!id) throw new ForbiddenException('缺少用户 id');
     const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id, role: Role.MERCHANT, status: { not: 'pending' } } });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
+    const data: Record<string, unknown> = { status };
+    if (status === 'suspended') data.sessionVersion = { increment: 1 };
     return this.prisma.user.update({
-      where: { id }, data: { status },
+      where: { id }, data,
       select: { id: true, status: true },
     });
   }

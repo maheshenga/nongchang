@@ -85,6 +85,35 @@ describe('AuthService.login', () => {
     expect(payload.agentId).toBeNull();
     expect(payload.ownerId).toBeNull();
   });
+
+  it('password login includes sessionVersion in access token', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      passwordHash: hash,
+      sessionVersion: 3,
+    });
+
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.sessionVersion).toBe(3);
+    expect(payload.exp - payload.iat).toBe(15 * 60);
+  });
+
+  it('password login access token expires in 15 minutes', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash });
+
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.exp - payload.iat).toBe(15 * 60);
+  });
 });
 
 describe('AuthService.refresh', () => {
@@ -120,6 +149,23 @@ describe('AuthService.refresh', () => {
   it('租户停用抛 Unauthorized(#22 吊销)', async () => {
     const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', tenant: { status: 'suspended' } });
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('rejects stale refresh token when sessionVersion no longer matches DB', async () => {
+    const { svc, jwt } = makeRefreshSvc({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      sessionVersion: 2,
+      tenant: activeTenant,
+    });
+    const stale = await jwt.signAsync(
+      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1', sessionVersion: 1 },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await expect(svc.refresh(stale)).rejects.toBeInstanceOf(UnauthorizedException);
   });
   it('rejects refresh when agent_admin linked agent is missing', async () => {
     const jwt = new JwtService({ secret: 'test' });
@@ -399,6 +445,13 @@ describe('AuthService.changePassword', () => {
     const newHash = update.mock.calls[0][0].data.passwordHash;
     expect(newHash).not.toBe(oldHash);
     expect(await bcrypt.compare('newpass456', newHash)).toBe(true);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: {
+        passwordHash: newHash,
+        sessionVersion: { increment: 1 },
+      },
+    });
   });
   it('旧密码错误抛 Unauthorized 且不改密', async () => {
     const oldHash = await bcrypt.hash('oldpass123', 10);

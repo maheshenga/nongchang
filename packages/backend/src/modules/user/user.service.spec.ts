@@ -106,6 +106,11 @@ describe('UserService 管理能力(商户管理)', () => {
     const svc = new UserService(prisma, new ScopeService());
     const r = await svc.setStatus(sysAdmin, 'm1', 'suspended');
     expect(r.status).toBe('suspended');
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      data: { status: 'suspended', sessionVersion: { increment: 1 } },
+      select: { id: true, status: true },
+    });
   });
 
   it('setStatus 对 pending/不在范围的目标抛 Forbidden', async () => {
@@ -114,6 +119,22 @@ describe('UserService 管理能力(商户管理)', () => {
     const svc = new UserService(prisma, new ScopeService());
     await expect(svc.setStatus(sysAdmin, 'mp', 'active'))
       .rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('setStatus active does not expose sessionVersion', async () => {
+    const prisma = makePrisma();
+    prisma.user.findFirst.mockResolvedValue({ id: 'm1' });
+    prisma.user.update.mockResolvedValue({ id: 'm1', status: 'active' });
+    const svc = new UserService(prisma, new ScopeService());
+
+    const r = await svc.setStatus(sysAdmin, 'm1', 'active');
+
+    expect(r).toEqual({ id: 'm1', status: 'active' });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      data: { status: 'active' },
+      select: { id: true, status: true },
+    });
   });
 
   it('create 生成随机初始密码并返回 initialPassword', async () => {

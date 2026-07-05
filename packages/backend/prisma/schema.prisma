@@ -46,6 +46,7 @@ model User {
   wxOpenid     String?  @map("wx_openid")
   displayName  String   @map("display_name")
   status       String   @default("active")
+  sessionVersion Int    @default(0) @map("session_version")
   groupId      String?  @map("group_id")
   createdAt    DateTime @default(now()) @map("created_at")
   tenant       Tenant   @relation(fields: [tenantId], references: [id])

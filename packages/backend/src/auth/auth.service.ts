@@ -135,7 +135,8 @@ export class AuthService {
       where: { id: payload.userId },
       include: { tenant: { select: { status: true } } },
     });
-    if (!user || user.status !== 'active' || user.tenant.status !== 'active') {
+    const tokenVersion = payload.sessionVersion ?? 0;
+    if (!user || user.status !== 'active' || user.tenant.status !== 'active' || (user.sessionVersion ?? 0) !== tokenVersion) {
       throw new UnauthorizedException('刷新令牌无效');
     }
     await this.assertActiveAgent(user);
@@ -165,12 +166,15 @@ export class AuthService {
   }
 
   async changePassword(actor: AuthUser, dto: ChangePasswordDto): Promise<{ ok: true }> {
-    const user = await this.prisma.user.findUnique({ where: { id: actor.userId }, select: { passwordHash: true } });
+    const user = await this.prisma.user.findUnique({ where: { id: actor.userId }, select: { id: true, passwordHash: true } });
     if (!user) throw new UnauthorizedException('账号不存在');
     const ok = await bcrypt.compare(dto.oldPassword, user.passwordHash);
     if (!ok) throw new UnauthorizedException('原密码错误');
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.prisma.user.update({ where: { id: actor.userId }, data: { passwordHash } });
+    await this.prisma.user.update({
+      where: { id: actor.userId },
+      data: { passwordHash, sessionVersion: { increment: 1 } },
+    });
     return { ok: true };
   }
 
@@ -184,17 +188,18 @@ export class AuthService {
     if (!agent || agent.status !== 'active') throw new ForbiddenException('Linked agent is suspended');
   }
 
-  private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null }): AuthUser {
+  private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null; sessionVersion?: number }): AuthUser {
     return {
       userId: user.id, tenantId: user.tenantId, role: user.role as Role,
       agentId: user.agentId ?? null,
       ownerId: user.role === Role.MERCHANT ? user.id : null,
+      sessionVersion: user.sessionVersion ?? 0,
     };
   }
 
   private async issueTokens(user: AuthUser): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(user, {
-      secret: process.env.JWT_SECRET, expiresIn: '2h',
+      secret: process.env.JWT_SECRET, expiresIn: '15m',
     });
     const refreshToken = await this.jwt.signAsync(user, {
       secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d',
