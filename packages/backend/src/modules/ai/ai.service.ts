@@ -26,10 +26,9 @@ export class AiService {
       model: p.textModel,
       messages: [{ role: 'user', content: message }],
     };
-    // 先扣费(余额不足直接 403,不浪费外部付费调用),外部失败再退款。
+    // Reserve first so insufficient credits fail before starting a paid provider call.
     const ref = { refType: 'ai.chat', idempotencyKey: this.idempotencyKey('ai.chat', user, message) };
-    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
-    const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, body));
+    const answer = await this.callWithReservation(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, body));
     return { answer };
   }
 
@@ -44,8 +43,7 @@ export class AiService {
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
     const ref = { refType: 'ai.advice', refId: input.batchId, idempotencyKey: `ai.advice:${user.tenantId}:${user.userId}:${input.batchId}` };
-    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
-    const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
+    const answer = await this.callWithReservation(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
     return { answer };
   }
 
@@ -57,8 +55,7 @@ export class AiService {
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
     const ref = { refType: 'ai.ask', idempotencyKey: this.idempotencyKey('ai.ask', user, input.question) };
-    await this.billing.consume(user, 'AI', AI_WEIGHT.chat, ref);
-    const answer = await this.callWithRefund(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
+    const answer = await this.callWithReservation(user, AI_WEIGHT.chat, ref, () => this.callChatCompletions(p, { model: p.textModel, messages: [{ role: 'user', content: prompt }] }));
     return { answer };
   }
 
@@ -80,8 +77,7 @@ export class AiService {
       ],
     };
     const ref = { refType: 'ai.diagnose', idempotencyKey: this.idempotencyKey('ai.diagnose', user, `${imgUrl}\n${input.note ?? ''}`) };
-    await this.billing.consume(user, 'AI', AI_WEIGHT.diagnose, ref);
-    const result = await this.callWithRefund(user, AI_WEIGHT.diagnose, ref, () => this.callChatCompletions(p, body));
+    const result = await this.callWithReservation(user, AI_WEIGHT.diagnose, ref, () => this.callChatCompletions(p, body));
     return { result };
   }
 
@@ -90,26 +86,31 @@ export class AiService {
     const creds = await this.integrations.getEnabledXfyun(user.tenantId);
     if (!creds) throw new BadRequestException('未配置讯飞语音');
     const ref = { refType: 'ai.transcribe', idempotencyKey: this.idempotencyKey('ai.transcribe', user, audio) };
-    // consume 在 try 外:余额不足的 403 直接透出,不被降级成 502。
-    await this.billing.consume(user, 'AI', AI_WEIGHT.transcribe, ref);
-    try {
-      const text = await transcribeWithXfyun(creds, audio, factory);
-      return { text };
-    } catch {
-      // 外部失败:退还已扣额度,再统一降级(不泄露凭证)。
-      await this.billing.refund(user, 'AI', AI_WEIGHT.transcribe, ref);
-      throw new BadGatewayException('语音转写失败');
-    }
+    const text = await this.callWithReservation(user, AI_WEIGHT.transcribe, ref, async () => {
+      try {
+        return await transcribeWithXfyun(creds, audio, factory);
+      } catch {
+        throw new BadGatewayException('语音转写失败');
+      }
+    });
+    return { text };
   }
 
-  // 已扣费后执行外部调用,失败则退款再抛出原错误,避免「扣了费但没拿到结果」。
-  private async callWithRefund<T>(user: AuthUser, amount: number, ref: { refType?: string; refId?: string; idempotencyKey?: string }, fn: () => Promise<T>): Promise<T> {
+  private async callWithReservation<T>(user: AuthUser, amount: number, ref: { refType?: string; refId?: string; idempotencyKey?: string }, fn: () => Promise<T>): Promise<T> {
+    await this.billing.reserve(user, 'AI', amount, ref);
+    let result: T;
     try {
-      return await fn();
+      result = await fn();
     } catch (err) {
-      await this.billing.refund(user, 'AI', amount, ref);
+      try {
+        await this.billing.releaseReservation(user, 'AI', amount, ref);
+      } catch {
+        // Keep the provider failure as the observable error; unreleased reservations are handled by audit/recovery.
+      }
       throw err;
     }
+    await this.billing.confirmReservation(user, 'AI', ref);
+    return result;
   }
 
   private idempotencyKey(kind: string, user: AuthUser, value: string | Buffer): string {

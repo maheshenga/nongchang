@@ -7,7 +7,13 @@ import { AI_WEIGHT } from '../billing/billing.constants';
 const user = { userId: 'u1', tenantId: 't1', role: 'merchant' } as AuthUser;
 function providerSvc(enabled: any) { return { getEnabled: async () => enabled } as any; }
 function integrationSvc(xfyun: any = null) { return { getEnabledXfyun: async () => xfyun } as any; }
-function billingSvc() { return { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }), refund: vi.fn().mockResolvedValue({ balanceAfter: 0 }) } as any; }
+function billingSvc() {
+  return {
+    reserve: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+    confirmReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+    releaseReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+  } as any;
+}
 const noProv = providerSvc(null);
 const keyPattern = (kind: string) => new RegExp(`^${kind.replace('.', '\\.')}:t1:u1:[a-f0-9]{16}$`);
 
@@ -15,8 +21,10 @@ describe('AiService', () => {
   beforeEach(() => vi.unstubAllGlobals());
 
   it('无 provider 抛业务错误', async () => {
-    const svc = new AiService(providerSvc(null), integrationSvc(), billingSvc(), {} as any, {} as any);
+    const billing = billingSvc();
+    const svc = new AiService(providerSvc(null), integrationSvc(), billing, {} as any, {} as any);
     await expect(svc.chat(user, 'hi')).rejects.toBeInstanceOf(BadRequestException);
+    expect(billing.reserve).not.toHaveBeenCalled();
   });
 
   it('chat 返回模型回答', async () => {
@@ -27,8 +35,10 @@ describe('AiService', () => {
   });
 
   it('diagnose 无 visionModel 抛错', async () => {
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc(), billingSvc(), {} as any, {} as any);
+    const billing = billingSvc();
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'sk-1', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
     await expect(svc.diagnose(user, { imageUrl: 'https://x.com/a.jpg' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(billing.reserve).not.toHaveBeenCalled();
   });
 
   it('diagnose 用 visionModel 返回结果', async () => {
@@ -52,13 +62,17 @@ describe('AiService', () => {
   });
 
   it('transcribe 未配置讯飞抛业务错误', async () => {
-    const svc = new AiService(noProv, integrationSvc(null), billingSvc(), {} as any, {} as any);
+    const billing = billingSvc();
+    const svc = new AiService(noProv, integrationSvc(null), billing, {} as any, {} as any);
     await expect(svc.transcribe(user, Buffer.from('abc'))).rejects.toBeInstanceOf(BadRequestException);
+    expect(billing.reserve).not.toHaveBeenCalled();
   });
 
   it('transcribe 空音频抛业务错误', async () => {
-    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billingSvc(), {} as any, {} as any);
+    const billing = billingSvc();
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
     await expect(svc.transcribe(user, Buffer.alloc(0))).rejects.toBeInstanceOf(BadRequestException);
+    expect(billing.reserve).not.toHaveBeenCalled();
   });
 
   it('transcribe 经 WS 拼接识别文字', async () => {
@@ -78,93 +92,176 @@ describe('AiService', () => {
   });
 });
 
-describe('AiService 扣费插桩', () => {
-  it('chat 成功后扣 AI 1', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const refund = vi.fn();
-    const billing: any = { consume, refund };
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '答' } }] }) })));
+describe('AiService billing reservation', () => {
+  it('chat success reserves and confirms AI 1', async () => {
+    const billing = billingSvc();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
-    const res = await svc.chat(user, '你好');
-    expect(res.answer).toBe('答');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
+
+    const res = await svc.chat(user, 'hello');
+
+    expect(res.answer).toBe('answer');
+    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
       refType: 'ai.chat',
       idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
     }));
-    expect(refund).not.toHaveBeenCalled();
+    expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', expect.objectContaining({
+      refType: 'ai.chat',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
+    }));
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
   });
-  it('chat repeats use the same idempotency key for the same payload', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const billing: any = { consume, refund: vi.fn() };
+
+  it('chat repeats use the same reservation idempotency key for the same payload', async () => {
+    const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+
     await svc.chat(user, 'same-payload');
     await svc.chat(user, 'same-payload');
-    expect(consume.mock.calls[0][3].idempotencyKey).toBe(consume.mock.calls[1][3].idempotencyKey);
+
+    expect(billing.reserve.mock.calls[0][3].idempotencyKey).toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
+    expect(billing.confirmReservation.mock.calls[0][2].idempotencyKey).toBe(billing.confirmReservation.mock.calls[1][2].idempotencyKey);
   });
-  it('余额不足(consume 抛 403)时不发起外部调用', async () => {
-    const consume = vi.fn(async () => { throw new Error('额度不足'); });
-    const refund = vi.fn();
-    const billing: any = { consume, refund };
+
+  it('reserve failure does not start the external AI call or release', async () => {
+    const billing = billingSvc();
+    billing.reserve.mockRejectedValueOnce(new Error('insufficient'));
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
-    await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
+
+    await expect(svc.chat(user, 'hello')).rejects.toThrow('insufficient');
+
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(refund).not.toHaveBeenCalled();
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
+    expect(billing.confirmReservation).not.toHaveBeenCalled();
   });
-  it('chat 外部失败则退款(先扣后退,用户不损失额度)', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const refund = vi.fn().mockResolvedValue({ balanceAfter: 10 });
-    const billing: any = { consume, refund };
+
+  it('chat releases the reservation when the external provider fails', async () => {
+    const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
-    await expect(svc.chat(user, '你好')).rejects.toBeTruthy();
-    expect(consume).toHaveBeenCalledTimes(1);
-    expect(refund).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
+
+    await expect(svc.chat(user, 'hello')).rejects.toBeTruthy();
+
+    expect(billing.reserve).toHaveBeenCalledTimes(1);
+    expect(billing.releaseReservation).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
       refType: 'ai.chat',
       idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
     }));
+    expect(billing.confirmReservation).not.toHaveBeenCalled();
   });
-  it('diagnose consume ref includes a stable idempotency key', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const billing: any = { consume, refund: vi.fn() };
+
+  it('chat keeps the provider error when reservation release fails', async () => {
+    const billing = billingSvc();
+    billing.releaseReservation.mockRejectedValueOnce(new Error('release down'));
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+
+    await expect(svc.chat(user, 'hello')).rejects.toBeInstanceOf(BadGatewayException);
+
+    expect(billing.releaseReservation).toHaveBeenCalledTimes(1);
+    expect(billing.confirmReservation).not.toHaveBeenCalled();
+  });
+
+  it('chat does not release when provider succeeds but confirm fails', async () => {
+    const billing = billingSvc();
+    billing.confirmReservation.mockRejectedValueOnce(new Error('confirm down'));
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
+    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+
+    await expect(svc.chat(user, 'hello')).rejects.toThrow('confirm down');
+
+    expect(billing.reserve).toHaveBeenCalledTimes(1);
+    expect(billing.confirmReservation).toHaveBeenCalledTimes(1);
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
+  });
+
+  it('diagnose reservation ref includes a stable idempotency key', async () => {
+    const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: 'vm' }), integrationSvc(), billing, {} as any, {} as any);
+
     await svc.diagnose(user, { imageBase64: 'AAAA', note: 'leaf' });
-    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.diagnose, expect.objectContaining({
+
+    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.diagnose, expect.objectContaining({
+      refType: 'ai.diagnose',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.diagnose')),
+    }));
+    expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', expect.objectContaining({
       refType: 'ai.diagnose',
       idempotencyKey: expect.stringMatching(keyPattern('ai.diagnose')),
     }));
   });
-  it('transcribe consume ref includes a stable idempotency key', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
-    const billing: any = { consume, refund: vi.fn() };
+
+  it('transcribe reservation ref includes a stable idempotency key', async () => {
+    const billing = billingSvc();
     const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
     const factory = makeWsFactory([{ code: 0, data: { status: 2, result: { ws: [{ cw: [{ w: 'ok' }] }] } } }]);
+
     await svc.transcribe(user, Buffer.from('audio'), factory);
-    expect(consume).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.transcribe, expect.objectContaining({
+
+    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.transcribe, expect.objectContaining({
+      refType: 'ai.transcribe',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.transcribe')),
+    }));
+    expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', expect.objectContaining({
       refType: 'ai.transcribe',
       idempotencyKey: expect.stringMatching(keyPattern('ai.transcribe')),
     }));
   });
+
+  it('transcribe releases the reservation when Xfyun fails', async () => {
+    const billing = billingSvc();
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
+    const factory = makeWsFactory([{ code: 10001, message: 'bad' }]);
+
+    await expect(svc.transcribe(user, Buffer.from('audio'), factory)).rejects.toBeInstanceOf(BadGatewayException);
+
+    expect(billing.releaseReservation).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.transcribe, expect.objectContaining({
+      refType: 'ai.transcribe',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.transcribe')),
+    }));
+    expect(billing.confirmReservation).not.toHaveBeenCalled();
+  });
+
+  it('transcribe reserve failure does not start Xfyun or release', async () => {
+    const billing = billingSvc();
+    billing.reserve.mockRejectedValueOnce(new Error('insufficient'));
+    const factory = vi.fn();
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
+
+    await expect(svc.transcribe(user, Buffer.from('audio'), factory)).rejects.toThrow('insufficient');
+
+    expect(factory).not.toHaveBeenCalled();
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
+    expect(billing.confirmReservation).not.toHaveBeenCalled();
+  });
 });
 
 describe('AiService.advice', () => {
-  it('拼接批次+农事记录上下文后调用 chat 并扣费', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+  it('advice reserves and confirms AI credits', async () => {
+    const billing = billingSvc();
     const prisma: any = {
-      batch: { findFirst: async () => ({ id: 'b1', cropName: '白芍', status: 'Growing', plantDate: new Date('2026-01-01') }) },
-      farmRecord: { findMany: async () => [{ action: '浇水' }] },
+      batch: { findFirst: async () => ({ id: 'b1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }) },
+      farmRecord: { findMany: async () => [{ action: 'water' }] },
       cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
     const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
-    const svc = new AiService(providers, {} as any, { consume } as any, prisma, scope);
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: '建议浇水' } }] }) });
+    const svc = new AiService(providers, {} as any, billing, prisma, scope);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
+
     const res = await svc.advice(user, { batchId: 'b1' });
-    expect(res.answer).toContain('建议');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, {
+
+    expect(res.answer).toContain('advice');
+    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, {
+      refType: 'ai.advice',
+      refId: 'b1',
+      idempotencyKey: 'ai.advice:t1:u1:b1',
+    });
+    expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', {
       refType: 'ai.advice',
       refId: 'b1',
       idempotencyKey: 'ai.advice:t1:u1:b1',
@@ -173,18 +270,24 @@ describe('AiService.advice', () => {
 });
 
 describe('AiService.ask', () => {
-  it('拼接可见批次上下文后调用 chat 并扣费', async () => {
-    const consume = vi.fn().mockResolvedValue({ balanceAfter: 9 });
+  it('ask reserves and confirms AI credits', async () => {
+    const billing = billingSvc();
     const prisma: any = {
-      batch: { findMany: async () => [{ batchNo: 'B1', cropName: '白芍', status: 'Growing', plantDate: new Date('2026-01-01') }] },
+      batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
     const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
-    const svc = new AiService(providers, {} as any, { consume } as any, prisma, scope);
-    (globalThis as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: '已为你汇总' } }] }) });
-    const res = await svc.ask(user, { question: '当前有哪些批次' });
-    expect(res.answer).toContain('汇总');
-    expect(consume).toHaveBeenCalledWith(user, 'AI', 1, expect.objectContaining({
+    const svc = new AiService(providers, {} as any, billing, prisma, scope);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
+
+    const res = await svc.ask(user, { question: 'current batches?' });
+
+    expect(res.answer).toContain('summary');
+    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
+      refType: 'ai.ask',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.ask')),
+    }));
+    expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', expect.objectContaining({
       refType: 'ai.ask',
       idempotencyKey: expect.stringMatching(keyPattern('ai.ask')),
     }));
