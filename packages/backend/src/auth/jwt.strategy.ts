@@ -28,6 +28,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('登录状态已失效');
     }
 
+    if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new UnauthorizedException('登录状态已失效');
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: user.agentId, tenantId: user.tenantId },
+        select: { id: true, status: true },
+      });
+      if (!agent || agent.status !== 'active') throw new UnauthorizedException('登录状态已失效');
+    }
+
     return {
       userId: user.id,
       tenantId: user.tenantId,

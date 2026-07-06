@@ -37,7 +37,12 @@ describe('AgentService 管理能力', () => {
   const sysAdmin = ctx({ role: Role.SYSTEM_ADMIN, agentId: null });
 
   function makePrisma() {
-    return { agent: { findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() } } as any;
+    const prisma = {
+      agent: { findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+      user: { updateMany: vi.fn() },
+      $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as any;
+    return prisma;
   }
 
   it('update 目标不在租户内抛 Forbidden', async () => {
@@ -64,9 +69,25 @@ describe('AgentService 管理能力', () => {
     const prisma = makePrisma();
     prisma.agent.findFirst.mockResolvedValue({ id: 'a1' });
     prisma.agent.update.mockResolvedValue({ id: 'a1', status: 'suspended' });
+    prisma.user.updateMany.mockResolvedValue({ count: 2 });
     const svc = new AgentService(prisma, new ScopeService());
     const r = await svc.setStatus(sysAdmin, 'a1', 'suspended');
     expect(r.status).toBe('suspended');
+  });
+
+  it('setStatus suspended increments sessionVersion for users assigned to the agent', async () => {
+    const prisma = makePrisma();
+    prisma.agent.findFirst.mockResolvedValue({ id: 'a1' });
+    prisma.agent.update.mockResolvedValue({ id: 'a1', status: 'suspended' });
+    prisma.user.updateMany.mockResolvedValue({ count: 2 });
+    const svc = new AgentService(prisma, new ScopeService());
+
+    await svc.setStatus(sysAdmin, 'a1', 'suspended');
+
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', agentId: 'a1' },
+      data: { sessionVersion: { increment: 1 } },
+    });
   });
 
   it('list 带 merchantCount', async () => {

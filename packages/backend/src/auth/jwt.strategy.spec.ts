@@ -5,10 +5,13 @@ import { JwtStrategy } from './jwt.strategy';
 
 const activeTenant = { status: 'active' };
 
-function makeStrategy(user: any) {
+function makeStrategy(user: any, agent: any = null) {
   const prisma = {
     user: {
       findUnique: vi.fn().mockResolvedValue(user),
+    },
+    agent: {
+      findFirst: vi.fn().mockResolvedValue(agent),
     },
   } as any;
   return { strategy: new JwtStrategy(prisma), prisma };
@@ -147,5 +150,31 @@ describe('JwtStrategy session revocation', () => {
       sessionVersion: 0,
       sub: 'u1',
     })).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects agent_admin tokens when the linked agent is suspended', async () => {
+    const { strategy, prisma } = makeStrategy({
+      id: 'u1',
+      tenantId: 't1',
+      role: Role.AGENT_ADMIN,
+      agentId: 'a1',
+      status: 'active',
+      sessionVersion: 0,
+      tenant: activeTenant,
+    }, { id: 'a1', status: 'suspended' });
+
+    await expect(strategy.validate({
+      userId: 'u1',
+      tenantId: 't1',
+      role: Role.AGENT_ADMIN,
+      agentId: 'a1',
+      ownerId: null,
+      sessionVersion: 0,
+      sub: 'u1',
+    })).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.agent.findFirst).toHaveBeenCalledWith({
+      where: { id: 'a1', tenantId: 't1' },
+      select: { id: true, status: true },
+    });
   });
 });

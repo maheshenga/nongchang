@@ -40,7 +40,16 @@ export class AgentService {
     if (!id) throw new ForbiddenException('缺少代理商 id');
     const target = await this.prisma.agent.findFirst({ where: { tenantId: user.tenantId, id } });
     if (!target) throw new ForbiddenException('代理商不存在或不在可管理范围');
-    return this.prisma.agent.update({ where: { id }, data: { status }, select: { id: true, status: true } });
+    const updateAgent = this.prisma.agent.update({ where: { id }, data: { status }, select: { id: true, status: true } });
+    if (status !== 'suspended') return updateAgent;
+    const [updated] = await this.prisma.$transaction([
+      updateAgent,
+      this.prisma.user.updateMany({
+        where: { tenantId: user.tenantId, agentId: id },
+        data: { sessionVersion: { increment: 1 } },
+      }),
+    ]);
+    return updated;
   }
 
   listMerchants(user: AuthUser) {
