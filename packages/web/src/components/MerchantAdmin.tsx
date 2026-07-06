@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Plus, Printer, Search, QrCode, X, Settings2, GripVertical, MapPin, ShieldCheck } from 'lucide-react';
 import { Crop } from '../types';
 import { useApi } from '../hooks/useApi';
 import { listBatches, type Batch } from '../api/batches';
-import { generateCodes } from '../api/trace';
+import { createTraceGenerationRequestKey, generateCodes } from '../api/trace';
 import type { AppTab } from '../navigation';
 
 interface MerchantAdminProps {
@@ -33,6 +33,7 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
   // 打印预览时为每个批次真实生成的溯源码:batchId → code。
   const [cropCodes, setCropCodes] = useState<Record<string, string>>({});
   const [generatingPrint, setGeneratingPrint] = useState(false);
+  const generationRequestKeys = useRef<Record<string, string>>({});
 
   const filteredCrops = crops.filter(crop => 
     crop.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -55,6 +56,14 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
 
   const selectedCrops = crops.filter(c => selectedCropIds.has(c.id));
   const activeCrop = selectedCrops.length > 0 ? selectedCrops[selectedCrops.length - 1] : null;
+  const getGenerationRequestKey = (source: string, batchId: string, count: number) => {
+    const operationKey = `${source}:${batchId}:${count}`;
+    generationRequestKeys.current[operationKey] ??= createTraceGenerationRequestKey(source, batchId, count);
+    return generationRequestKeys.current[operationKey];
+  };
+  const clearGenerationRequestKey = (source: string, batchId: string, count: number) => {
+    delete generationRequestKeys.current[`${source}:${batchId}:${count}`];
+  };
 
   // 消费者扫码访问的真实溯源页 URL(hash 路由 H5)。
   const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
@@ -66,11 +75,13 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
     try {
       const entries = await Promise.all(
         selectedCrops.map(async (c) => {
-          const codes = await generateCodes(c.id, 1);
+          const requestKey = getGenerationRequestKey('merchant-print', c.id, 1);
+          const codes = await generateCodes(c.id, 1, requestKey);
           return [c.id, codes[0]?.code] as const;
         }),
       );
       setCropCodes(Object.fromEntries(entries.filter(([, code]) => code)));
+      selectedCrops.forEach((c) => clearGenerationRequestKey('merchant-print', c.id, 1));
       setShowPrintPreview(true);
     } catch (e) {
       showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
@@ -87,11 +98,13 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
     }
     setGeneratingPrint(true);
     try {
-      const codes = await generateCodes(activeCrop.id, qrAmount);
+      const requestKey = getGenerationRequestKey('merchant-side-panel', activeCrop.id, qrAmount);
+      const codes = await generateCodes(activeCrop.id, qrAmount, requestKey);
       const firstCode = codes[0]?.code;
       if (firstCode) setCropCodes((current) => ({ ...current, [activeCrop.id]: firstCode }));
       showToast(`已生成 ${codes.length} 个溯源码`);
       await reload();
+      clearGenerationRequestKey('merchant-side-panel', activeCrop.id, qrAmount);
     } catch (e) {
       showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
     } finally {

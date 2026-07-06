@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
 
 interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
+interface ReservationResult { reservationId: string; balanceAfter: number }
 
 @Injectable()
 export class BillingService {
@@ -94,6 +95,172 @@ export class BillingService {
         },
       });
       return { balanceAfter };
+    });
+  }
+
+  async reserve(user: AuthUser, resource: CreditResource, amount: number, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法预约额度');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.creditReservation.findFirst({
+          where: { accountId: acct.id, resource, idempotencyKey },
+          select: { id: true, status: true, amount: true, balanceAfter: true },
+        });
+        if (existing) {
+          if (existing.status === 'RELEASED') throw new BadRequestException('预约已释放,不可重复使用该幂等键');
+          if (existing.amount !== amount) throw new BadRequestException('预约额度与当前请求额度不一致');
+          return { reservationId: existing.id, balanceAfter: existing.balanceAfter };
+        }
+        const upd = await tx.creditAccount.updateMany({
+          where: { id: acct.id, [field]: { gte: amount } },
+          data: { [field]: { decrement: amount } },
+        });
+        if (upd.count === 0) {
+          const label = resource === 'AI' ? 'AI 算力' : '二维码';
+          throw new ForbiddenException(`${label}额度不足,请联系上级充值`);
+        }
+        const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+        const balanceAfter = (after as any)[field] as number;
+        const reservation = await tx.creditReservation.create({
+          data: {
+            tenantId: user.tenantId,
+            accountId: acct.id,
+            resource,
+            amount,
+            balanceAfter,
+            status: 'RESERVED',
+            refType: ref.refType ?? null,
+            refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId,
+            note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        await tx.creditLedger.create({
+          data: {
+            accountId: acct.id, resource, delta: -amount, balanceAfter, reason: 'RESERVED',
+            refType: ref.refType ?? null, refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        return { reservationId: reservation.id, balanceAfter };
+      });
+    } catch (err) {
+      if ((err as any)?.code === 'P2002') {
+        const existing = await this.prisma.creditReservation.findFirst({
+          where: { accountId: acct.id, resource, idempotencyKey },
+          select: { id: true, status: true, amount: true, balanceAfter: true },
+        });
+        if (existing && existing.status !== 'RELEASED' && existing.amount === amount) {
+          return { reservationId: existing.id, balanceAfter: existing.balanceAfter };
+        }
+      }
+      throw err;
+    }
+  }
+
+  async confirmReservation(user: AuthUser, resource: CreditResource, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法确认预约');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    return this.prisma.$transaction(async (tx) => {
+      const existingConfirm = await tx.creditLedger.findFirst({
+        where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+        select: { balanceAfter: true },
+      });
+      const reservation = await tx.creditReservation.findFirst({
+        where: { accountId: acct.id, resource, idempotencyKey },
+        select: { id: true, status: true, balanceAfter: true },
+      });
+      if (!reservation) throw new BadRequestException('预约记录不存在,无法确认扣费');
+      if (reservation.status === 'RELEASED') throw new BadRequestException('预约已释放,无法确认扣费');
+      if (existingConfirm) return { reservationId: reservation.id, balanceAfter: existingConfirm.balanceAfter };
+      if (reservation.status === 'RESERVED') {
+        const flip = await tx.creditReservation.updateMany({
+          where: { id: reservation.id, status: 'RESERVED' },
+          data: { status: 'CONFIRMED', confirmedAt: new Date() },
+        });
+        if (flip.count === 0) {
+          const existing = await tx.creditLedger.findFirst({
+            where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+            select: { balanceAfter: true },
+          });
+          if (existing) return { reservationId: reservation.id, balanceAfter: existing.balanceAfter };
+          throw new BadRequestException('预约状态已变化,无法确认扣费');
+        }
+      }
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      const balanceAfter = (after as any)[field] as number;
+      try {
+        await tx.creditLedger.create({
+          data: {
+            accountId: acct.id, resource, delta: 0, balanceAfter, reason: 'CONFIRMED',
+            refType: ref.refType ?? null, refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+      } catch (err) {
+        if ((err as any)?.code !== 'P2002') throw err;
+        const existing = await tx.creditLedger.findFirst({
+          where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+          select: { balanceAfter: true },
+        });
+        if (!existing) throw err;
+        return { reservationId: reservation.id, balanceAfter: existing.balanceAfter };
+      }
+      return { reservationId: reservation.id, balanceAfter };
+    });
+  }
+
+  async releaseReservation(user: AuthUser, resource: CreditResource, amount: number, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法释放预约');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.creditReservation.findFirst({
+        where: { accountId: acct.id, resource, idempotencyKey },
+        select: { id: true, status: true, amount: true, balanceAfter: true },
+      });
+      if (!reservation) throw new BadRequestException('预约记录不存在,无法释放额度');
+      if (reservation.status === 'CONFIRMED') throw new BadRequestException('预约已确认,无法释放额度');
+      const existingRelease = await tx.creditLedger.findFirst({
+        where: { accountId: acct.id, reason: 'RELEASED', idempotencyKey },
+        select: { balanceAfter: true },
+      });
+      if (existingRelease || reservation.status === 'RELEASED') {
+        return { reservationId: reservation.id, balanceAfter: existingRelease?.balanceAfter ?? reservation.balanceAfter };
+      }
+      if (amount !== reservation.amount) throw new BadRequestException('释放额度与预约额度不一致');
+      const flip = await tx.creditReservation.updateMany({
+        where: { id: reservation.id, status: 'RESERVED' },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+      if (flip.count === 0) throw new BadRequestException('预约状态已变化,无法释放额度');
+      await tx.creditAccount.updateMany({
+        where: { id: acct.id },
+        data: { [field]: { increment: reservation.amount } },
+      });
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      const balanceAfter = (after as any)[field] as number;
+      await tx.creditLedger.create({
+        data: {
+          accountId: acct.id, resource, delta: reservation.amount, balanceAfter, reason: 'RELEASED',
+          refType: ref.refType ?? null, refId: ref.refId ?? null,
+          operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+          idempotencyKey,
+        },
+      });
+      return { reservationId: reservation.id, balanceAfter };
     });
   }
 

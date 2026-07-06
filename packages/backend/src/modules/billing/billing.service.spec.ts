@@ -10,6 +10,7 @@ const merchant: AuthUser = { userId: 'u3', tenantId: 't1', role: Role.MERCHANT, 
 function makeService(opts: { aiBalance?: number; codeBalance?: number; account?: any } = {}) {
   const state: any = { aiBalance: opts.aiBalance ?? 0, codeBalance: opts.codeBalance ?? 0 };
   const ledgers: any[] = [];
+  const reservations: any[] = [];
   const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
   const tx = {
     creditAccount: {
@@ -39,13 +40,31 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
       ) ?? null,
       create: async (a: any) => { ledgers.push(a.data); return a.data; },
     },
+    creditReservation: {
+      findFirst: async (a: any) => reservations.find((r) =>
+        r.accountId === a.where.accountId &&
+        r.resource === a.where.resource &&
+        r.idempotencyKey === a.where.idempotencyKey,
+      ) ?? null,
+      create: async (a: any) => {
+        const row = { id: `res${reservations.length + 1}`, ...a.data };
+        reservations.push(row);
+        return row;
+      },
+      updateMany: async (a: any) => {
+        const row = reservations.find((r) => r.id === a.where.id && (!a.where.status || r.status === a.where.status));
+        if (!row) return { count: 0 };
+        Object.assign(row, a.data);
+        return { count: 1 };
+      },
+    },
   };
   const prisma: any = {
     ...tx,
     $transaction: async (fn: any) => fn(tx),
   };
   const svc = new BillingService(prisma);
-  return { svc, state, ledgers, prisma };
+  return { svc, state, ledgers, reservations, prisma };
 }
 
 describe('BillingService.consume', () => {
@@ -86,6 +105,153 @@ describe('BillingService.refund', () => {
     await svc.refund(merchant, 'AI', 3, { refType: 'ai.transcribe' });
     expect(state.aiBalance).toBe(10);
     expect(ledgers[0]).toMatchObject({ resource: 'AI', delta: 3, balanceAfter: 10, reason: 'REFUND', refType: 'ai.transcribe' });
+  });
+});
+
+describe('BillingService reservation model', () => {
+  it('reserve:余额充足时扣减并写 RESERVED 流水', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', refId: 'b1', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers[0]).toMatchObject({
+      resource: 'CODE',
+      delta: -5,
+      balanceAfter: 5,
+      reason: 'RESERVED',
+      refType: 'trace.generate',
+      refId: 'b1',
+      idempotencyKey: ref.idempotencyKey,
+    });
+  });
+
+  it('reserve:同一幂等键重复预约不二次扣减', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    await svc.reserve(merchant, 'CODE', 5, ref);
+
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((l) => l.reason === 'RESERVED')).toHaveLength(1);
+  });
+
+  it('confirmReservation:已有 RESERVED 后写零 delta CONFIRMED 且幂等', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    await svc.confirmReservation(merchant, 'CODE', ref);
+    await svc.confirmReservation(merchant, 'CODE', ref);
+
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((l) => l.reason === 'CONFIRMED')).toHaveLength(1);
+    expect(ledgers.find((l) => l.reason === 'CONFIRMED')).toMatchObject({ delta: 0, balanceAfter: 5 });
+  });
+
+  it('releaseReservation:已有 RESERVED 后退回额度并写 RELEASED 且幂等', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    await svc.releaseReservation(merchant, 'CODE', 5, ref);
+    await svc.releaseReservation(merchant, 'CODE', 5, ref);
+
+    expect(state.codeBalance).toBe(10);
+    expect(ledgers.filter((l) => l.reason === 'RELEASED')).toHaveLength(1);
+    expect(ledgers.find((l) => l.reason === 'RELEASED')).toMatchObject({ delta: 5, balanceAfter: 10 });
+  });
+
+  it('releaseReservation:没有 RESERVED 时拒绝释放,避免凭空加余额', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+
+    await expect(
+      svc.releaseReservation(merchant, 'CODE', 5, { idempotencyKey: 'missing' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(state.codeBalance).toBe(10);
+    expect(ledgers).toHaveLength(0);
+  });
+
+  it('releaseReservation:已确认预约不可释放', async () => {
+    const { svc, state } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    await svc.confirmReservation(merchant, 'CODE', ref);
+
+    await expect(svc.releaseReservation(merchant, 'CODE', 5, ref)).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.codeBalance).toBe(5);
+  });
+
+  it('confirmReservation:已释放预约不可确认', async () => {
+    const { svc, state } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    await svc.releaseReservation(merchant, 'CODE', 5, ref);
+
+    await expect(svc.confirmReservation(merchant, 'CODE', ref)).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.codeBalance).toBe(10);
+  });
+
+  it('confirmReservation:CAS 失败时不写 CONFIRMED 流水', async () => {
+    const { svc, ledgers, prisma } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    prisma.creditReservation.updateMany = async () => ({ count: 0 });
+
+    await expect(svc.confirmReservation(merchant, 'CODE', ref)).rejects.toBeInstanceOf(BadRequestException);
+    expect(ledgers.filter((l) => l.reason === 'CONFIRMED')).toHaveLength(0);
+  });
+
+  it('releaseReservation:CAS 失败时不返还余额也不写 RELEASED 流水', async () => {
+    const { svc, state, ledgers, prisma } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    prisma.creditReservation.updateMany = async () => ({ count: 0 });
+
+    await expect(svc.releaseReservation(merchant, 'CODE', 5, ref)).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((l) => l.reason === 'RELEASED')).toHaveLength(0);
+  });
+  it('reserve rejects same idempotency key with a different amount', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:req-1' };
+
+    await svc.reserve(merchant, 'CODE', 2, ref);
+
+    await expect(svc.reserve(merchant, 'CODE', 5, ref)).rejects.toBeInstanceOf(BadRequestException);
+    expect(state.codeBalance).toBe(8);
+    expect(ledgers.filter((l) => l.reason === 'RESERVED')).toHaveLength(1);
+  });
+
+  it('confirmReservation returns idempotently when CAS loses to an existing CONFIRMED ledger', async () => {
+    const { svc, state, ledgers, prisma } = makeService({ codeBalance: 10 });
+    const ref = { refType: 'trace.generate', idempotencyKey: 'trace.generate:t1:u3:b1:5' };
+
+    await svc.reserve(merchant, 'CODE', 5, ref);
+    prisma.creditReservation.updateMany = async () => {
+      ledgers.push({
+        accountId: 'acc1',
+        resource: 'CODE',
+        delta: 0,
+        balanceAfter: 5,
+        reason: 'CONFIRMED',
+        idempotencyKey: ref.idempotencyKey,
+      });
+      return { count: 0 };
+    };
+
+    const out = await svc.confirmReservation(merchant, 'CODE', ref);
+
+    expect(out).toMatchObject({ reservationId: 'res1', balanceAfter: 5 });
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((l) => l.reason === 'CONFIRMED')).toHaveLength(1);
   });
 });
 

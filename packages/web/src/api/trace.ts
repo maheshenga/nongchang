@@ -33,8 +33,16 @@ export interface TraceEvent {
 }
 
 // 一物一码:为批次批量生成 count 个唯一溯源码,返回码列表。
-export function generateCodes(batchId: string, count: number): Promise<TraceCode[]> {
-  return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}?count=${encodeURIComponent(count)}`, { method: 'POST' });
+export function createTraceGenerationRequestKey(source: string, batchId: string, count: number): string {
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `${source}:${batchId}:${count}:${random}`;
+}
+
+export function generateCodes(batchId: string, count: number, requestKey?: string): Promise<TraceCode[]> {
+  return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}?count=${encodeURIComponent(count)}`, {
+    method: 'POST',
+    ...(requestKey ? { headers: { 'Idempotency-Key': requestKey } } : {}),
+  });
 }
 
 export function listEvents(batchId: string): Promise<TraceEvent[]> {

@@ -11,13 +11,22 @@ const evt: CreateTraceEventDto = {
 
 function make(batchInScope = true) {
   const created: any[] = [];
-  const billing = { consume: vi.fn().mockResolvedValue({ balanceAfter: 0 }), refund: vi.fn().mockResolvedValue({ balanceAfter: 0 }) };
+  const billing = {
+    reserve: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+    confirmReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+    releaseReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+  };
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
     traceCode: {
       create: vi.fn().mockResolvedValue({ id: 'tc1' }),
       createMany: vi.fn().mockImplementation(async ({ data }: any) => { created.push(...data); return { count: data.length }; }),
-      findMany: vi.fn().mockImplementation(async () => created),
+      findMany: vi.fn().mockImplementation(async (q?: any) => {
+        if (q?.where?.generationKey) return created.filter((c) => c.generationKey === q.where.generationKey);
+        if (q?.where?.tenantId && q?.where?.batchId && q?.where?.generationKey === undefined) return created.filter((c) => c.tenantId === q.where.tenantId && c.batchId === q.where.batchId);
+        if (q?.where?.code?.in) return created.filter((c) => q.where.code.in.includes(c.code));
+        return created;
+      }),
     },
     traceEvent: {
       create: vi.fn().mockResolvedValue({ id: 'te1' }),
@@ -90,24 +99,69 @@ describe('TraceService.listCodes 已生成码列表', () => {
 });
 
 describe('TraceService.generateCodes 扣费插桩', () => {
-  it('生成成功后扣 CODE = count', async () => {
+  it('生成成功后预约并确认 CODE = count', async () => {
     const h = make(true);
     await h.svc.generateCodes(merchant, 'b1', 5);
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 5, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 5, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.releaseReservation).not.toHaveBeenCalled();
   });
-  it('同一生码请求使用稳定幂等键', async () => {
+  it('同一客户端请求键使用稳定幂等键', async () => {
     const h = make(true);
-    await h.svc.generateCodes(merchant, 'b1', 5);
-    await h.svc.generateCodes(merchant, 'b1', 5);
+    await h.svc.generateCodes(merchant, 'b1', 5, 'req-1');
+    await h.svc.generateCodes(merchant, 'b1', 5, 'req-2');
 
-    const firstRef = h.billing.consume.mock.calls[0][3];
-    const secondRef = h.billing.consume.mock.calls[1][3];
-    expect(firstRef.idempotencyKey).toBe('trace.generate:t1:op1:b1:5');
-    expect(secondRef.idempotencyKey).toBe(firstRef.idempotencyKey);
+    const firstRef = h.billing.reserve.mock.calls[0][3];
+    const secondRef = h.billing.reserve.mock.calls[1][3];
+    expect(firstRef.idempotencyKey).toBe('trace.generate:t1:op1:b1:req-1');
+    expect(secondRef.idempotencyKey).toBe('trace.generate:t1:op1:b1:req-2');
+  });
+  it('同一客户端请求键重复调用返回已生成码,不再次扣费或建码', async () => {
+    const h = make(true);
+    const first = await h.svc.generateCodes(merchant, 'b1', 2, 'req-repeat');
+    h.billing.reserve.mockClear();
+    h.billing.confirmReservation.mockClear();
+    h.prisma.traceCode.createMany.mockClear();
+
+    const second = await h.svc.generateCodes(merchant, 'b1', 2, 'req-repeat');
+
+    expect(second).toEqual(first);
+    expect(h.billing.reserve).not.toHaveBeenCalled();
+    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ idempotencyKey: 'trace.generate:t1:op1:b1:req-repeat' }));
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+  });
+  it('同一客户端请求键即使 count 变化也返回原 codes', async () => {
+    const h = make(true);
+    const first = await h.svc.generateCodes(merchant, 'b1', 2, 'req-same-key');
+    h.billing.reserve.mockClear();
+    h.billing.confirmReservation.mockClear();
+    h.prisma.traceCode.createMany.mockClear();
+
+    const second = await h.svc.generateCodes(merchant, 'b1', 5, 'req-same-key');
+
+    expect(second).toEqual(first);
+    expect(h.billing.reserve).not.toHaveBeenCalled();
+    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ idempotencyKey: 'trace.generate:t1:op1:b1:req-same-key' }));
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+  });
+  it('同一客户端请求键已有 codes 但确认失败后重试会补确认', async () => {
+    const h = make(true);
+    h.billing.confirmReservation.mockRejectedValueOnce(new Error('confirm down'));
+    await expect(h.svc.generateCodes(merchant, 'b1', 2, 'req-confirm-retry')).rejects.toThrow('confirm down');
+    h.billing.reserve.mockClear();
+    h.billing.confirmReservation.mockClear();
+    h.prisma.traceCode.createMany.mockClear();
+
+    const second = await h.svc.generateCodes(merchant, 'b1', 2, 'req-confirm-retry');
+
+    expect(second).toHaveLength(2);
+    expect(h.billing.reserve).not.toHaveBeenCalled();
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ idempotencyKey: 'trace.generate:t1:op1:b1:req-confirm-retry' }));
   });
   it('余额不足则不创建码', async () => {
     const h = make(true);
-    h.billing.consume.mockRejectedValueOnce(new Error('insufficient'));
+    h.billing.reserve.mockRejectedValueOnce(new Error('insufficient'));
     await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
@@ -115,20 +169,22 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     const h = make(true);
     h.prisma.traceCode.findMany.mockRejectedValueOnce(new Error('read failed'));
     await expect(h.svc.generateCodes(merchant, 'b1', 2)).rejects.toThrow('read failed');
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 2, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
-    expect(h.billing.refund).not.toHaveBeenCalled();
+    expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 2, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.releaseReservation).not.toHaveBeenCalled();
   });
   it('batch 不在范围则不扣费', async () => {
     const h = make(false);
     await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
-    expect(h.billing.consume).not.toHaveBeenCalled();
+    expect(h.billing.reserve).not.toHaveBeenCalled();
   });
-  it('建码失败则退还已扣额度并重抛', async () => {
+  it('建码失败则释放已预约额度并重抛', async () => {
     const h = make(true);
     h.prisma.traceCode.createMany.mockRejectedValueOnce(new Error('db down'));
     await expect(h.svc.generateCodes(merchant, 'b1', 4)).rejects.toThrow('db down');
-    expect(h.billing.consume).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
-    expect(h.billing.refund).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.releaseReservation).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
+    expect(h.billing.confirmReservation).not.toHaveBeenCalled();
   });
 
   it('建码前在同一事务内锁定 batch 行', async () => {

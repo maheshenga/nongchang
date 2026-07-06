@@ -1,4 +1,4 @@
-import { Body, Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, DefaultValuePipe, Get, Headers, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { AuthUser, CreateTraceEventDto, createTraceEventSchema, listQuerySchema, ListQuery, Permission, Role } from '@nongchang/shared';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -15,8 +15,9 @@ export class TraceController {
     @CurrentUser() user: AuthUser,
     @Param('batchId') batchId: string,
     @Query('count', new DefaultValuePipe(1), ParseIntPipe) count: number,
+    @Headers('idempotency-key') requestKey?: string,
   ) {
-    return this.svc.generateCodes(user, batchId, count);
+    return this.svc.generateCodes(user, batchId, count, requestKey);
   }
 
   @Post('events') @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
