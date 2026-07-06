@@ -71,6 +71,11 @@ export class BillingController {
     return this.svc.listOrders(user, query);
   }
 
+  @Get('orders/:id') @Roles(Role.AGENT_ADMIN, Role.MERCHANT)
+  getOrder(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.svc.getOrder(user, id);
+  }
+
   @Post('orders') @Roles(Role.AGENT_ADMIN, Role.MERCHANT)
   createOrder(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createOrderSchema)) dto: CreateOrderInput) {
     return this.svc.createOrder(user, dto);

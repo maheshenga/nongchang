@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { BillingService } from './billing.service';
 import { Role, type AuthUser } from '@nongchang/shared';
 
@@ -837,6 +837,51 @@ describe('BillingService.createOrder', () => {
     const { prisma } = orderPrisma([{ id: 'p1', tenantId: 't1', name: 'x', resource: 'AI', quantity: 1, priceCents: 1, isUnit: false, active: true }]);
     const svc = new BillingService(prisma);
     await expect(svc.createOrder(sysadmin, { planId: 'p1' })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('BillingService.getOrder', () => {
+  const baseOrder = {
+    id: 'o1',
+    tenantId: 't1',
+    ownerType: 'MERCHANT',
+    ownerId: 'm1',
+    planId: null,
+    resource: 'CODE',
+    quantity: 100,
+    amountCents: 990,
+    status: 'PENDING',
+    buyerId: 'u3',
+    createdAt: new Date('2026-07-07T00:00:00.000Z'),
+    paidAt: null,
+    plan: null,
+  };
+
+  function getOrderPrisma(order: any = baseOrder) {
+    return {
+      creditOrder: {
+        findFirst: vi.fn().mockResolvedValue(order),
+      },
+    } as any;
+  }
+
+  it('returns the current buyer order by id with plan name', async () => {
+    const prisma = getOrderPrisma({ ...baseOrder, plan: { name: 'CODE100' } });
+    const svc = new BillingService(prisma);
+
+    const out = await svc.getOrder(merchant, 'o1');
+
+    expect(prisma.creditOrder.findFirst).toHaveBeenCalledWith({
+      where: { id: 'o1', tenantId: 't1', ownerType: 'MERCHANT', ownerId: 'm1' },
+      include: { plan: { select: { name: true } } },
+    });
+    expect(out).toMatchObject({ id: 'o1', status: 'PENDING', planName: 'CODE100' });
+  });
+
+  it('rejects orders outside the current buyer ownership scope', async () => {
+    const svc = new BillingService(getOrderPrisma(null));
+
+    await expect(svc.getOrder(merchant, 'other-order')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

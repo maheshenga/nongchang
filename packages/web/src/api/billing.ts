@@ -73,6 +73,10 @@ export function listOrders(query: Partial<OrderQuery> = {}): Promise<PaginatedOr
   return request<PaginatedOrders>(`/billing/orders${s ? `?${s}` : ''}`);
 }
 
+export function getOrder(id: string): Promise<CreditOrderView> {
+  return request<CreditOrderView>(`/billing/orders/${id}`);
+}
+
 export function createOrder(input: CreateOrderInput): Promise<CreditOrderView> {
   return request<CreditOrderView>('/billing/orders', { method: 'POST', body: JSON.stringify(input) });
 }

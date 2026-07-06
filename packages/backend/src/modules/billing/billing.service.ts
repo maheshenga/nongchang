@@ -829,6 +829,16 @@ export class BillingService {
     };
   }
 
+  async getOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
+    const buyer = this.resolveBuyer(user);
+    const order = await this.prisma.creditOrder.findFirst({
+      where: { id, tenantId: user.tenantId, ownerType: buyer.ownerType, ownerId: buyer.ownerId },
+      include: { plan: { select: { name: true } } },
+    });
+    if (!order) throw new NotFoundException('订单不存在');
+    return this.toOrderView(order, (order as any).plan?.name ?? null);
+  }
+
   private toOrderView(o: any, planName: string | null): CreditOrderView {
     return {
       id: o.id, ownerType: o.ownerType, ownerId: o.ownerId,
