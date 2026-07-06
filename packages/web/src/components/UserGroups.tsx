@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Users, RefreshCw, Plus, Trash2, X } from 'lucide-react';
-import { Permission, type Permission as PermissionValue, type UserGroupView, type UserGroupInput } from '@nongchang/shared';
+import { useState, type FormEvent } from 'react';
+import { Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
+import { Permission, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
-import { listUserGroups, createUserGroup, updateUserGroup, deleteUserGroup } from '../api/user-group';
+import { createUserGroup, deleteUserGroup, listUserGroups, updateUserGroup } from '../api/user-group';
+import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 
-// 经营角色在已接入接口会按这些权限放行；管理员与未接入接口仍按角色与业务范围鉴权。
 const PERMISSION_OPTIONS: { value: PermissionValue; label: string }[] = [
   { value: Permission.RECORD_CREATE, label: '创建农事记录' },
   { value: Permission.RECORD_VIEW, label: '查看农事记录' },
@@ -22,6 +22,12 @@ interface EditState {
 
 const EMPTY: EditState = { id: null, name: '', isDefault: false, permissions: [] };
 
+function knownPermissions(permissions: string[]): PermissionValue[] {
+  return permissions.filter((permission): permission is PermissionValue =>
+    Object.values(Permission).includes(permission as PermissionValue),
+  );
+}
+
 export default function UserGroups() {
   const { data, loading, error, reload } = useApi(listUserGroups);
   const [edit, setEdit] = useState<EditState | null>(null);
@@ -37,9 +43,7 @@ export default function UserGroups() {
       id: g.id,
       name: g.name,
       isDefault: g.isDefault,
-      permissions: g.permissions.filter((permission): permission is PermissionValue =>
-        Object.values(Permission).includes(permission as PermissionValue),
-      ),
+      permissions: knownPermissions(g.permissions),
     });
   };
 
@@ -51,7 +55,7 @@ export default function UserGroups() {
     });
   };
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!edit) return;
     setSubmitting(true); setErr(null);
@@ -67,7 +71,7 @@ export default function UserGroups() {
   };
 
   const onDelete = async (g: UserGroupView) => {
-    if (!window.confirm(`确认删除用户组「${g.name}」?组内用户将被解除归属。`)) return;
+    if (!window.confirm(`确认删除用户组「${g.name}」？如果仍有关联用户，后端可能拒绝删除。`)) return;
     try {
       await deleteUserGroup(g.id);
       await reload();
@@ -76,60 +80,68 @@ export default function UserGroups() {
     }
   };
 
-  const inputCls =
-    'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition';
-
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-slate-800">
-          <div className="p-1.5 bg-violet-100 text-violet-600 rounded-lg"><Users className="w-4 h-4" /></div>
-          <h2 className="font-bold text-base">用户分组</h2>
+    <div className="flex h-full min-h-0 max-w-5xl flex-col gap-4">
+      <header className="flex shrink-0 flex-col gap-3 border border-[#E1DFDD] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-[#242424]">
+            <Users className="h-5 w-5 text-[#0078D4]" />
+            用户分组
+          </h2>
+          <p className="mt-1 text-sm text-[#605E5C]">
+            微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入: 创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。
+          </p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> 新建用户组
+        <button type="button" onClick={openCreate} className={fluentButton('primary')}>
+          <Plus className="h-4 w-4" /> 新建用户组
         </button>
-      </div>
-      <p className="text-xs text-slate-500 -mt-3">微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入:创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。</p>
+      </header>
 
-      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+      {loading && <div className="border border-[#E1DFDD] bg-white p-8 text-center text-sm text-[#605E5C]">加载中...</div>}
       {error && (
-        <div className="p-8 text-center text-rose-500 text-sm">
-          加载失败:{error}
-          <button onClick={() => void reload()} className="underline font-bold ml-2 inline-flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" /> 重试
+        <div className="border border-[#F1B8BD] bg-[#FDE7E9] p-4 text-sm text-[#A4262C]">
+          加载失败: {error}
+          <button type="button" onClick={() => void reload()} className="ml-2 inline-flex items-center gap-1 font-semibold underline">
+            <RefreshCw className="h-3 w-3" /> 重试
           </button>
         </div>
       )}
 
       {!loading && !error && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className={`${fluentTable.wrapper} overflow-x-auto`}>
           {groups.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-sm">暂无用户组</div>
+            <div className="p-8 text-center text-sm text-[#605E5C]">暂无用户组</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50/60 text-slate-500 text-xs uppercase tracking-wider">
+            <table className={`${fluentTable.table} min-w-[720px]`}>
+              <thead className={fluentTable.thead}>
                 <tr>
-                  <th className="text-left px-5 py-3 font-bold">名称</th>
-                  <th className="text-left px-5 py-3 font-bold">默认组</th>
-                  <th className="text-left px-5 py-3 font-bold">接口权限</th>
-                  <th className="text-right px-5 py-3 font-bold">操作</th>
+                  <th className={fluentTable.th}>名称</th>
+                  <th className={fluentTable.th}>默认组</th>
+                  <th className={fluentTable.th}>接口权限</th>
+                  <th className={`${fluentTable.th} text-right`}>操作</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {groups.map((g) => (
-                  <tr key={g.id} className="hover:bg-slate-50/50">
-                    <td className="px-5 py-3 font-bold text-slate-700">{g.name}</td>
-                    <td className="px-5 py-3">{g.isDefault ? <span className="text-emerald-600 font-bold">是</span> : <span className="text-slate-400">—</span>}</td>
-                    <td className="px-5 py-3 text-slate-500">{g.permissions.length ? g.permissions.length + ' 项' : '未配置'}</td>
-                    <td className="px-5 py-3 text-right space-x-3">
-                      <button onClick={() => openEdit(g)} className="text-emerald-600 hover:text-emerald-700 font-bold">编辑</button>
-                      <button onClick={() => void onDelete(g)} className="text-rose-500 hover:text-rose-600 font-bold inline-flex items-center gap-1">
-                        <Trash2 className="w-3.5 h-3.5" /> 删除
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+              <tbody>
+                {groups.map((g) => {
+                  const knownCount = knownPermissions(g.permissions).length;
+                  return (
+                    <tr key={g.id} className={fluentTable.row}>
+                      <td className={`${fluentTable.td} font-semibold`}>{g.name}</td>
+                      <td className={fluentTable.td}>
+                        {g.isDefault ? <span className={fluentStatusTag('active')}>是</span> : <span className="text-[#605E5C]">-</span>}
+                      </td>
+                      <td className={`${fluentTable.td} text-[#605E5C]`}>{knownCount ? `${knownCount} 项` : '未配置'}</td>
+                      <td className={`${fluentTable.td} text-right`}>
+                        <div className="inline-flex gap-2">
+                          <button type="button" onClick={() => openEdit(g)} aria-label={`编辑 ${g.name}`} className={fluentButton('subtle')}>编辑</button>
+                          <button type="button" onClick={() => void onDelete(g)} aria-label={`删除 ${g.name}`} className={fluentButton('danger')}>
+                            <Trash2 className="h-4 w-4" /> 删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -137,40 +149,36 @@ export default function UserGroups() {
       )}
 
       {edit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEdit(null)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <h3 className="font-bold text-slate-800">{edit.id ? '编辑用户组' : '新建用户组'}</h3>
-              <button onClick={() => setEdit(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label={edit.id ? '编辑用户组' : '新建用户组'}>
+          <div className="w-full max-w-lg overflow-hidden rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl">
+            <div className="flex h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5">
+              <h3 className="text-base font-semibold text-[#242424]">{edit.id ? '编辑用户组' : '新建用户组'}</h3>
+              <button type="button" onClick={() => setEdit(null)} aria-label="关闭" className={fluentButton('icon')}><X className="h-5 w-5" /></button>
             </div>
-            <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">名称</label>
-                <input aria-label="名称" className={inputCls} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="如:记录员" required />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={edit.isDefault} onChange={(e) => setEdit({ ...edit, isDefault: e.target.checked })}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
-                <span className="text-sm text-slate-700 font-bold">设为默认组(微信新用户进入此组)</span>
+            <form onSubmit={(e) => void onSubmit(e)} className="space-y-4 p-5">
+              <label htmlFor="group-name" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
+                名称
+                <input id="group-name" aria-label="名称" className={`${fluentInput} w-full`} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="如: 记录员" required />
+              </label>
+              <label className="flex cursor-pointer select-none items-center gap-2">
+                <input type="checkbox" checked={edit.isDefault} onChange={(e) => setEdit({ ...edit, isDefault: e.target.checked })} className="h-4 w-4 rounded border-[#C8C6C4] text-[#0078D4] focus:ring-[#0078D4]/40" />
+                <span className="text-sm font-semibold text-[#242424]">设为默认组，微信新用户进入此组</span>
               </label>
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-2">接口权限（部分接口已接入）</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="mb-2 block text-sm font-semibold text-[#605E5C]">接口权限（部分接口已接入）</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {PERMISSION_OPTIONS.map((p) => (
-                    <label key={p.value} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 rounded-lg px-3 py-2">
-                      <input type="checkbox" checked={edit.permissions.includes(p.value)} onChange={() => togglePerm(p.value)}
-                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
-                      <span className="text-sm text-slate-700">{p.label}</span>
+                    <label key={p.value} className="flex cursor-pointer select-none items-center gap-2 border border-[#E1DFDD] bg-[#FAFAFA] px-3 py-2">
+                      <input type="checkbox" checked={edit.permissions.includes(p.value)} onChange={() => togglePerm(p.value)} className="h-4 w-4 rounded border-[#C8C6C4] text-[#0078D4] focus:ring-[#0078D4]/40" />
+                      <span className="text-sm text-[#242424]">{p.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
-              {err && <div className="text-sm text-rose-500 font-bold">{err}</div>}
-              <div className="flex items-center gap-3 pt-2">
-                <button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm">
-                  {submitting ? '保存中…' : '保存'}
-                </button>
-                <button type="button" onClick={() => setEdit(null)} className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2 rounded-lg text-sm font-bold transition-colors">取消</button>
+              {err && <div className="text-sm font-semibold text-[#A4262C]">{err}</div>}
+              <div className="flex justify-end gap-2 border-t border-[#E1DFDD] pt-4">
+                <button type="button" onClick={() => setEdit(null)} className={fluentButton('secondary')}>取消</button>
+                <button type="submit" disabled={submitting} className={fluentButton('primary')}>{submitting ? '保存中...' : '保存'}</button>
               </div>
             </form>
           </div>

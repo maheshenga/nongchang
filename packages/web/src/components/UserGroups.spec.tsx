@@ -28,6 +28,7 @@ const groups: UserGroupView[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
   listUserGroupsMock.mockResolvedValue(groups);
   createUserGroupMock.mockResolvedValue(groups[0]);
   updateUserGroupMock.mockResolvedValue(groups[0]);
@@ -62,6 +63,38 @@ describe('UserGroups permission enforcement wording', () => {
         isDefault: false,
         permissions: ['record:create'],
       });
+    });
+  });
+
+  it('edits default flag and known permissions through the real update API', async () => {
+    render(<UserGroups />);
+    await screen.findByText('记录员');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑 记录员' }));
+    const recordCreate = screen.getByLabelText('创建农事记录') as HTMLInputElement;
+    expect(recordCreate.checked).toBe(true);
+    fireEvent.click(recordCreate);
+    fireEvent.click(screen.getByLabelText(/设为默认组/));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(updateUserGroupMock).toHaveBeenCalledWith('group-1', {
+        name: '记录员',
+        isDefault: false,
+        permissions: [],
+      });
+    });
+  });
+
+  it('keeps destructive deletion behind confirmation', async () => {
+    render(<UserGroups />);
+    await screen.findByText('记录员');
+
+    fireEvent.click(screen.getByRole('button', { name: '删除 记录员' }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(deleteUserGroupMock).toHaveBeenCalledWith('group-1');
     });
   });
 });
