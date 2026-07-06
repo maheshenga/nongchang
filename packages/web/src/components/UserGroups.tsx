@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Users, RefreshCw, Plus, Trash2, X } from 'lucide-react';
-import { Permission, type UserGroupView, type UserGroupInput } from '@nongchang/shared';
+import { Permission, type Permission as PermissionValue, type UserGroupView, type UserGroupInput } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
 import { listUserGroups, createUserGroup, updateUserGroup, deleteUserGroup } from '../api/user-group';
 
 // 经营角色在已接入接口会按这些权限放行；管理员与未接入接口仍按角色与业务范围鉴权。
-const PERMISSION_OPTIONS: { value: string; label: string }[] = [
+const PERMISSION_OPTIONS: { value: PermissionValue; label: string }[] = [
   { value: Permission.RECORD_CREATE, label: '创建农事记录' },
   { value: Permission.RECORD_VIEW, label: '查看农事记录' },
   { value: Permission.TRACE_VIEW, label: '查看溯源' },
@@ -17,7 +17,7 @@ interface EditState {
   id: string | null;
   name: string;
   isDefault: boolean;
-  permissions: string[];
+  permissions: PermissionValue[];
 }
 
 const EMPTY: EditState = { id: null, name: '', isDefault: false, permissions: [] };
@@ -33,10 +33,17 @@ export default function UserGroups() {
   const openCreate = () => { setErr(null); setEdit({ ...EMPTY }); };
   const openEdit = (g: UserGroupView) => {
     setErr(null);
-    setEdit({ id: g.id, name: g.name, isDefault: g.isDefault, permissions: [...g.permissions] });
+    setEdit({
+      id: g.id,
+      name: g.name,
+      isDefault: g.isDefault,
+      permissions: g.permissions.filter((permission): permission is PermissionValue =>
+        Object.values(Permission).includes(permission as PermissionValue),
+      ),
+    });
   };
 
-  const togglePerm = (value: string) => {
+  const togglePerm = (value: PermissionValue) => {
     setEdit((prev) => {
       if (!prev) return prev;
       const has = prev.permissions.includes(value);
