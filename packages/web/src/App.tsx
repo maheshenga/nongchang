@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Bell, Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
+import { Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import GlobalSearch from './components/GlobalSearch';
 import { useAuth } from './auth/auth-context';
@@ -293,15 +293,6 @@ export default function App() {
             </button>
             <GlobalSearch items={searchItems} onOpen={setActiveTab} />
             <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-[#605E5C]">
-              <button
-                type="button"
-                aria-label="Notifications unavailable"
-                disabled
-                title="Notifications are not available"
-                className={fluentButton('icon')}
-              >
-                <Bell className="h-4 w-4" />
-              </button>
               <span className="hidden truncate sm:inline">{profile?.displayName ?? user?.userId ?? '已登录用户'}</span>
               <span className="hidden rounded-[4px] bg-[#F3F2F1] px-2 py-1 font-semibold text-[#323130] sm:inline">{roleInfo.badge}</span>
               <button type="button" onClick={() => setProfileOpen(true)} className={fluentButton('subtle')}>账户</button>

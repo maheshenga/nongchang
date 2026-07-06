@@ -120,24 +120,16 @@ describe('MerchantAdmin production actions', () => {
     expect(generateCodesMock).not.toHaveBeenCalled();
   });
 
-  it('does not show local completion toasts for unavailable actions', async () => {
+  it('keeps unavailable batch capabilities out of the primary action cluster', async () => {
     const { container } = render(<MerchantAdmin />);
     await screen.findByText('Peony');
     fireEvent.click(screen.getByText('Peony'));
 
     expect(container.textContent).not.toContain('pending backend integration');
-    const warehouseDocumentButton = screen.getByRole('button', { name: /出入库单未开放/ });
-    expect((warehouseDocumentButton as HTMLButtonElement).disabled).toBe(true);
-    const disabledButtons = Array.from(container.querySelectorAll('button:disabled'));
-    expect(disabledButtons.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('marks lifecycle trace archive as unavailable', async () => {
-    render(<MerchantAdmin />);
-    await screen.findByText('Peony');
-
-    const archiveButton = screen.getByRole('button', { name: 'Lifecycle trace archive unavailable' });
-    expect((archiveButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /出入库单未开放/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lifecycle trace archive unavailable' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /发货流向绑定未开通/ })).toBeNull();
+    expect(screen.getAllByText('批次状态流转、发货流向、出入库单和完整追溯档案请在批次管理中处理。')[0]).toBeTruthy();
   });
 
   it('prints trace labels without unsupported certification or cryptographic claims', async () => {

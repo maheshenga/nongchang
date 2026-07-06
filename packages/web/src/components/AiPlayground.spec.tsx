@@ -94,14 +94,13 @@ describe('AiPlayground production actions', () => {
     expect(await screen.findByText('diagnosis failed')).toBeTruthy();
   });
 
-  it('shows voice input as unavailable without triggering placeholder alerts', () => {
+  it('explains voice input is not available without showing an inert toolbar action', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 
     render(<AiPlayground />);
 
-    const voiceButton = screen.getByRole('button', { name: 'Voice input unavailable' });
-    expect((voiceButton as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(voiceButton);
+    expect(screen.queryByRole('button', { name: 'Voice input unavailable' })).toBeNull();
+    expect(screen.getByText('语音输入暂未开放，请先使用文本提问。')).toBeTruthy();
 
     expect(alertSpy).not.toHaveBeenCalled();
   });

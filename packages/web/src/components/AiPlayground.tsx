@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image as ImageIcon, MessageSquare, Mic, Send, Stethoscope } from 'lucide-react';
+import { Image as ImageIcon, MessageSquare, Send, Stethoscope } from 'lucide-react';
 import { aiChat, aiDiagnose } from '../api/ai';
 import { fluentButton, fluentInput } from '../ui/fluent';
 
@@ -107,16 +107,7 @@ export default function AiPlayground() {
               <Send className="h-4 w-4" />
               {chatLoading ? '发送中...' : '发送'}
             </button>
-            <button
-              type="button"
-              aria-label="Voice input unavailable"
-              disabled
-              className={fluentButton('secondary')}
-              title="Voice input is not available"
-            >
-              <Mic className="h-4 w-4" />
-              语音
-            </button>
+            <span className="text-xs text-[#605E5C]">语音输入暂未开放，请先使用文本提问。</span>
           </div>
           {chatError && <div className="mt-3 text-sm font-semibold text-[#A4262C]">{chatError}</div>}
           {answer && <div className="mt-3 whitespace-pre-wrap border border-[#E1DFDD] bg-[#FAFAFA] p-3 text-sm text-[#242424]">{answer}</div>}

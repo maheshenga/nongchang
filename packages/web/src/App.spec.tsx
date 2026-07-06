@@ -57,11 +57,11 @@ describe('App role wiring', () => {
     expect(await screen.findByText('Billing Admin View')).toBeTruthy();
   });
 
-  it('marks notifications as unavailable instead of leaving an inert header action', async () => {
+  it('removes unavailable notifications from the primary header actions', async () => {
     render(<App />);
 
-    const notificationButton = await screen.findByRole('button', { name: 'Notifications unavailable' });
-    expect((notificationButton as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByText('农场溯源管理')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Notifications unavailable' })).toBeNull();
   });
 
   it('falls back to the safe settings surface for unknown token roles', async () => {

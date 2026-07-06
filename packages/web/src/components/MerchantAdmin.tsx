@@ -226,48 +226,14 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap items-center gap-2">
                        <button
-                         disabled
-                         title="请在批次管理中执行状态流转"
-                         className="text-slate-400 font-bold text-[10px] bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg cursor-not-allowed"
-                       >
-                         到批次管理流转
-                       </button>
-                       <button
                          onClick={() => setSelectedCropIds(new Set([crop.id]))}
                          className="text-emerald-700 hover:text-white hover:bg-emerald-600 font-bold text-[10px] bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
                        >
                         选择后生成
                       </button>
-                      <button
-                        disabled
-                        title="发货流向绑定未在当前页开放"
-                        className="text-indigo-300 font-bold text-[10px] bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg cursor-not-allowed"
-                      >
-                        发货流向绑定未开通
-                      </button>
-                      <button
-                        disabled
-                        aria-label="Lifecycle trace archive unavailable"
-                        title="Lifecycle trace archive is not available"
-                        className="text-slate-400 font-bold text-[10px] px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 shadow-sm cursor-not-allowed"
-                      >
-                        追溯档案未开放
-                      </button>
-                      <button
-                        disabled
-                        title="批次出入库单导出未在当前页开放"
-                        className="flex items-center gap-1 text-slate-400 font-bold text-[10px] border border-slate-200 bg-slate-100 rounded-lg px-3 py-1.5 cursor-not-allowed"
-                      >
-                        <Printer className="w-3 h-3" />
-                        出入库单未开放
-                      </button>
-                      <button
-                        disabled
-                        title="请在批次管理中删除批次"
-                        className="flex items-center gap-1 text-red-300 font-bold text-[10px] border border-red-100 bg-red-50 rounded-lg px-3 py-1.5 cursor-not-allowed"
-                      >
-                        到批次管理删除
-                      </button>
+                      <span className="max-w-[280px] whitespace-normal text-[10px] leading-4 text-slate-500">
+                        批次状态流转、发货流向、出入库单和完整追溯档案请在批次管理中处理。
+                      </span>
                     </div>
                   </td>
                 </tr>
