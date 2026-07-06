@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { AuthUser, CreateTraceCredentialInput, TraceCredentialView, TraceCredentialType } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -6,6 +6,11 @@ import { ScopeService } from '../../common/scope/scope.service';
 interface CredentialRow {
   id: string; batchId: string; type: string; title: string; issuer: string;
   serialNo: string | null; issuedAt: Date | null; fileUrl: string; createdAt: Date;
+}
+
+interface OssConfigRow {
+  enabled: boolean;
+  baseUrl: string | null;
 }
 
 function toView(r: CredentialRow): TraceCredentialView {
@@ -20,6 +25,40 @@ function toView(r: CredentialRow): TraceCredentialView {
 export class TraceCredentialService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
+  private addOrigin(origins: Set<string>, rawUrl: string | null | undefined): void {
+    if (!rawUrl) return;
+    try {
+      origins.add(new URL(rawUrl).origin);
+    } catch {
+      // Ignore invalid trusted URL configuration; upload itself will have failed earlier.
+    }
+  }
+
+  private async trustedFileOrigins(tenantId: string): Promise<Set<string>> {
+    const origins = new Set<string>();
+    const ossConfig = (await this.prisma.ossConfig.findUnique({
+      where: { tenantId },
+      select: { enabled: true, baseUrl: true },
+    })) as OssConfigRow | null;
+    if (ossConfig?.enabled) this.addOrigin(origins, ossConfig.baseUrl);
+    this.addOrigin(origins, process.env.OSS_BASE_URL);
+    return origins;
+  }
+
+  private async assertTrustedFileUrl(tenantId: string, fileUrl: string): Promise<void> {
+    const trustedOrigins = await this.trustedFileOrigins(tenantId);
+    if (trustedOrigins.size === 0) return;
+    let parsed: URL;
+    try {
+      parsed = new URL(fileUrl);
+    } catch {
+      throw new BadRequestException('资质文件 URL 无效');
+    }
+    if (!trustedOrigins.has(parsed.origin)) {
+      throw new BadRequestException('资质文件 URL 不在可信存储域名内');
+    }
+  }
+
   /** 列出某批次的资质/检测文件。先校验 batch 在作用域内(fail-closed)。 */
   async list(user: AuthUser, batchId: string): Promise<TraceCredentialView[]> {
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
@@ -32,6 +71,7 @@ export class TraceCredentialService {
   /** 为批次登记资质/检测文件。先校验 batch 归属(fail-closed)。 */
   async create(user: AuthUser, input: CreateTraceCredentialInput): Promise<TraceCredentialView> {
     await this.scope.assertInScope(this.prisma, user, 'batch', input.batchId);
+    await this.assertTrustedFileUrl(user.tenantId, input.fileUrl);
     const row = (await this.prisma.traceCredential.create({
       data: {
         tenantId: user.tenantId, batchId: input.batchId, type: input.type, title: input.title,

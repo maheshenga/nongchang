@@ -22,6 +22,7 @@ function make(batchInScope = true, credInScope = true) {
       findFirst: vi.fn().mockResolvedValue(credInScope ? { id: 'cr1', batchId: 'b1' } : null),
       delete: vi.fn().mockResolvedValue({ id: 'cr1' }),
     },
+    ossConfig: { findUnique: vi.fn().mockResolvedValue(null) },
   };
   return { svc: new TraceCredentialService(prisma as any, new ScopeService()), prisma };
 }
@@ -39,6 +40,17 @@ describe('TraceCredentialService', () => {
   it('create:batch 不在范围则抛 Forbidden(不创建)', async () => {
     const h = make(false);
     await expect(h.svc.create(merchant, input)).rejects.toThrow();
+    expect(h.prisma.traceCredential.create).not.toHaveBeenCalled();
+  });
+
+  it('create: rejects credential file urls outside the trusted OSS base url', async () => {
+    const h = make(true);
+    h.prisma.ossConfig = {
+      findUnique: vi.fn().mockResolvedValue({ enabled: true, baseUrl: 'https://cdn.example.com/uploads' }),
+    };
+
+    await expect(h.svc.create(merchant, { ...input, fileUrl: 'https://evil.example/cert.pdf' }))
+      .rejects.toThrow();
     expect(h.prisma.traceCredential.create).not.toHaveBeenCalled();
   });
 
