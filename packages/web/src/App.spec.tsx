@@ -105,4 +105,14 @@ describe('App role wiring', () => {
     fireEvent.click(batchTab);
     expect(batchTab.getAttribute('aria-pressed')).toBe('true');
   });
+
+  it('opens mobile navigation from the command bar menu button', async () => {
+    authMock.role = 'agent_admin';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open navigation' }));
+
+    const mobileNav = await screen.findByRole('dialog', { name: 'Mobile navigation' });
+    expect(mobileNav.textContent).toContain('批次管理');
+  });
 });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Bell, Leaf, LogOut, Menu, Search, Sparkles } from 'lucide-react';
+import { Bell, Leaf, LogOut, Menu, Search, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
@@ -83,6 +83,7 @@ export default function App() {
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
@@ -170,9 +171,86 @@ export default function App() {
 
   const isMounted = (tab: AppTab) => mountedTabs.has(tab) && allowedTabs.includes(tab);
   const activeItem = flatNavItems.find(i => i.id === activeTab);
+  const renderNavSections = (mobile = false) => navItems.map((category) => (
+    <div key={category.category} className="py-1">
+      <div className="px-4 pb-1 pt-3 text-[11px] font-semibold text-[#605E5C]">{category.category}</div>
+      {category.items.map((item) => {
+        const Icon = item.icon;
+        const active = activeTab === item.id;
+        const label = navLabel(item.id, item.label);
+
+        return (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => {
+              setActiveTab(item.id);
+              if (mobile) setMobileNavOpen(false);
+            }}
+            className={`flex h-10 w-full items-center gap-3 border-l-2 px-4 text-left text-sm transition-colors ${
+              active
+                ? 'border-l-[#0078D4] bg-[#EFF6FC] text-[#005A9E]'
+                : 'border-l-transparent text-[#323130] hover:bg-[#F3F2F1]'
+            }`}
+            title={label}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  ));
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F5F5F5] text-[#242424]">
+      {mobileNavOpen && !isPresentationMode && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation backdrop"
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
+            className="relative flex h-full w-[280px] flex-col border-r border-[#E1DFDD] bg-[#FAFAFA] shadow-xl"
+          >
+            <div className="flex h-12 items-center gap-3 border-b border-[#E1DFDD] px-4">
+              <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">
+                <Leaf className="h-4 w-4" />
+              </div>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">农场溯源管理</span>
+              <button type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} className={fluentButton('icon')}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">
+              {renderNavSections(true)}
+            </nav>
+            {canOpenBilling && (
+              <div className="border-t border-[#E1DFDD] p-3">
+                <button
+                  type="button"
+                  aria-label="Open billing resources"
+                  onClick={() => {
+                    setActiveTab('billing');
+                    setMobileNavOpen(false);
+                  }}
+                  className={`${fluentButton('secondary')} w-full justify-start`}
+                >
+                  <Sparkles className="h-4 w-4" />
+                  打开计费资源
+                </button>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
+
       {!isPresentationMode && (
         <aside className="hidden w-[232px] shrink-0 border-r border-[#E1DFDD] bg-[#FAFAFA] md:flex md:flex-col">
           <div className="flex h-12 items-center gap-3 border-b border-[#E1DFDD] px-4">
@@ -183,34 +261,7 @@ export default function App() {
           </div>
 
           <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">
-            {navItems.map((category) => (
-              <div key={category.category} className="py-1">
-                <div className="px-4 pb-1 pt-3 text-[11px] font-semibold text-[#605E5C]">{category.category}</div>
-                {category.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = activeTab === item.id;
-                  const label = navLabel(item.id, item.label);
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`flex h-10 w-full items-center gap-3 border-l-2 px-4 text-left text-sm transition-colors ${
-                        active
-                          ? 'border-l-[#0078D4] bg-[#EFF6FC] text-[#005A9E]'
-                          : 'border-l-transparent text-[#323130] hover:bg-[#F3F2F1]'
-                      }`}
-                      title={label}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+            {renderNavSections(false)}
           </nav>
 
           {canOpenBilling && (
@@ -232,7 +283,7 @@ export default function App() {
       <main className="flex min-w-0 flex-1 flex-col">
         {!isPresentationMode && (
           <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#E1DFDD] bg-white px-4">
-            <button type="button" aria-label="打开导航" className={fluentButton('icon')}>
+            <button type="button" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
               <Menu className="h-4 w-4" />
             </button>
             <div className="relative hidden w-full max-w-xl sm:block">
