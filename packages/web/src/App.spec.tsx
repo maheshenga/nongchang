@@ -97,6 +97,17 @@ describe('App role wiring', () => {
     expect(screen.getByRole('button', { name: /退出/ })).toBeTruthy();
   });
 
+  it('opens navigation targets from global menu search', async () => {
+    authMock.role = 'system_admin';
+    render(<App />);
+
+    fireEvent.change(await screen.findByPlaceholderText('搜索资源、菜单和功能'), { target: { value: '商户' } });
+    fireEvent.click(await screen.findByRole('button', { name: /打开 商户管理与档案/ }));
+
+    expect(await screen.findByText('Merchant Management View')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '商户管理与档案' })).toBeTruthy();
+  });
+
   it('keeps batch navigation reachable from the shell', async () => {
     authMock.role = 'agent_admin';
     render(<App />);

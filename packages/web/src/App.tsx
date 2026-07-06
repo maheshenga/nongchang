@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Bell, Leaf, LogOut, Menu, Search, Sparkles, X } from 'lucide-react';
+import { Bell, Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
+import GlobalSearch from './components/GlobalSearch';
 import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
-import { fluentButton, fluentInput } from './ui/fluent';
+import { fluentButton } from './ui/fluent';
 
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
@@ -87,6 +88,10 @@ export default function App() {
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
+  const searchItems = useMemo(
+    () => flatNavItems.map(item => ({ id: item.id, label: navLabel(item.id, item.label), icon: item.icon })),
+    [flatNavItems],
+  );
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
   const canOpenBilling = allowedTabs.includes('billing');
@@ -286,10 +291,7 @@ export default function App() {
             <button type="button" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
               <Menu className="h-4 w-4" />
             </button>
-            <div className="relative hidden w-full max-w-xl sm:block">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
-              <input className={`${fluentInput} w-full pl-8`} placeholder="搜索资源、菜单和功能" />
-            </div>
+            <GlobalSearch items={searchItems} onOpen={setActiveTab} />
             <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-[#605E5C]">
               <button
                 type="button"
