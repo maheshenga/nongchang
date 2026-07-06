@@ -22,15 +22,12 @@ export class PublicTraceService {
       const traceCode = await tx.traceCode.findUnique({ where: { code } });
       if (!traceCode) throw new NotFoundException('溯源码不存在');
 
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${traceCode.batchId} FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('批次不存在');
+      const batch = await tx.batch.findUnique({ where: { id: traceCode.batchId } });
+      if (!batch) throw new NotFoundException('批次不存在');
 
       if (traceCode.status === 'frozen') {
         return { code: traceCode.code, frozen: true };
       }
-
-      const batch = await tx.batch.findUnique({ where: { id: traceCode.batchId } });
-      if (!batch) throw new NotFoundException('批次不存在');
 
       const field = await tx.field.findUnique({ where: { id: batch.fieldId } });
     // 经纬度存 PostGIS geography 列,用 ST_X/ST_Y 提取(无坐标则为 null)。

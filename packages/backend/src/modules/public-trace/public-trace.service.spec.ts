@@ -137,7 +137,7 @@ describe('PublicTraceService.getByCode', () => {
     expect(prisma.integrationConfig?.findUnique).toBeUndefined();
   });
 
-  it('记录扫码前先在事务内锁定 batch 行', async () => {
+  it('公开扫码不锁定 batch 行但仍记录扫码', async () => {
     const calls: string[] = [];
     const prisma = makePrisma({
       $queryRaw: vi.fn(() => { calls.push('lock-batch'); return Promise.resolve([{ id: 'b1' }]); }),
@@ -152,6 +152,7 @@ describe('PublicTraceService.getByCode', () => {
     const svc = new PublicTraceService(prisma);
     await svc.getByCode('ORC-X', { ip: '127.0.0.1', userAgent: 'vitest' });
     expect(prisma.$transaction).toHaveBeenCalled();
-    expect(calls).toEqual(['lock-batch', 'update-code', 'create-scan']);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(calls).toEqual(['update-code', 'create-scan']);
   });
 });
