@@ -1,40 +1,79 @@
-import React, { useState } from 'react';
-import { Search, Plus, Filter, CheckCircle2, XCircle, Store, Pencil, Power } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useState, type FormEvent } from 'react';
+import { CheckCircle2, Filter, Pencil, Plus, Power, Search, Store, X, XCircle } from 'lucide-react';
+import { Role, type CreateUserDto, type MerchantListItem, type UpdateUserDto } from '@nongchang/shared';
+import { createUser, listMerchants, setUserStatus, updateUser } from '../api/users';
 import { useApi } from '../hooks/useApi';
-import { listMerchants, createUser, updateUser, setUserStatus } from '../api/users';
-import { Role, type MerchantListItem, type CreateUserDto, type UpdateUserDto } from '@nongchang/shared';
+import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 
 type FormState = { displayName: string; username: string; phone: string };
+type StatusFilter = 'all' | 'active' | 'suspended';
+
 const emptyForm: FormState = { displayName: '', username: '', phone: '' };
+
+function statusTag(status: string) {
+  if (status === 'active') {
+    return (
+      <span className={fluentStatusTag('success')}>
+        <CheckCircle2 className="mr-1 h-3 w-3" />
+        正常
+      </span>
+    );
+  }
+  if (status === 'suspended') {
+    return (
+      <span className={fluentStatusTag('neutral')}>
+        <XCircle className="mr-1 h-3 w-3" />
+        已停用
+      </span>
+    );
+  }
+  return <span className={fluentStatusTag('neutral')}>{status}</span>;
+}
+
+const statusOptions: Array<{ key: StatusFilter; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'active', label: '正常' },
+  { key: 'suspended', label: '已停用' },
+];
 
 export default function MerchantManagement() {
   const { data: rawMerchants, loading, error, reload } = useApi(listMerchants);
   const merchants: MerchantListItem[] = rawMerchants ?? [];
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
-  const filteredMerchants = merchants.filter(m => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      m.displayName.toLowerCase().includes(q) || m.username.toLowerCase().includes(q);
-    const matchesStatus = statusFilter === 'all' || m.status === statusFilter;
+  const filteredMerchants = merchants.filter((merchant) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = !query
+      || merchant.displayName.toLowerCase().includes(query)
+      || merchant.username.toLowerCase().includes(query);
+    const matchesStatus = statusFilter === 'all' || merchant.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setShowModal(true); };
-  const openEdit = (m: MerchantListItem) => {
-    setEditingId(m.id);
-    setForm({ displayName: m.displayName, username: m.username, phone: m.phone ?? '' });
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
     setShowModal(true);
   };
-  const closeModal = () => { setShowModal(false); setEditingId(null); setForm(emptyForm); };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const openEdit = (merchant: MerchantListItem) => {
+    setEditingId(merchant.id);
+    setForm({ displayName: merchant.displayName, username: merchant.username, phone: merchant.phone ?? '' });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     if (!form.displayName || !form.username) return;
     try {
       if (editingId) {
@@ -47,223 +86,220 @@ export default function MerchantManagement() {
           displayName: form.displayName,
           phone: form.phone || undefined,
         };
-        const res = await createUser(dto);
-        window.alert('商户已创建。初始密码:' + res.initialPassword + ',请转交商户并提醒尽快修改。');
+        const result = await createUser(dto);
+        window.alert(`商户已创建。初始密码: ${result.initialPassword}，请转交商户并提醒尽快修改。`);
       }
       closeModal();
       void reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
+      window.alert(err instanceof Error ? err.message : '操作失败');
     }
   };
 
-  const toggleStatus = async (m: MerchantListItem) => {
-    const next = m.status === 'active' ? 'suspended' : 'active';
-    const msg = next === 'suspended' ? '确认停用该商户?停用后将无法登录。' : '确认启用该商户?';
-    if (!window.confirm(msg)) return;
+  const toggleStatus = async (merchant: MerchantListItem) => {
+    const next = merchant.status === 'active' ? 'suspended' : 'active';
+    const message = next === 'suspended'
+      ? '确认停用该商户？停用后该账号将无法登录。'
+      : '确认启用该商户？';
+    if (!window.confirm(message)) return;
     try {
-      await setUserStatus(m.id, next);
+      await setUserStatus(merchant.id, next);
       void reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'active': return <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-xs font-bold flex items-center gap-1 w-max"><CheckCircle2 className="w-3 h-3" /> 正常营业</span>;
-      case 'suspended': return <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-xs font-bold flex items-center gap-1 w-max"><XCircle className="w-3 h-3" /> 已停用</span>;
-      default: return null;
+      window.alert(err instanceof Error ? err.message : '操作失败');
     }
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
-            <Store className="w-6 h-6 text-indigo-500" /> 商户管理与档案
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">管理入驻平台的生态商家、权限及资质审核</p>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <header className="flex shrink-0 flex-col gap-3 border border-[#E1DFDD] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#005A9E]">
+            <Store className="h-4 w-4" />
+            商户档案
+          </div>
+          <h2 className="mt-1 text-xl font-semibold text-[#242424]">商户管理与档案</h2>
+          <p className="mt-1 text-sm text-[#605E5C]">管理入驻平台的商户、联系人与账号状态</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> 新增入驻
+        <button type="button" onClick={openAdd} className={fluentButton('primary')}>
+          <Plus className="h-4 w-4" />
+          新增入驻
         </button>
-      </div>
+      </header>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex gap-4 bg-slate-50/50">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="搜索商户名称或负责人..." 
+      <section className="flex min-h-0 flex-1 flex-col border border-[#E1DFDD] bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 py-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+            <input
+              type="text"
+              placeholder="搜索商户名称或联系人"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className={`${fluentInput} w-full pl-8`}
             />
           </div>
-          <div className="flex items-center gap-2" role="group" aria-label="状态筛选">
-            <Filter className="w-4 h-4 text-slate-400" />
-            {([
-              { key: 'all', label: '全部' },
-              { key: 'active', label: '正常' },
-              { key: 'suspended', label: '已停用' },
-            ] as const).map(opt => (
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="状态筛选">
+            <Filter className="h-4 w-4 text-[#605E5C]" />
+            {statusOptions.map((option) => (
               <button
-                key={opt.key}
-                onClick={() => setStatusFilter(opt.key)}
-                aria-pressed={statusFilter === opt.key}
-                className={`px-3 py-2 rounded-lg font-bold text-sm transition-colors ${
-                  statusFilter === opt.key
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                key={option.key}
+                type="button"
+                onClick={() => setStatusFilter(option.key)}
+                aria-pressed={statusFilter === option.key}
+                className={statusFilter === option.key ? fluentButton('primary') : fluentButton('secondary')}
               >
-                {opt.label}
+                {option.label}
               </button>
             ))}
           </div>
+          {error && (
+            <button type="button" onClick={() => void reload()} className={fluentButton('secondary')}>
+              重试
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 overflow-auto">
-          {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
-          {error && <div className="p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-              <tr>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">商户编号</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">企业名称</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">联系人 / 电话</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">地块数</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">确权面积</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">状态</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">入驻时间</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredMerchants.map((merchant) => (
-                <tr key={merchant.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="p-4">
-                    <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">{merchant.id.slice(0, 8)}</span>
-                  </td>
-                  <td className="p-4">
-                    <span className="font-bold text-slate-800 text-sm">{merchant.displayName}</span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-slate-700">{merchant.username}</span>
-                      <span className="text-xs text-slate-500">{merchant.phone ?? '未填'}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-sm text-slate-600">{merchant.fieldCount}</td>
-                  <td className="p-4 text-sm text-slate-600">{merchant.totalArea.toFixed(1)} 亩</td>
-                  <td className="p-4">{getStatusBadge(merchant.status)}</td>
-                  <td className="p-4 text-sm text-slate-600">{new Date(merchant.createdAt).toLocaleDateString()}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex flex-row justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openEdit(merchant)}
-                        aria-label="编辑商户"
-                        className="px-2 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> 编辑
-                      </button>
-                      <button
-                        onClick={() => void toggleStatus(merchant)}
-                        aria-label={merchant.status === 'active' ? '停用商户' : '启用商户'}
-                        className={`px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold ${
-                          merchant.status === 'active'
-                            ? 'text-rose-500 hover:bg-rose-50'
-                            : 'text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        <Power className="w-3.5 h-3.5" /> {merchant.status === 'active' ? '停用' : '启用'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredMerchants.length === 0 && (
+        <div className="fluent-scrollbar min-h-0 flex-1 overflow-auto">
+          {loading && <div className="px-4 py-8 text-center text-sm text-[#605E5C]">加载中...</div>}
+          {error && !loading && (
+            <div className="m-4 border border-[#F1C6CA] bg-[#FDE7E9] px-4 py-3 text-sm font-semibold text-[#A4262C]">
+              加载失败: {error}
+            </div>
+          )}
+          {!loading && !error && (
+            <table className={`${fluentTable.table} min-w-[980px]`}>
+              <thead className={fluentTable.thead}>
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500 text-sm">未能找到匹配的商户</td>
+                  <th className={fluentTable.th}>商户编号</th>
+                  <th className={fluentTable.th}>企业名称</th>
+                  <th className={fluentTable.th}>联系人 / 电话</th>
+                  <th className={fluentTable.th}>地块数</th>
+                  <th className={fluentTable.th}>确权面积</th>
+                  <th className={fluentTable.th}>状态</th>
+                  <th className={fluentTable.th}>入驻时间</th>
+                  <th className={`${fluentTable.th} text-right`}>操作</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredMerchants.map((merchant) => (
+                  <tr key={merchant.id} className={fluentTable.row}>
+                    <td className={fluentTable.td}>
+                      <span className="font-mono text-xs font-semibold text-[#605E5C]">{merchant.id.slice(0, 8)}</span>
+                    </td>
+                    <td className={fluentTable.td}>
+                      <div className="font-semibold text-[#242424]">{merchant.displayName}</div>
+                    </td>
+                    <td className={fluentTable.td}>
+                      <div className="font-semibold text-[#323130]">{merchant.username}</div>
+                      <div className="text-xs text-[#605E5C]">{merchant.phone ?? '未填'}</div>
+                    </td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.fieldCount}</td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.totalArea.toFixed(1)} 亩</td>
+                    <td className={fluentTable.td}>{statusTag(merchant.status)}</td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(merchant.createdAt).toLocaleDateString()}</td>
+                    <td className={`${fluentTable.td} text-right`}>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(merchant)}
+                          aria-label={`编辑商户 ${merchant.displayName}`}
+                          className={fluentButton('subtle')}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          编辑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleStatus(merchant)}
+                          aria-label={`${merchant.status === 'active' ? '停用' : '启用'}商户 ${merchant.displayName}`}
+                          className={merchant.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}
+                        >
+                          <Power className="h-4 w-4" />
+                          {merchant.status === 'active' ? '停用' : '启用'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredMerchants.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-[#605E5C]">
+                      暂无匹配商户
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
-      </div>
+      </section>
 
-      <AnimatePresence>
-        {showModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="merchant-modal-title"
-            >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 id="merchant-modal-title" className="font-bold text-slate-800 flex items-center gap-2">
-                  <Store className="w-5 h-5 text-indigo-500" /> {editingId ? '编辑商户档案' : '新增入驻商户'}
-                </h3>
-                <button onClick={closeModal} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><XCircle className="w-5 h-5" /></button>
-              </div>
-              <form onSubmit={handleSubmit}>
-                <div className="p-6 space-y-4">
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="merchant-modal-title"
+            className="w-full max-w-xl overflow-hidden border border-[#E1DFDD] bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+              <h3 id="merchant-modal-title" className="text-base font-semibold text-[#242424]">
+                {editingId ? '编辑商户档案' : '新增入驻商户'}
+              </h3>
+              <button type="button" onClick={closeModal} aria-label="关闭" className={fluentButton('icon')}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4 px-5 py-5">
+                <div>
+                  <label htmlFor="merchant-name" className="mb-1.5 block text-sm font-semibold text-[#323130]">企业 / 商户名称</label>
+                  <input
+                    id="merchant-name"
+                    type="text"
+                    required
+                    value={form.displayName}
+                    onChange={(event) => setForm({ ...form, displayName: event.target.value })}
+                    className={`${fluentInput} w-full`}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label htmlFor="merchant-name" className="block text-xs font-bold text-slate-500 mb-1">企业/商户名称 <span className="text-red-500">*</span></label>
+                    <label htmlFor="merchant-username" className="mb-1.5 block text-sm font-semibold text-[#323130]">联系人 / 用户名</label>
                     <input
-                      id="merchant-name"
+                      id="merchant-username"
                       type="text"
                       required
-                      value={form.displayName}
-                      onChange={e => setForm({ ...form, displayName: e.target.value })}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      minLength={3}
+                      disabled={!!editingId}
+                      value={form.username}
+                      onChange={(event) => setForm({ ...form, username: event.target.value })}
+                      className={`${fluentInput} w-full disabled:bg-[#F3F2F1] disabled:text-[#8A8886]`}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="merchant-username" className="block text-xs font-bold text-slate-500 mb-1">联系人 / 用户名 <span className="text-red-500">*</span></label>
-                      <input
-                        id="merchant-username"
-                        type="text"
-                        required
-                        minLength={3}
-                        disabled={!!editingId}
-                        value={form.username}
-                        onChange={e => setForm({ ...form, username: e.target.value })}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="merchant-phone" className="block text-xs font-bold text-slate-500 mb-1">手机号码</label>
-                      <input
-                        id="merchant-phone"
-                        type="text"
-                        value={form.phone}
-                        onChange={e => setForm({ ...form, phone: e.target.value })}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
+                  <div>
+                    <label htmlFor="merchant-phone" className="mb-1.5 block text-sm font-semibold text-[#323130]">手机号码</label>
+                    <input
+                      id="merchant-phone"
+                      type="text"
+                      value={form.phone}
+                      onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                      className={`${fluentInput} w-full`}
+                    />
                   </div>
                 </div>
-                <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200">
-                  <button type="button" onClick={closeModal} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-200 rounded-lg text-sm transition-colors">取消</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm text-sm transition-colors">{editingId ? '保存修改' : '确认添加'}</button>
-                </div>
-              </form>
-            </motion.div>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+                <button type="button" onClick={closeModal} className={fluentButton('secondary')}>取消</button>
+                <button type="submit" className={fluentButton('primary')}>
+                  {editingId ? '保存修改' : '确认添加'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
