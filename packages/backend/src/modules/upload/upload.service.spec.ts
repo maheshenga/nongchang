@@ -31,6 +31,32 @@ describe('UploadService.upload', () => {
     expect(oss.put).not.toHaveBeenCalled();
   });
 
+  it('credential purpose accepts real PDF files and stores them with pdf extension', async () => {
+    const oss = { put: vi.fn().mockImplementation((key: string) => Promise.resolve(`https://cdn.example.com/${key}`)) } as any;
+    const svc = new UploadService(oss);
+    const res = await svc.upload(
+      { originalname: 'report.pdf', mimetype: 'application/pdf', size: 1000, buffer: Buffer.from('%PDF-1.7\n') } as any,
+      'tenant-1',
+      { purpose: 'credential' },
+    );
+
+    const key = oss.put.mock.calls[0][0] as string;
+    expect(key).toMatch(/^credentials\/\d{6}\/[0-9a-f-]{36}\.pdf$/);
+    expect(res.url).toBe(`https://cdn.example.com/${key}`);
+  });
+
+  it('credential purpose rejects PDF files without PDF magic bytes', async () => {
+    const oss = makeOss();
+    const svc = new UploadService(oss);
+
+    await expect(svc.upload(
+      { originalname: 'report.pdf', mimetype: 'application/pdf', size: 1000, buffer: Buffer.from('not a pdf') } as any,
+      'tenant-1',
+      { purpose: 'credential' },
+    )).rejects.toThrow(BadRequestException);
+    expect(oss.put).not.toHaveBeenCalled();
+  });
+
   it('超过 5MB 抛 400', async () => {
     const oss = makeOss();
     const svc = new UploadService(oss);

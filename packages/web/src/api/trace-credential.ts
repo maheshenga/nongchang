@@ -5,7 +5,7 @@ import { request } from './request';
 export async function uploadCredentialFile(file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file);
-  const res = await request<UploadResponse>('/uploads', { method: 'POST', body: form });
+  const res = await request<UploadResponse>('/uploads?purpose=credential', { method: 'POST', body: form });
   return res.url;
 }
 
