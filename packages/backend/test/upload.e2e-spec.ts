@@ -44,7 +44,7 @@ describe('POST /api/uploads(受保护图片上传)', () => {
     const t = await token('merchantA');
     const res = await request(app.getHttpServer())
       .post('/api/uploads').set('Authorization', `Bearer ${t}`)
-      .attach('file', Buffer.from('fakejpeg'), { filename: 'a.jpg', contentType: 'image/jpeg' })
+      .attach('file', Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), { filename: 'a.jpg', contentType: 'image/jpeg' })
       .expect(201);
     expect(res.body.url).toMatch(/^https:\/\/cdn\.test\/farm-records\/\d{6}\/[0-9a-f-]{36}\.jpg$/);
   });

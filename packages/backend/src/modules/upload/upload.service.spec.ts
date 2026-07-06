@@ -5,7 +5,10 @@ import { UploadService } from './upload.service';
 function makeOss() {
   return { put: vi.fn().mockResolvedValue('https://cdn.example.com/farm-records/202606/x.jpg') } as any;
 }
-const jpg = { originalname: 'a.jpg', mimetype: 'image/jpeg', size: 1024, buffer: Buffer.from('x') } as any;
+const jpegBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const webpBytes = Buffer.from('RIFFxxxxWEBPVP8 ', 'ascii');
+const jpg = { originalname: 'a.jpg', mimetype: 'image/jpeg', size: jpegBytes.length, buffer: jpegBytes } as any;
 
 describe('UploadService.upload', () => {
   it('合法 jpeg 调 Oss.put 并返回 { url }', async () => {
@@ -19,8 +22,32 @@ describe('UploadService.upload', () => {
   it('png/webp 也允许', async () => {
     const oss = makeOss();
     const svc = new UploadService(oss);
-    await expect(svc.upload({ ...jpg, mimetype: 'image/png', originalname: 'a.png' })).resolves.toBeTruthy();
-    await expect(svc.upload({ ...jpg, mimetype: 'image/webp', originalname: 'a.webp' })).resolves.toBeTruthy();
+    await expect(svc.upload({ ...jpg, mimetype: 'image/png', originalname: 'a.png', size: pngBytes.length, buffer: pngBytes })).resolves.toBeTruthy();
+    await expect(svc.upload({ ...jpg, mimetype: 'image/webp', originalname: 'a.webp', size: webpBytes.length, buffer: webpBytes })).resolves.toBeTruthy();
+  });
+
+  it('rejects fake PNG files whose content does not match PNG magic bytes', async () => {
+    const oss = makeOss();
+    const svc = new UploadService(oss);
+
+    await expect(svc.upload({
+      originalname: 'fake.png',
+      mimetype: 'image/png',
+      size: 12,
+      buffer: Buffer.from('not a png'),
+    } as any)).rejects.toThrow(BadRequestException);
+    expect(oss.put).not.toHaveBeenCalled();
+  });
+
+  it('accepts valid JPEG, PNG, and WebP signatures before writing to OSS', async () => {
+    const oss = makeOss();
+    const svc = new UploadService(oss);
+
+    await svc.upload({ originalname: 'a.jpg', mimetype: 'image/jpeg', size: jpegBytes.length, buffer: jpegBytes } as any);
+    await svc.upload({ originalname: 'a.png', mimetype: 'image/png', size: pngBytes.length, buffer: pngBytes } as any);
+    await svc.upload({ originalname: 'a.webp', mimetype: 'image/webp', size: webpBytes.length, buffer: webpBytes } as any);
+
+    expect(oss.put).toHaveBeenCalledTimes(3);
   });
 
   it('不支持的类型(pdf)抛 400 且不调 OSS', async () => {
