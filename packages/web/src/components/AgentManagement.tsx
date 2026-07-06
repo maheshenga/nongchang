@@ -1,12 +1,33 @@
-import React, { useState } from 'react';
-import { Search, Plus, Building2, CheckCircle2, XCircle, Pencil, Power } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { useApi } from '../hooks/useApi';
-import { listAgents, createAgent, updateAgent, setAgentStatus } from '../api/agents';
+import { useState, type FormEvent } from 'react';
+import { Building2, CheckCircle2, Pencil, Plus, Power, Search, X, XCircle } from 'lucide-react';
 import { type AgentListItem, type CreateAgentDto, type UpdateAgentDto } from '@nongchang/shared';
+import { createAgent, listAgents, setAgentStatus, updateAgent } from '../api/agents';
+import { useApi } from '../hooks/useApi';
+import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 
 type FormState = { name: string; region: string };
+
 const emptyForm: FormState = { name: '', region: '' };
+
+function statusTag(status: string) {
+  if (status === 'active') {
+    return (
+      <span className={fluentStatusTag('success')}>
+        <CheckCircle2 className="mr-1 h-3 w-3" />
+        正常
+      </span>
+    );
+  }
+  if (status === 'suspended') {
+    return (
+      <span className={fluentStatusTag('neutral')}>
+        <XCircle className="mr-1 h-3 w-3" />
+        已停用
+      </span>
+    );
+  }
+  return <span className={fluentStatusTag('neutral')}>{status}</span>;
+}
 
 export default function AgentManagement() {
   const { data: rawAgents, loading, error, reload } = useApi(listAgents);
@@ -16,21 +37,32 @@ export default function AgentManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
-  const filteredAgents = agents.filter(a => {
-    const q = searchQuery.toLowerCase();
-    return a.name.toLowerCase().includes(q) || a.region.toLowerCase().includes(q);
+  const filteredAgents = agents.filter((agent) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return agent.name.toLowerCase().includes(query) || agent.region.toLowerCase().includes(query);
   });
 
-  const openAdd = () => { setEditingId(null); setForm(emptyForm); setShowModal(true); };
-  const openEdit = (a: AgentListItem) => {
-    setEditingId(a.id);
-    setForm({ name: a.name, region: a.region });
+  const openAdd = () => {
+    setEditingId(null);
+    setForm(emptyForm);
     setShowModal(true);
   };
-  const closeModal = () => { setShowModal(false); setEditingId(null); setForm(emptyForm); };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const openEdit = (agent: AgentListItem) => {
+    setEditingId(agent.id);
+    setForm({ name: agent.name, region: agent.region });
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     if (!form.name || !form.region) return;
     try {
       if (editingId) {
@@ -43,173 +75,179 @@ export default function AgentManagement() {
       closeModal();
       void reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
+      window.alert(err instanceof Error ? err.message : '操作失败');
     }
   };
 
-  const toggleStatus = async (a: AgentListItem) => {
-    const next = a.status === 'active' ? 'suspended' : 'active';
-    const msg = next === 'suspended' ? '确认停用该代理商?停用后将无法登录。' : '确认启用该代理商?';
-    if (!window.confirm(msg)) return;
+  const toggleStatus = async (agent: AgentListItem) => {
+    const next = agent.status === 'active' ? 'suspended' : 'active';
+    const message = next === 'suspended'
+      ? '确认停用该代理商？停用后该代理商账号将无法登录。'
+      : '确认启用该代理商？';
+    if (!window.confirm(message)) return;
     try {
-      await setAgentStatus(a.id, next);
+      await setAgentStatus(agent.id, next);
       void reload();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '操作失败');
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'active': return <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-xs font-bold flex items-center gap-1 w-max"><CheckCircle2 className="w-3 h-3" /> 正常</span>;
-      case 'suspended': return <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded text-xs font-bold flex items-center gap-1 w-max"><XCircle className="w-3 h-3" /> 已停用</span>;
-      default: return null;
+      window.alert(err instanceof Error ? err.message : '操作失败');
     }
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-indigo-500" /> 代理商管理
-          </h2>
-          <p className="text-sm text-slate-500 mt-1">管理平台代理商组织、辖区及下辖商户</p>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <header className="flex shrink-0 flex-col gap-3 border border-[#E1DFDD] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[#005A9E]">
+            <Building2 className="h-4 w-4" />
+            组织管理
+          </div>
+          <h2 className="mt-1 text-xl font-semibold text-[#242424]">代理商管理</h2>
+          <p className="mt-1 text-sm text-[#605E5C]">管理代理商组织、辖区与下级商户归属</p>
         </div>
-        <button
-          onClick={openAdd}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> 新增代理商
+        <button type="button" onClick={openAdd} className={fluentButton('primary')}>
+          <Plus className="h-4 w-4" />
+          新增代理商
         </button>
-      </div>
+      </header>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex gap-4 bg-slate-50/50">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <section className="flex min-h-0 flex-1 flex-col border border-[#E1DFDD] bg-white">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 py-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
             <input
               type="text"
-              placeholder="搜索代理商名称或辖区..."
+              placeholder="搜索代理商名称或辖区"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className={`${fluentInput} w-full pl-8`}
             />
           </div>
+          {error && (
+            <button type="button" onClick={() => void reload()} className={fluentButton('secondary')}>
+              重试
+            </button>
+          )}
         </div>
 
-        <div className="flex-1 overflow-auto">
-          {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
-          {error && <div className="p-8 text-center text-rose-500 text-sm">{error} <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button></div>}
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
-              <tr>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">代理商名称</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">辖区</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">下辖商户数</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">状态</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest">创建时间</th>
-                <th className="p-4 text-xs font-bold text-slate-500 uppercase tracking-widest text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {filteredAgents.map((agent) => (
-                <tr key={agent.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="p-4">
-                    <span className="font-bold text-slate-800 text-sm">{agent.name}</span>
-                  </td>
-                  <td className="p-4 text-sm text-slate-600">{agent.region}</td>
-                  <td className="p-4 text-sm text-slate-600">{agent.merchantCount}</td>
-                  <td className="p-4">{getStatusBadge(agent.status)}</td>
-                  <td className="p-4 text-sm text-slate-600">{new Date(agent.createdAt).toLocaleDateString()}</td>
-                  <td className="p-4 text-right">
-                    <div className="flex flex-row justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openEdit(agent)}
-                        aria-label="编辑代理商"
-                        className="px-2 py-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                      >
-                        <Pencil className="w-3.5 h-3.5" /> 编辑
-                      </button>
-                      <button
-                        onClick={() => void toggleStatus(agent)}
-                        aria-label={agent.status === 'active' ? '停用代理商' : '启用代理商'}
-                        className={`px-2 py-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold ${
-                          agent.status === 'active'
-                            ? 'text-rose-500 hover:bg-rose-50'
-                            : 'text-emerald-600 hover:bg-emerald-50'
-                        }`}
-                      >
-                        <Power className="w-3.5 h-3.5" /> {agent.status === 'active' ? '停用' : '启用'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredAgents.length === 0 && (
+        <div className="fluent-scrollbar min-h-0 flex-1 overflow-auto">
+          {loading && <div className="px-4 py-8 text-center text-sm text-[#605E5C]">加载中...</div>}
+          {error && !loading && (
+            <div className="m-4 border border-[#F1C6CA] bg-[#FDE7E9] px-4 py-3 text-sm font-semibold text-[#A4262C]">
+              加载失败: {error}
+            </div>
+          )}
+          {!loading && !error && (
+            <table className={`${fluentTable.table} min-w-[820px]`}>
+              <thead className={fluentTable.thead}>
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500 text-sm">未能找到匹配的代理商</td>
+                  <th className={fluentTable.th}>代理商名称</th>
+                  <th className={fluentTable.th}>辖区</th>
+                  <th className={fluentTable.th}>下级商户</th>
+                  <th className={fluentTable.th}>状态</th>
+                  <th className={fluentTable.th}>创建时间</th>
+                  <th className={`${fluentTable.th} text-right`}>操作</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredAgents.map((agent) => (
+                  <tr key={agent.id} className={fluentTable.row}>
+                    <td className={fluentTable.td}>
+                      <div className="font-semibold text-[#242424]">{agent.name}</div>
+                    </td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.region}</td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.merchantCount}</td>
+                    <td className={fluentTable.td}>{statusTag(agent.status)}</td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(agent.createdAt).toLocaleDateString()}</td>
+                    <td className={`${fluentTable.td} text-right`}>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(agent)}
+                          aria-label={`编辑代理商 ${agent.name}`}
+                          className={fluentButton('subtle')}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          编辑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleStatus(agent)}
+                          aria-label={`${agent.status === 'active' ? '停用' : '启用'}代理商 ${agent.name}`}
+                          className={agent.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}
+                        >
+                          <Power className="h-4 w-4" />
+                          {agent.status === 'active' ? '停用' : '启用'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredAgents.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-[#605E5C]">
+                      暂无匹配代理商
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
-      </div>
+      </section>
 
-      <AnimatePresence>
-        {showModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm shadow-xl">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="agent-modal-title"
-            >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 id="agent-modal-title" className="font-bold text-slate-800 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-indigo-500" /> {editingId ? '编辑代理商' : '新增代理商'}
-                </h3>
-                <button onClick={closeModal} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><XCircle className="w-5 h-5" /></button>
+      {showModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="agent-modal-title"
+            className="w-full max-w-lg overflow-hidden border border-[#E1DFDD] bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+              <h3 id="agent-modal-title" className="text-base font-semibold text-[#242424]">
+                {editingId ? '编辑代理商' : '新增代理商'}
+              </h3>
+              <button type="button" onClick={closeModal} aria-label="关闭" className={fluentButton('icon')}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4 px-5 py-5">
+                <div>
+                  <label htmlFor="agent-name" className="mb-1.5 block text-sm font-semibold text-[#323130]">代理商名称</label>
+                  <input
+                    id="agent-name"
+                    type="text"
+                    required
+                    maxLength={128}
+                    value={form.name}
+                    onChange={(event) => setForm({ ...form, name: event.target.value })}
+                    className={`${fluentInput} w-full`}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="agent-region" className="mb-1.5 block text-sm font-semibold text-[#323130]">辖区</label>
+                  <input
+                    id="agent-region"
+                    type="text"
+                    required
+                    maxLength={64}
+                    value={form.region}
+                    onChange={(event) => setForm({ ...form, region: event.target.value })}
+                    className={`${fluentInput} w-full`}
+                  />
+                </div>
               </div>
-              <form onSubmit={handleSubmit}>
-                <div className="p-6 space-y-4">
-                  <div>
-                    <label htmlFor="agent-name" className="block text-xs font-bold text-slate-500 mb-1">代理商名称 <span className="text-red-500">*</span></label>
-                    <input
-                      id="agent-name"
-                      type="text"
-                      required
-                      maxLength={128}
-                      value={form.name}
-                      onChange={e => setForm({ ...form, name: e.target.value })}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="agent-region" className="block text-xs font-bold text-slate-500 mb-1">辖区 <span className="text-red-500">*</span></label>
-                    <input
-                      id="agent-region"
-                      type="text"
-                      required
-                      maxLength={64}
-                      value={form.region}
-                      onChange={e => setForm({ ...form, region: e.target.value })}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-                <div className="p-4 bg-slate-50 flex justify-end gap-3 border-t border-slate-200">
-                  <button type="button" onClick={closeModal} className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-200 rounded-lg text-sm transition-colors">取消</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-sm text-sm transition-colors">{editingId ? '保存修改' : '确认添加'}</button>
-                </div>
-              </form>
-            </motion.div>
+              <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+                <button type="button" onClick={closeModal} className={fluentButton('secondary')}>取消</button>
+                <button type="submit" className={fluentButton('primary')}>
+                  {editingId ? '保存修改' : '确认添加'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
