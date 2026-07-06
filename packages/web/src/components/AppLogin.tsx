@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Lock, User, QrCode, Building2 } from 'lucide-react';
+import { Building2, Lock, QrCode, User } from 'lucide-react';
 import { useAuth } from '../auth/auth-context';
+import { fluentButton, fluentInput } from '../ui/fluent';
 
 export default function AppLogin() {
   const { login } = useAuth();
@@ -24,98 +25,106 @@ export default function AppLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 relative overflow-hidden">
-      {/* 纯 CSS 深色背景:登录页是所有内部用户的入口,避免外链图弱网/无外网时门面降级 */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 25% 15%, rgba(6,78,59,0.95), transparent 55%), radial-gradient(circle at 80% 85%, rgba(15,118,110,0.85), transparent 50%), linear-gradient(160deg, #0f172a, #064e3b)',
-        }}
-      />
-      <div
-        className="absolute inset-0 opacity-[0.08]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M30 0C30 16 16 30 0 30c16 0 30 14 30 30 0-16 14-30 30-30-16 0-30-14-30-30z' fill='none' stroke='%23ffffff' stroke-width='0.6'/%3E%3C/svg%3E\")",
-          backgroundSize: '60px 60px',
-        }}
-      />
-      <div className="relative z-10 w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-500/20 mx-auto mb-6">
-            <QrCode className="w-8 h-8" />
+    <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-10 text-[#242424]">
+      <div className="absolute inset-x-0 top-0 h-1 bg-[#0078D4]" />
+      <main className="grid w-full max-w-5xl overflow-hidden border border-[#E1DFDD] bg-white shadow-sm md:grid-cols-[1fr_420px]">
+        <section className="hidden border-r border-[#E1DFDD] bg-[#FAFAFA] p-10 md:flex md:flex-col md:justify-between">
+          <div>
+            <div className="mb-8 inline-flex h-10 w-10 items-center justify-center rounded-[4px] bg-[#0078D4] text-white">
+              <QrCode className="h-5 w-5" />
+            </div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#605E5C]">Traceability SaaS</p>
+            <h1 className="max-w-sm text-3xl font-semibold leading-tight text-[#242424]">农业溯源 SaaS 平台</h1>
+            <p className="mt-4 max-w-md text-sm leading-6 text-[#605E5C]">全链路数据存证与数字农业协作，面向租户、代理商与商户的统一管理入口。</p>
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tight mb-2">农业溯源 SaaS 平台</h1>
-          <p className="text-emerald-100/70 font-medium tracking-wide text-sm">全链路数据存证与数字农业协作</p>
-        </div>
-        <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 shadow-2xl">
-          <div className="mb-8 border-b border-white/10 pb-4">
-            <span className="text-sm font-bold text-white border-b-2 border-emerald-400 pb-2">系统登录</span>
+          <div className="text-xs leading-5 text-[#605E5C]">
+            <div className="font-semibold text-[#323130]">农场溯源管理</div>
+            <div>Microsoft Fluent 风格控制台</div>
           </div>
-          <form className="space-y-5" onSubmit={handleSubmit}>
+        </section>
+
+        <section className="p-6 sm:p-8">
+          <div className="mb-8 md:hidden">
+            <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-[4px] bg-[#0078D4] text-white">
+              <QrCode className="h-5 w-5" />
+            </div>
+            <h1 className="text-2xl font-semibold text-[#242424]">农业溯源 SaaS 平台</h1>
+            <p className="mt-2 text-sm text-[#605E5C]">全链路数据存证与数字农业协作</p>
+          </div>
+
+          <div className="mb-6 border-b border-[#E1DFDD] pb-4">
+            <h2 className="text-xl font-semibold text-[#242424]">系统登录</h2>
+            <p className="mt-1 text-sm text-[#605E5C]">请输入租户机构编码与账号信息。</p>
+          </div>
+
+          <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="login-tenant" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">机构编码</label>
+              <label htmlFor="login-tenant" className="mb-1.5 block text-sm font-semibold text-[#323130]">机构编码</label>
               <div className="relative">
+                <Building2 className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
                 <input
                   id="login-tenant"
                   type="text"
                   autoComplete="organization"
                   value={tenantCode}
                   onChange={(e) => setTenantCode(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
+                  className={`${fluentInput} w-full pl-8`}
                   placeholder="请输入机构编码"
                   required
                 />
-                <Building2 className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
               </div>
             </div>
+
             <div>
-              <label htmlFor="login-username" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">登录账号</label>
+              <label htmlFor="login-username" className="mb-1.5 block text-sm font-semibold text-[#323130]">登录账号</label>
               <div className="relative">
+                <User className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
                 <input
                   id="login-username"
                   type="text"
                   autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
+                  className={`${fluentInput} w-full pl-8`}
                   placeholder="请输入用户名"
                   required
                 />
-                <User className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
               </div>
             </div>
+
             <div>
-              <label htmlFor="login-password" className="block text-[10px] font-bold text-white/60 uppercase tracking-widest mb-2">密码</label>
+              <label htmlFor="login-password" className="mb-1.5 block text-sm font-semibold text-[#323130]">密码</label>
               <div className="relative">
+                <Lock className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
                 <input
                   id="login-password"
                   type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-white/30 focus:outline-none focus:border-emerald-400 transition-colors text-sm"
+                  className={`${fluentInput} w-full pl-8`}
                   placeholder="••••••••"
                   required
                 />
-                <Lock className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
               </div>
             </div>
-            {error && <p className="text-rose-400 text-xs font-medium">{error}</p>}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] transition-all text-white font-bold py-3.5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] mt-8 disabled:opacity-50"
-            >
-              {submitting ? '登录中…' : '安全登录'}
+
+            {error && (
+              <div className="border border-[#F1C6CA] bg-[#FDE7E9] px-3 py-2 text-sm font-semibold text-[#A4262C]">
+                {error}
+              </div>
+            )}
+
+            <button type="submit" disabled={submitting} className={`${fluentButton('primary')} mt-2 w-full`}>
+              {submitting ? '登录中...' : '安全登录'}
             </button>
           </form>
-        </div>
-        <p className="text-center text-white/30 text-xs mt-8 font-medium">
-          &copy; 2026 数字农业溯源系统版. All rights reserved.
-        </p>
-      </div>
+
+          <p className="mt-8 text-center text-xs text-[#605E5C]">
+            © 2026 数字农业溯源系统. All rights reserved.
+          </p>
+        </section>
+      </main>
     </div>
   );
 }
