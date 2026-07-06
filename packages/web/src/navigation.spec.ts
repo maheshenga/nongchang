@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { firstAllowedTab, flattenNavItems, getNavItems, isDemoTab, type SystemRole } from './navigation';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as navigation from './navigation';
+import { firstAllowedTab, flattenNavItems, getNavItems, type SystemRole } from './navigation';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const ALL_ROLES: SystemRole[] = [
   'system_admin',
@@ -25,6 +31,20 @@ describe('production navigation', () => {
     }
   });
 
+  it('does not export legacy demo tab helpers from the production navigation contract', () => {
+    expect(navigation).not.toHaveProperty('isDemoTab');
+  });
+
+  it('keeps legacy demo component hints out of the production shell and CSS bundle inputs', () => {
+    const appSource = readFileSync(resolve(__dirname, 'App.tsx'), 'utf8');
+    const cssSource = readFileSync(resolve(__dirname, 'index.css'), 'utf8');
+
+    expect(appSource).not.toMatch(/Dashboard|MobileView|warehouse/);
+    expect(cssSource).not.toMatch(/MobileView|themeTheme/);
+    expect(cssSource).not.toContain('{bg,text,from,to,shadow}-{emerald,purple}');
+    expect(cssSource).not.toContain('text-{emerald,purple}-100/90');
+  });
+
   it('limits platform admins to tenant lifecycle navigation', () => {
     const platformIds = idsFor('platform_admin');
 
@@ -38,14 +58,11 @@ describe('production navigation', () => {
     expect(idsFor('agent_admin')).not.toContain('pendingUsers');
   });
 
-  it('classifies legacy demo tabs and falls back to the first allowed tab', () => {
-    expect(isDemoTab('dashboard')).toBe(true);
-    expect(isDemoTab('mobile')).toBe(true);
-    expect(isDemoTab('warehouse')).toBe(true);
+  it('falls back to the first allowed production tab for legacy or unauthorized tab strings', () => {
     expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('fields');
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
     expect(firstAllowedTab('agent_admin', 'fields')).toBe('merchantFiles');
-    expect(firstAllowedTab('platform_admin', 'dashboard')).toBe('tenants');
+    expect(firstAllowedTab('platform_admin', 'warehouse')).toBe('tenants');
   });
 
   it('limits ordinary members to local settings only', () => {

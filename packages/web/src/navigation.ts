@@ -40,9 +40,6 @@ export type AppTab =
   | 'phenology'
   | 'billing';
 
-export type LegacyDemoTab = 'dashboard' | 'mobile' | 'warehouse';
-export type AnyTab = AppTab | LegacyDemoTab;
-
 export type NavItem = { id: AppTab; label: string; icon: LucideIcon };
 export type NavCategory = { category: string; items: NavItem[] };
 
@@ -139,8 +136,6 @@ const NAV_BY_ROLE: Record<SystemRole, NavCategory[]> = {
   member: MEMBER_NAV,
 };
 
-const LEGACY_DEMO_TABS = new Set<LegacyDemoTab>(['dashboard', 'mobile', 'warehouse']);
-
 export const getNavItems = (role: SystemRole): NavCategory[] => NAV_BY_ROLE[role];
 
 export const isSystemRole = (role: string | null | undefined): role is SystemRole =>
@@ -149,10 +144,10 @@ export const isSystemRole = (role: string | null | undefined): role is SystemRol
 export const flattenNavItems = (items: NavCategory[]): NavItem[] =>
   items.flatMap((category) => category.items);
 
-export const isDemoTab = (tab: AnyTab): tab is LegacyDemoTab =>
-  LEGACY_DEMO_TABS.has(tab as LegacyDemoTab);
-
-export const firstAllowedTab = (role: SystemRole, requestedTab: AnyTab): AppTab => {
+export const firstAllowedTab = (
+  role: SystemRole,
+  requestedTab: string | null | undefined,
+): AppTab => {
   const items = flattenNavItems(getNavItems(role));
   const allowed = items.find((item) => item.id === requestedTab);
   return allowed?.id ?? items[0].id;
