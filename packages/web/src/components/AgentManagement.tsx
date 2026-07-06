@@ -4,6 +4,7 @@ import { type AgentListItem, type CreateAgentDto, type UpdateAgentDto } from '@n
 import { createAgent, listAgents, setAgentStatus, updateAgent } from '../api/agents';
 import { useApi } from '../hooks/useApi';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
+import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 type FormState = { name: string; region: string };
 
@@ -130,11 +131,9 @@ export default function AgentManagement() {
         </div>
 
         <div className="fluent-scrollbar min-h-0 flex-1 overflow-auto">
-          {loading && <div className="px-4 py-8 text-center text-sm text-[#605E5C]">加载中...</div>}
+          {loading && <LoadingState label="加载代理商列表" />}
           {error && !loading && (
-            <div className="m-4 border border-[#F1C6CA] bg-[#FDE7E9] px-4 py-3 text-sm font-semibold text-[#A4262C]">
-              加载失败: {error}
-            </div>
+            <ErrorState message={error} onRetry={() => void reload()} className="m-4" />
           )}
           {!loading && !error && (
             <table className={`${fluentTable.table} min-w-[820px]`}>
@@ -184,8 +183,8 @@ export default function AgentManagement() {
                 ))}
                 {filteredAgents.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-[#605E5C]">
-                      暂无匹配代理商
+                    <td colSpan={6} className="p-0">
+                      <EmptyState title="暂无匹配代理商" />
                     </td>
                   </tr>
                 )}

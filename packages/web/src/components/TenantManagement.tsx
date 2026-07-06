@@ -3,6 +3,7 @@ import { Building2, Loader2, Plus, Power, PowerOff, X } from 'lucide-react';
 import type { CreateTenantResponse, TenantListItem, TenantStatus } from '@nongchang/shared';
 import { createTenant, listTenants, setTenantStatus } from '../api/tenants';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
+import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 type FormState = {
   name: string;
@@ -109,7 +110,7 @@ export default function TenantManagement() {
         </button>
       </header>
 
-      {error && <div className="border border-[#F1B8BD] bg-[#FDE7E9] px-4 py-3 text-sm text-[#A4262C]">{error}</div>}
+      {error && <ErrorState message={error} onRetry={() => void reload()} />}
       {lastCreated && (
         <div className="border border-[#92C353] bg-[#F1F9EE] px-4 py-3 text-sm text-[#107C10]">
           已创建 {lastCreated.name}，初始管理员 {lastCreated.adminUser.username}，初始密码 {lastCreated.initialPassword}
@@ -131,17 +132,16 @@ export default function TenantManagement() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className={`${fluentTable.td} text-[#605E5C]`}>
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    加载中...
-                  </span>
+                <td colSpan={6} className="p-0">
+                  <LoadingState label="加载租户列表" />
                 </td>
               </tr>
             )}
             {!loading && tenants.length === 0 && (
               <tr>
-                <td colSpan={6} className={`${fluentTable.td} text-center text-[#605E5C]`}>暂无租户</td>
+                <td colSpan={6} className="p-0">
+                  <EmptyState title="暂无租户" description="新建租户后会显示在这里。" />
+                </td>
               </tr>
             )}
             {!loading && tenants.map((tenant) => (

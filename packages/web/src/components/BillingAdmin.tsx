@@ -9,6 +9,7 @@ import BillingPurchase from './BillingPurchase';
 import BillingPlans from './BillingPlans';
 import BillingAlipayConfig from './BillingAlipayConfig';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
+import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 const LOW = 100;
 
@@ -141,22 +142,12 @@ export default function BillingAdmin() {
           <div className="flex h-11 items-center gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 text-sm font-semibold text-[#242424]">
             <ArrowRightLeft className="h-4 w-4 text-[#0078D4]" /> 下级账户
           </div>
-          {acc.loading && (
-            <div className="flex items-center justify-center gap-2 p-8 text-sm text-[#605E5C]">
-              <Loader2 className="h-4 w-4 animate-spin" /> 加载中...
-            </div>
-          )}
+          {acc.loading && <LoadingState label="加载下级账户" />}
           {acc.error && (
-            <div className="p-8 text-center text-sm text-[#A4262C]">
-              {acc.error}
-              <button type="button" onClick={() => void acc.reload()} className="ml-2 font-semibold underline">重试</button>
-            </div>
+            <ErrorState message={acc.error} onRetry={() => void acc.reload()} className="m-4" />
           )}
           {!acc.loading && !acc.error && accounts.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-[#605E5C]">
-              <ArrowRightLeft className="mb-2 h-10 w-10 opacity-40" />
-              <p className="text-sm">暂无下级账户</p>
-            </div>
+            <EmptyState title="暂无下级账户" description="创建代理商或商户后会显示额度账户。" />
           )}
           {!acc.loading && !acc.error && accounts.length > 0 && (
             <div className="overflow-x-auto">
