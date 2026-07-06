@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { Map, MapPin, Search, Plus, Layers, Maximize2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useState, type FormEvent } from 'react';
+import { Layers, Map, MapPin, Maximize2, Plus, Search } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import type { AuthUser, CreateFieldDto } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
-import { listFields, createField, type Field } from '../api/fields';
+import { createField, listFields, type Field } from '../api/fields';
 import TiandituMap from './TiandituMap';
 import TiandituPicker from './TiandituPicker';
 import { listMerchants, type MerchantUser } from '../api/agents';
 import { useAuth } from '../auth/auth-context';
-import type { CreateFieldDto, AuthUser } from '@nongchang/shared';
+import { fluentButton, fluentInput, fluentSelect } from '../ui/fluent';
 
 export default function FarmFields() {
   const { user } = useAuth();
@@ -20,11 +21,11 @@ export default function FarmFields() {
   const [showCreate, setShowCreate] = useState(false);
 
   const filteredFields = fields.filter((f) =>
-    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+    f.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
-    <div className="h-full flex flex-col space-y-4">
+    <div className="relative flex h-full min-h-0 flex-col gap-4">
       {showCreate && (
         <CreateFieldModal
           user={user}
@@ -32,142 +33,180 @@ export default function FarmFields() {
           onCreated={() => { setShowCreate(false); void reload(); }}
         />
       )}
-      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
-      {error && (
-        <div className="p-8 text-center text-rose-500 text-sm">
-          {error}
-          <button onClick={() => void reload()} className="underline font-bold ml-2">重试</button>
-        </div>
-      )}
-      {/* Header */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4 shrink-0">
+
+      <header className="flex shrink-0 flex-col gap-3 border border-[#E1DFDD] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            <Map className="w-6 h-6 text-emerald-600" />
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-[#242424]">
+            <Map className="h-5 w-5 text-[#0078D4]" />
             数字地块管理
           </h2>
-          <p className="text-sm text-slate-500 mt-1">管理种植基地边界、传感器网络及实时环境数据</p>
+          <p className="mt-1 text-sm text-[#605E5C]">
+            管理种植基地边界、归属商户、地图位置与 IoT 设备信息
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-100 p-1 flex items-center rounded-lg max-w-[200px]">
-            <Search className="w-4 h-4 text-slate-400 ml-2 shrink-0" />
-            <input 
-              type="text" 
-              placeholder="搜索地块..." 
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="relative block min-w-0 sm:w-64">
+            <span className="sr-only">搜索地块</span>
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+            <input
+              type="search"
+              placeholder="搜索地块..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none focus:outline-none text-sm px-2 w-full text-slate-700" 
+              className={`${fluentInput} w-full pl-8`}
             />
-          </div>
-          <button onClick={() => setShowCreate(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-2">
-            <Plus className="w-4 h-4" /> 绘制新地块
+          </label>
+          <button type="button" onClick={() => setShowCreate(true)} className={fluentButton('primary')}>
+            <Plus className="h-4 w-4" /> 绘制新地块
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="flex-1 flex gap-4 min-h-0">
-        {/* Left List */}
-        <div className="w-80 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden shrink-0">
-          <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-            <h3 className="font-bold text-slate-700 text-sm">地块列表 ({filteredFields.length})</h3>
-            <div className="flex bg-white rounded border border-slate-200 p-0.5">
-               <button onClick={() => setViewMode('map')} className={`p-1 rounded ${viewMode === 'map' ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}><MapPin className="w-3.5 h-3.5" /></button>
-               <button onClick={() => setViewMode('list')} className={`p-1 rounded ${viewMode === 'list' ? 'bg-slate-100 text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}><Layers className="w-3.5 h-3.5" /></button>
+      {loading && <div className="border border-[#E1DFDD] bg-white p-8 text-center text-sm text-[#605E5C]">加载中...</div>}
+      {error && (
+        <div className="border border-[#F1B8BD] bg-[#FDE7E9] p-4 text-sm text-[#A4262C]">
+          {error}
+          <button type="button" onClick={() => void reload()} className="ml-2 font-semibold underline">重试</button>
+        </div>
+      )}
+
+      <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[20rem_minmax(0,1fr)]">
+        <aside className="flex min-h-[260px] w-full shrink-0 flex-col overflow-hidden border border-[#E1DFDD] bg-white">
+          <div className="flex h-11 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-3">
+            <h3 className="text-sm font-semibold text-[#242424]">地块列表 ({filteredFields.length})</h3>
+            <div className="inline-flex border border-[#C8C6C4] bg-white">
+              <button
+                type="button"
+                aria-label="地图视图"
+                aria-pressed={viewMode === 'map'}
+                onClick={() => setViewMode('map')}
+                className={`grid h-7 w-8 place-items-center ${viewMode === 'map' ? 'bg-[#EFF6FC] text-[#005A9E]' : 'text-[#605E5C] hover:bg-[#F3F2F1]'}`}
+              >
+                <MapPin className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="列表视图"
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+                className={`grid h-7 w-8 place-items-center border-l border-[#C8C6C4] ${viewMode === 'list' ? 'bg-[#EFF6FC] text-[#005A9E]' : 'text-[#605E5C] hover:bg-[#F3F2F1]'}`}
+              >
+                <Layers className="h-4 w-4" />
+              </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {filteredFields.map(field => (
-              <button
-                key={field.id}
-                onClick={() => setActiveFieldId(field.id)}
-                className={`w-full text-left p-3 rounded-xl border transition-all ${activeField?.id === field.id ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-transparent hover:bg-slate-50 border-slate-100'}`}
-              >
-                 <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-sm text-slate-800">{field.name}</span>
-                 </div>
-                 <div className="text-xs text-slate-500 mt-1">归属商户: <span className="font-bold text-slate-700">{field.ownerName ?? '—'}</span></div>
-                 <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
-                    <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">{field.area} 亩</span>
-                 </div>
-              </button>
-            ))}
+          <div className="fluent-scrollbar flex-1 overflow-y-auto">
+            {filteredFields.length === 0 ? (
+              <div className="p-6 text-center text-sm text-[#605E5C]">暂无匹配地块</div>
+            ) : (
+              filteredFields.map((field) => (
+                <button
+                  key={field.id}
+                  type="button"
+                  onClick={() => setActiveFieldId(field.id)}
+                  className={`w-full border-l-2 px-3 py-3 text-left text-sm transition-colors ${
+                    activeField?.id === field.id
+                      ? 'border-l-[#0078D4] bg-[#EFF6FC] text-[#242424]'
+                      : 'border-l-transparent hover:bg-[#F5F9FF]'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold">{field.name}</span>
+                    <span className="shrink-0 font-mono text-xs text-[#605E5C]">{field.area} 亩</span>
+                  </div>
+                  <div className="mt-1 truncate text-xs text-[#605E5C]">
+                    归属商户: <span className="font-semibold text-[#323130]">{field.ownerName ?? '-'}</span>
+                  </div>
+                  <div className="mt-1 truncate font-mono text-xs text-[#605E5C]">
+                    {field.lng != null && field.lat != null ? `${field.lng.toFixed(4)}, ${field.lat.toFixed(4)}` : '未设置坐标'}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
-        </div>
+        </aside>
 
-        {/* Right Map/Detail Area */}
-        <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative flex flex-col">
+        <section className="relative flex min-h-[420px] min-w-0 flex-1 flex-col overflow-hidden border border-[#E1DFDD] bg-white">
           {viewMode === 'map' ? (
-            <div className="flex-1 relative bg-slate-100">
-               <TiandituMap
-                 fields={fields}
-                 activeFieldId={activeField?.id ?? null}
-                 onSelect={setActiveFieldId}
-               />
-               {/* Overlay Stats for Active Field */}
-               <AnimatePresence mode="wait">
-                 <motion.div
-                   key={activeField?.id ?? 'none'}
-                   initial={{ opacity: 0, x: 20 }}
-                   animate={{ opacity: 1, x: 0 }}
-                   exit={{ opacity: 0, x: -20 }}
-                   className="absolute top-6 right-6 w-64 bg-white/95 backdrop-blur shadow-xl rounded-xl border border-slate-200 p-4 z-[400]"
-                 >
-                    <div className="flex justify-between items-start mb-3">
-                      <h4 className="font-black text-slate-800">{activeField?.name ?? '—'}</h4>
-                      <div className="p-1.5 bg-slate-100 rounded-md">
-                        <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
-                      </div>
+            <div className="relative min-h-0 flex-1 bg-[#F5F5F5]">
+              <TiandituMap
+                fields={fields}
+                activeFieldId={activeField?.id ?? null}
+                onSelect={setActiveFieldId}
+              />
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeField?.id ?? 'none'}
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  className="absolute bottom-4 left-4 right-4 z-[400] border border-[#E1DFDD] bg-white/95 p-4 shadow-lg sm:left-auto sm:right-4 sm:top-4 sm:w-72"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <h4 className="font-semibold text-[#242424]">{activeField?.name ?? '-'}</h4>
+                    <div className="grid h-7 w-7 place-items-center border border-[#E1DFDD] bg-[#FAFAFA]" aria-hidden="true">
+                      <Maximize2 className="h-3.5 w-3.5 text-[#605E5C]" />
                     </div>
-                    <ul className="space-y-1.5 border-t border-slate-100 pt-3">
-                       <li className="flex justify-between text-xs">
-                         <span className="text-slate-500">负责人</span>
-                         <span className="font-bold text-slate-700">{activeField?.ownerName ?? '—'}</span>
-                       </li>
-                       <li className="flex justify-between text-xs">
-                         <span className="text-slate-500">规划面积</span>
-                         <span className="font-mono text-slate-700">{activeField?.area ?? '—'} 亩</span>
-                       </li>
-                       <li className="flex justify-between text-xs">
-                         <span className="text-slate-500">经纬度</span>
-                         <span className="font-mono text-slate-700">
-                           {activeField?.lng != null && activeField?.lat != null
-                             ? `${activeField.lng.toFixed(4)}, ${activeField.lat.toFixed(4)}`
-                             : '—'}
-                         </span>
-                       </li>
-                       <li className="flex justify-between text-xs">
-                         <span className="text-slate-500">IoT 设备</span>
-                         <span className="font-bold text-slate-700">{activeField?.iotDeviceId ?? '—'}</span>
-                       </li>
-                    </ul>
-                 </motion.div>
-               </AnimatePresence>
-             </div>
-           ) : (
-             <div className="flex-1 p-8 overflow-y-auto">
-                <div className="max-w-4xl mx-auto space-y-6">
-                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex items-start gap-6">
-                     <div className="w-32 h-32 bg-slate-100 rounded-xl flex items-center justify-center border-2 border-slate-200 shrink-0 overflow-hidden relative">
-                       <div className="absolute inset-0 bg-emerald-500/10 z-10" />
-                       <MapPin className="w-8 h-8 text-emerald-600 opacity-50 absolute" />
-                     </div>
-                     <div className="flex-1">
-                       <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-2xl font-black text-slate-800">{activeField?.name ?? '—'}</h3>
-                       </div>
-                       <p className="text-sm text-slate-500 mb-4 bg-slate-50 inline-block px-3 py-1.5 rounded-lg border border-slate-100">标识码: {activeField?.id ?? '—'} • 面积: {activeField?.area ?? '—'} 亩</p>
-                       <div className="flex gap-3">
-                          <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-emerald-700">编辑信息</button>
-                       </div>
-                     </div>
+                  </div>
+                  <dl className="space-y-2 border-t border-[#E1DFDD] pt-3 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#605E5C]">负责人</dt>
+                      <dd className="truncate font-semibold text-[#323130]">{activeField?.ownerName ?? '-'}</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#605E5C]">规划面积</dt>
+                      <dd className="font-mono text-[#323130]">{activeField?.area ?? '-'} 亩</dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#605E5C]">经纬度</dt>
+                      <dd className="truncate font-mono text-[#323130]">
+                        {activeField?.lng != null && activeField?.lat != null
+                          ? `${activeField.lng.toFixed(4)}, ${activeField.lat.toFixed(4)}`
+                          : '-'}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[#605E5C]">IoT 设备</dt>
+                      <dd className="truncate font-semibold text-[#323130]">{activeField?.iotDeviceId ?? '-'}</dd>
+                    </div>
+                  </dl>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          ) : (
+            <div className="fluent-scrollbar min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="border border-[#E1DFDD] bg-white p-5">
+                <div className="flex flex-col gap-5 sm:flex-row">
+                  <div className="grid h-28 w-28 shrink-0 place-items-center border border-[#E1DFDD] bg-[#F5F5F5]">
+                    <MapPin className="h-8 w-8 text-[#0078D4]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xl font-semibold text-[#242424]">{activeField?.name ?? '-'}</h3>
+                    <p className="mt-2 break-all border border-[#E1DFDD] bg-[#FAFAFA] px-3 py-2 font-mono text-xs text-[#605E5C]">
+                      ID: {activeField?.id ?? '-'} | 面积: {activeField?.area ?? '-'} 亩
+                    </p>
+                    <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs font-semibold text-[#605E5C]">归属商户</dt>
+                        <dd className="mt-1 text-[#242424]">{activeField?.ownerName ?? '-'}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold text-[#605E5C]">IoT 设备</dt>
+                        <dd className="mt-1 text-[#242424]">{activeField?.iotDeviceId ?? '-'}</dd>
+                      </div>
+                    </dl>
+                    <p className="mt-4 text-xs text-[#605E5C]">
+                      编辑地块信息的后端接口尚未在此页接入，本页仅保留真实创建与地图选点流程。
+                    </p>
                   </div>
                 </div>
-             </div>
-           )}
-         </div>
-       </div>
-     </div>
-   );
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function CreateFieldModal({
@@ -187,7 +226,7 @@ function CreateFieldModal({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     setErr(null);
     setSubmitting(true);
@@ -209,54 +248,58 @@ function CreateFieldModal({
   };
 
   return (
-    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-bold text-slate-800 text-lg">新建地块</h3>
-        {!isMerchant && (
-          <label className="block text-xs font-bold text-slate-500">归属商家
-            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required
-              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
-              <option value="">请选择…</option>
-              {((merchants as MerchantUser[] | null) ?? []).map((m) => (
-                <option key={m.id} value={m.id}>{m.displayName}（{m.username}）</option>
-              ))}
-            </select>
+    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="新建地块">
+      <form onSubmit={submit} className="fluent-scrollbar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl">
+        <div className="flex h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5">
+          <h3 className="text-base font-semibold text-[#242424]">新建地块</h3>
+          <button type="button" onClick={onClose} className={fluentButton('icon')} aria-label="关闭">×</button>
+        </div>
+        <div className="space-y-4 p-5">
+          {!isMerchant && (
+            <label htmlFor="field-owner" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+              归属商家
+              <select id="field-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required className={`${fluentSelect} w-full`}>
+                <option value="">请选择...</option>
+                {((merchants as MerchantUser[] | null) ?? []).map((m) => (
+                  <option key={m.id} value={m.id}>{m.displayName} ({m.username})</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label htmlFor="field-name" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+            地块名称
+            <input id="field-name" value={name} onChange={(e) => setName(e.target.value)} required className={`${fluentInput} w-full`} />
           </label>
-        )}
-        <label className="block text-xs font-bold text-slate-500">地块名称
-          <input value={name} onChange={(e) => setName(e.target.value)} required
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-        </label>
-        <label className="block text-xs font-bold text-slate-500">面积(亩)
-          <input type="number" step="0.1" value={area} onChange={(e) => setArea(e.target.value)} required
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-        </label>
-        <div>
-          <span className="block text-xs font-bold text-slate-500 mb-1">地块位置(点击地图选点,或手动填写)</span>
-          <div className="h-48 rounded-lg overflow-hidden border border-slate-200">
-            <TiandituPicker
-              lng={lng ? Number(lng) : null}
-              lat={lat ? Number(lat) : null}
-              onPick={(pLng, pLat) => { setLng(String(pLng)); setLat(String(pLat)); }}
-            />
+          <label htmlFor="field-area" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+            面积(亩)
+            <input id="field-area" type="number" step="0.1" value={area} onChange={(e) => setArea(e.target.value)} required className={`${fluentInput} w-full`} />
+          </label>
+          <div>
+            <span className="mb-1 block text-xs font-semibold text-[#605E5C]">地块位置(点击地图选点，或手动填写)</span>
+            <div className="h-48 overflow-hidden border border-[#E1DFDD]">
+              <TiandituPicker
+                lng={lng ? Number(lng) : null}
+                lat={lat ? Number(lat) : null}
+                onPick={(pLng, pLat) => { setLng(String(pLng)); setLat(String(pLat)); }}
+              />
+            </div>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label htmlFor="field-lng" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+              经度
+              <input id="field-lng" type="number" step="0.000001" value={lng} onChange={(e) => setLng(e.target.value)} required className={`${fluentInput} w-full`} />
+            </label>
+            <label htmlFor="field-lat" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+              纬度
+              <input id="field-lat" type="number" step="0.000001" value={lat} onChange={(e) => setLat(e.target.value)} required className={`${fluentInput} w-full`} />
+            </label>
+          </div>
+          {err && <p className="text-sm font-semibold text-[#A4262C]">{err}</p>}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block text-xs font-bold text-slate-500">经度
-            <input type="number" step="0.000001" value={lng} onChange={(e) => setLng(e.target.value)} required
-              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </label>
-          <label className="block text-xs font-bold text-slate-500">纬度
-            <input type="number" step="0.000001" value={lat} onChange={(e) => setLat(e.target.value)} required
-              className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-          </label>
-        </div>
-        {err && <p className="text-rose-500 text-xs">{err}</p>}
-        <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600">取消</button>
-          <button type="submit" disabled={submitting}
-            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50">
-            {submitting ? '提交中…' : '创建'}
+        <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+          <button type="button" onClick={onClose} className={fluentButton('secondary')}>取消</button>
+          <button type="submit" disabled={submitting} className={fluentButton('primary')}>
+            {submitting ? '提交中...' : '创建'}
           </button>
         </div>
       </form>
