@@ -77,7 +77,9 @@ describe('AiProviders Fluent settings', () => {
     render(<AiProviders />);
     await screen.findByText('OpenAI');
 
-    fireEvent.click(screen.getByRole('button', { name: '停用 OpenAI' }));
+    const toggleButton = screen.getByRole('button', { name: '停用 OpenAI' });
+    expect(toggleButton.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(toggleButton);
 
     await waitFor(() => {
       expect(updateAiProviderMock).toHaveBeenCalledWith('provider-1', { enabled: false });

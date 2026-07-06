@@ -3,7 +3,7 @@ import { Bot, CheckCircle2, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-
 import type { AiProviderView, AiTestResponse } from '@nongchang/shared';
 import { deleteAiProvider, listAiProviders, testAiProvider, updateAiProvider } from '../api/ai-provider';
 import { useApi } from '../hooks/useApi';
-import { fluentButton, fluentStatusTag, fluentTable } from '../ui/fluent';
+import { fluentButton, fluentTable } from '../ui/fluent';
 import AiProviderModal from './AiProviderModal';
 import AiPlayground from './AiPlayground';
 
@@ -122,7 +122,8 @@ export default function AiProviders() {
                         type="button"
                         onClick={() => void onToggle(provider)}
                         aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.name}`}
-                        className={provider.enabled ? fluentStatusTag('success') : fluentStatusTag('neutral')}
+                        aria-pressed={provider.enabled}
+                        className={fluentButton('secondary')}
                       >
                         {provider.enabled ? '已启用' : '已禁用'}
                       </button>
