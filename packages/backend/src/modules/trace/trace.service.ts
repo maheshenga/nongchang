@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateTraceEventDto, ListQuery, Paginated } from '@nongchang/shared';
@@ -18,24 +18,27 @@ export class TraceService {
     if (!Number.isInteger(count) || count < 1 || count > MAX_CODES_PER_BATCH) {
       throw new ForbiddenException(`生成数量须为 1~${MAX_CODES_PER_BATCH} 的整数`);
     }
+    const normalizedRequestKey = requestKey?.trim();
+    if (!normalizedRequestKey) {
+      throw new BadRequestException('缺少幂等键,请通过 Idempotency-Key 重试安全地生成溯源码');
+    }
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    const generationKey = requestKey
-      ? `trace.generate:${user.tenantId}:${user.userId}:${batchId}:${requestKey}`
-      : `trace.generate:${user.tenantId}:${user.userId}:${batchId}:${count}:${randomUUID()}`;
+    const generationKey = `trace.generate:${user.tenantId}:${user.userId}:${batchId}:${normalizedRequestKey}`;
     const ref = {
       refType: 'trace.generate',
       refId: batchId,
       idempotencyKey: generationKey,
     };
-    if (requestKey) {
-      const existingCodes = await this.prisma.traceCode.findMany({
-        where: { tenantId: user.tenantId, batchId, generationKey },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (existingCodes.length > 0) {
-        await this.billing.confirmReservation(user, 'CODE', ref);
-        return existingCodes;
+    const existingCodes = await this.prisma.traceCode.findMany({
+      where: { tenantId: user.tenantId, batchId, generationKey },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existingCodes.length > 0) {
+      if (existingCodes.length !== count) {
+        throw new BadRequestException(`幂等键已用于生成 ${existingCodes.length} 个溯源码,不能以 ${count} 个重试`);
       }
+      await this.billing.confirmReservation(user, 'CODE', ref);
+      return existingCodes;
     }
     const reservation = await this.billing.reserve(user, 'CODE', count, ref);
     const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
@@ -43,12 +46,15 @@ export class TraceService {
       await this.prisma.$transaction(async (tx) => {
         const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${batchId} FOR UPDATE`;
         if (locked.length === 0) throw new NotFoundException('批次不存在');
-        if (requestKey) {
-          const existingCodes = await tx.traceCode.findMany({
-            where: { tenantId: user.tenantId, batchId, generationKey },
-            orderBy: { createdAt: 'asc' },
-          });
-          if (existingCodes.length > 0) return;
+        const existingCodes = await tx.traceCode.findMany({
+          where: { tenantId: user.tenantId, batchId, generationKey },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (existingCodes.length > 0) {
+          if (existingCodes.length !== count) {
+            throw new BadRequestException(`幂等键已用于生成 ${existingCodes.length} 个溯源码,不能以 ${count} 个重试`);
+          }
+          return;
         }
         await tx.traceCode.createMany({
           data: codes.map((code) => ({
@@ -65,9 +71,7 @@ export class TraceService {
       throw err;
     }
     await this.billing.confirmReservation(user, 'CODE', ref);
-    return requestKey
-      ? this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, batchId, generationKey }, orderBy: { createdAt: 'asc' } })
-      : this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, code: { in: codes } } });
+    return this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, batchId, generationKey }, orderBy: { createdAt: 'asc' } });
   }
 
   async addEvent(user: AuthUser, dto: CreateTraceEventDto) {

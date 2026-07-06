@@ -17,12 +17,10 @@ describe('trace api client', () => {
     });
   });
 
-  it('generateCodes omits headers when requestKey is not provided', async () => {
-    await generateCodes('batch-1', 2);
+  it('generateCodes rejects blank request keys before sending', async () => {
+    expect(() => generateCodes('batch-1', 1, '   ')).toThrow('Missing trace generation request key');
 
-    expect(requestMock).toHaveBeenCalledWith('/trace/codes/batch-1?count=2', {
-      method: 'POST',
-    });
+    expect(requestMock).not.toHaveBeenCalled();
   });
 
   it('createTraceGenerationRequestKey scopes keys by source, batch, and count', () => {

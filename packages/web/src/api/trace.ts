@@ -38,10 +38,12 @@ export function createTraceGenerationRequestKey(source: string, batchId: string,
   return `${source}:${batchId}:${count}:${random}`;
 }
 
-export function generateCodes(batchId: string, count: number, requestKey?: string): Promise<TraceCode[]> {
+export function generateCodes(batchId: string, count: number, requestKey: string): Promise<TraceCode[]> {
+  const normalizedRequestKey = requestKey.trim();
+  if (!normalizedRequestKey) throw new Error('Missing trace generation request key');
   return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}?count=${encodeURIComponent(count)}`, {
     method: 'POST',
-    ...(requestKey ? { headers: { 'Idempotency-Key': requestKey } } : {}),
+    headers: { 'Idempotency-Key': normalizedRequestKey },
   });
 }
 

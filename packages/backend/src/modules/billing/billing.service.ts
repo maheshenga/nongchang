@@ -399,6 +399,7 @@ export class BillingService {
         where: { id: reservationId },
         select: {
           id: true,
+          tenantId: true,
           accountId: true,
           resource: true,
           amount: true,
@@ -419,6 +420,41 @@ export class BillingService {
       });
       if (existingTerminalLedger) {
         throw new BadRequestException('inconsistent reservation: RESERVED row already has terminal ledger');
+      }
+      if (reservation.resource === 'CODE' && reservation.refType === 'trace.generate') {
+        const producedCodes = await tx.traceCode.count({
+          where: {
+            reservationId: reservation.id,
+            tenantId: reservation.tenantId,
+            ...(reservation.refId ? { batchId: reservation.refId } : {}),
+            ...(reservation.idempotencyKey ? { generationKey: reservation.idempotencyKey } : {}),
+          },
+        });
+        if (producedCodes > 0) {
+          const flip = await tx.creditReservation.updateMany({
+            where: { id: reservation.id, status: 'RESERVED' },
+            data: { status: 'CONFIRMED', confirmedAt: new Date() },
+          });
+          if (flip.count === 0) return false;
+          const field = BALANCE_FIELD[reservation.resource as CreditResource];
+          const after = await tx.creditAccount.findUnique({ where: { id: reservation.accountId } });
+          const balanceAfter = (after as any)[field] as number;
+          await tx.creditLedger.create({
+            data: {
+              accountId: reservation.accountId,
+              resource: reservation.resource as CreditResource,
+              delta: 0,
+              balanceAfter,
+              reason: 'CONFIRMED',
+              refType: reservation.refType ?? null,
+              refId: reservation.refId ?? null,
+              operatorId: 'system:reservation-recovery',
+              note: `stale trace reservation confirmed after finding ${producedCodes} generated code(s)`,
+              idempotencyKey: reservation.idempotencyKey,
+            },
+          });
+          return false;
+        }
       }
       const flip = await tx.creditReservation.updateMany({
         where: { id: reservation.id, status: 'RESERVED' },

@@ -59,7 +59,7 @@ describe('TraceService #24 batch 归属校验', () => {
 describe('TraceService.generateCodes 批量', () => {
   it('生成指定数量的唯一码并返回列表', async () => {
     const h = make(true);
-    const out = await h.svc.generateCodes(merchant, 'b1', 5);
+    const out = await h.svc.generateCodes(merchant, 'b1', 5, 'req-success');
     expect(out.length).toBe(5);
     expect(h.prisma.traceCode.createMany).toHaveBeenCalled();
     const codes = h.created.map((c) => c.code);
@@ -68,12 +68,12 @@ describe('TraceService.generateCodes 批量', () => {
   });
   it('count 缺省为 1', async () => {
     const h = make(true);
-    const out = await h.svc.generateCodes(merchant, 'b1');
+    const out = await h.svc.generateCodes(merchant, 'b1', 1, 'req-default-count');
     expect(out.length).toBe(1);
   });
   it('batch 不在范围则抛 Forbidden(不创建)', async () => {
     const h = make(false);
-    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    await expect(h.svc.generateCodes(merchant, 'b1', 3, 'req-out-of-scope')).rejects.toThrow();
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
   it('count 非法(0 或超上限)抛错', async () => {
@@ -99,9 +99,17 @@ describe('TraceService.listCodes 已生成码列表', () => {
 });
 
 describe('TraceService.generateCodes 扣费插桩', () => {
-  it('生成成功后预约并确认 CODE = count', async () => {
+  it('缺少客户端请求键时拒绝生码,避免不可重试的随机扣费', async () => {
     const h = make(true);
-    await h.svc.generateCodes(merchant, 'b1', 5);
+    await expect(h.svc.generateCodes(merchant, 'b1', 1)).rejects.toThrow('缺少幂等键');
+
+    expect(h.billing.reserve).not.toHaveBeenCalled();
+    expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
+  });
+
+  it('reserves and confirms CODE when code generation succeeds', async () => {
+    const h = make(true);
+    await h.svc.generateCodes(merchant, 'b1', 5, 'req-reserve-success');
     expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 5, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.releaseReservation).not.toHaveBeenCalled();
@@ -130,18 +138,17 @@ describe('TraceService.generateCodes 扣费插桩', () => {
     expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ idempotencyKey: 'trace.generate:t1:op1:b1:req-repeat' }));
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
-  it('同一客户端请求键即使 count 变化也返回原 codes', async () => {
+  it('同一客户端请求键 count 变化时拒绝,避免错把新请求当重试', async () => {
     const h = make(true);
-    const first = await h.svc.generateCodes(merchant, 'b1', 2, 'req-same-key');
+    await h.svc.generateCodes(merchant, 'b1', 2, 'req-same-key');
     h.billing.reserve.mockClear();
     h.billing.confirmReservation.mockClear();
     h.prisma.traceCode.createMany.mockClear();
 
-    const second = await h.svc.generateCodes(merchant, 'b1', 5, 'req-same-key');
+    await expect(h.svc.generateCodes(merchant, 'b1', 5, 'req-same-key')).rejects.toThrow('幂等键已用于生成 2 个溯源码');
 
-    expect(second).toEqual(first);
     expect(h.billing.reserve).not.toHaveBeenCalled();
-    expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ idempotencyKey: 'trace.generate:t1:op1:b1:req-same-key' }));
+    expect(h.billing.confirmReservation).not.toHaveBeenCalled();
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
   it('同一客户端请求键已有 codes 但确认失败后重试会补确认', async () => {
@@ -162,26 +169,29 @@ describe('TraceService.generateCodes 扣费插桩', () => {
   it('余额不足则不创建码', async () => {
     const h = make(true);
     h.billing.reserve.mockRejectedValueOnce(new Error('insufficient'));
-    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    await expect(h.svc.generateCodes(merchant, 'b1', 3, 'req-insufficient')).rejects.toThrow();
     expect(h.prisma.traceCode.createMany).not.toHaveBeenCalled();
   });
   it('写入成功但后续读取失败时不应退款', async () => {
     const h = make(true);
-    h.prisma.traceCode.findMany.mockRejectedValueOnce(new Error('read failed'));
-    await expect(h.svc.generateCodes(merchant, 'b1', 2)).rejects.toThrow('read failed');
+    h.prisma.traceCode.findMany
+      .mockImplementationOnce(async () => [])
+      .mockImplementationOnce(async () => [])
+      .mockRejectedValueOnce(new Error('read failed'));
+    await expect(h.svc.generateCodes(merchant, 'b1', 2, 'req-read-fails')).rejects.toThrow('read failed');
     expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 2, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.confirmReservation).toHaveBeenCalledWith(merchant, 'CODE', expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.releaseReservation).not.toHaveBeenCalled();
   });
   it('batch 不在范围则不扣费', async () => {
     const h = make(false);
-    await expect(h.svc.generateCodes(merchant, 'b1', 3)).rejects.toThrow();
+    await expect(h.svc.generateCodes(merchant, 'b1', 3, 'req-no-billing')).rejects.toThrow();
     expect(h.billing.reserve).not.toHaveBeenCalled();
   });
   it('建码失败则释放已预约额度并重抛', async () => {
     const h = make(true);
     h.prisma.traceCode.createMany.mockRejectedValueOnce(new Error('db down'));
-    await expect(h.svc.generateCodes(merchant, 'b1', 4)).rejects.toThrow('db down');
+    await expect(h.svc.generateCodes(merchant, 'b1', 4, 'req-create-fails')).rejects.toThrow('db down');
     expect(h.billing.reserve).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.releaseReservation).toHaveBeenCalledWith(merchant, 'CODE', 4, expect.objectContaining({ refType: 'trace.generate', refId: 'b1' }));
     expect(h.billing.confirmReservation).not.toHaveBeenCalled();
@@ -200,7 +210,7 @@ describe('TraceService.generateCodes 扣费插桩', () => {
       return { count: data.length };
     });
 
-    await h.svc.generateCodes(merchant, 'b1', 2);
+    await h.svc.generateCodes(merchant, 'b1', 2, 'req-lock-before-create');
 
     expect(h.prisma.$transaction).toHaveBeenCalled();
     expect(calls).toEqual(['lock-batch', 'create-codes']);

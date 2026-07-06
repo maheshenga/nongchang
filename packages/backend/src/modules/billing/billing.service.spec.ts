@@ -11,6 +11,7 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
   const state: any = { aiBalance: opts.aiBalance ?? 0, codeBalance: opts.codeBalance ?? 0 };
   const ledgers: any[] = [];
   const reservations: any[] = [];
+  const traceCodes: any[] = [];
   const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
   const now = opts.now ?? new Date('2026-07-06T00:00:00.000Z');
   const tx = {
@@ -77,13 +78,22 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
         return { count: 1 };
       },
     },
+    traceCode: {
+      count: async (a: any) => traceCodes.filter((row) => {
+        if (a.where?.reservationId && row.reservationId !== a.where.reservationId) return false;
+        if (a.where?.tenantId && row.tenantId !== a.where.tenantId) return false;
+        if (a.where?.batchId && row.batchId !== a.where.batchId) return false;
+        if (a.where?.generationKey && row.generationKey !== a.where.generationKey) return false;
+        return true;
+      }).length,
+    },
   };
   const prisma: any = {
     ...tx,
     $transaction: async (fn: any) => fn(tx),
   };
   const svc = new BillingService(prisma);
-  return { svc, state, ledgers, reservations, prisma };
+  return { svc, state, ledgers, reservations, traceCodes, prisma };
 }
 
 describe('BillingService.consume', () => {
@@ -358,6 +368,67 @@ describe('BillingService reservation model', () => {
       idempotencyKey: 'trace:release',
       operatorId: 'system:reservation-recovery',
     });
+  });
+
+  it('releaseStaleReservations confirms trace reservations that already produced codes', async () => {
+    const { svc, state, ledgers, reservations, traceCodes } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, {
+      refType: 'trace.generate',
+      refId: 'b1',
+      idempotencyKey: 'trace.generate:t1:u3:b1:req-confirm-existing-codes',
+    });
+    traceCodes.push(
+      { id: 'code1', tenantId: 't1', batchId: 'b1', reservationId: 'res1', generationKey: 'trace.generate:t1:u3:b1:req-confirm-existing-codes' },
+      { id: 'code2', tenantId: 't1', batchId: 'b1', reservationId: 'res1', generationKey: 'trace.generate:t1:u3:b1:req-confirm-existing-codes' },
+    );
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 0, skipped: 1, errors: [] });
+    expect(state.codeBalance).toBe(5);
+    expect(reservations[0].status).toBe('CONFIRMED');
+    expect(ledgers.find((ledger) => ledger.reason === 'CONFIRMED')).toMatchObject({
+      resource: 'CODE',
+      delta: 0,
+      idempotencyKey: 'trace.generate:t1:u3:b1:req-confirm-existing-codes',
+      operatorId: 'system:reservation-recovery',
+    });
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(0);
+  });
+
+  it('releaseStaleReservations does not confirm trace reservations from unrelated codes', async () => {
+    const { svc, state, ledgers, reservations, traceCodes } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, {
+      refType: 'trace.generate',
+      refId: 'b1',
+      idempotencyKey: 'trace.generate:t1:u3:b1:req-unrelated-codes',
+    });
+    traceCodes.push({
+      id: 'code-other',
+      tenantId: 't1',
+      batchId: 'b1',
+      reservationId: 'other-reservation',
+      generationKey: 'trace.generate:t1:u3:b1:req-unrelated-codes',
+    });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 1, skipped: 0, errors: [] });
+    expect(state.codeBalance).toBe(10);
+    expect(reservations[0].status).toBe('RELEASED');
+    expect(ledgers.find((ledger) => ledger.reason === 'RELEASED')).toMatchObject({
+      resource: 'CODE',
+      delta: 5,
+      idempotencyKey: 'trace.generate:t1:u3:b1:req-unrelated-codes',
+      operatorId: 'system:reservation-recovery',
+    });
+    expect(ledgers.filter((ledger) => ledger.reason === 'CONFIRMED')).toHaveLength(0);
   });
 
   it('releaseStaleReservations skips rows no longer RESERVED', async () => {
