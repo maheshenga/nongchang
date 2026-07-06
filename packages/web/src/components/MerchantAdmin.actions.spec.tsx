@@ -126,6 +126,8 @@ describe('MerchantAdmin production actions', () => {
     fireEvent.click(screen.getByText('Peony'));
 
     expect(container.textContent).not.toContain('pending backend integration');
+    const warehouseDocumentButton = screen.getByRole('button', { name: /出入库单未开放/ });
+    expect((warehouseDocumentButton as HTMLButtonElement).disabled).toBe(true);
     const disabledButtons = Array.from(container.querySelectorAll('button:disabled'));
     expect(disabledButtons.length).toBeGreaterThanOrEqual(3);
   });
@@ -136,5 +138,26 @@ describe('MerchantAdmin production actions', () => {
 
     const archiveButton = screen.getByRole('button', { name: 'Lifecycle trace archive unavailable' });
     expect((archiveButton as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('prints trace labels without unsupported certification or cryptographic claims', async () => {
+    const { container } = render(<MerchantAdmin />);
+    await screen.findByText('Peony');
+
+    fireEvent.click(screen.getByText('Peony'));
+    fireEvent.click(screen.getByRole('button', { name: /打印追溯标签/ }));
+
+    await screen.findByRole('dialog', { name: '溯源码标签打印预览' });
+
+    expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 1, expect.any(String));
+    expect(container.textContent).toContain('TRACE-001');
+    expect(container.textContent).toContain('扫码查看该批次已登记的溯源信息');
+    expect(container.textContent).not.toContain('权威质检');
+    expect(container.textContent).not.toContain('PASSED');
+    expect(container.textContent).not.toContain('zero-knowledge');
+    expect(container.textContent).not.toContain('OAUTH');
+    expect(container.textContent).not.toContain('地理标志');
+    expect(container.textContent).not.toContain('源头温室棚室标识');
+    expect(container.textContent).not.toContain('花卉品种品系级别');
   });
 });
