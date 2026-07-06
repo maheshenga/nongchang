@@ -196,3 +196,54 @@ Expected: commit succeeds. If there are no staged changes because all changes ar
 - [ ] **Step 3: Prepare next P**
 
 After P0 commit and verification, start P1 plan before touching P1 code.
+
+---
+
+### Task 5: Close AI Reservation Idempotency Review Gap
+
+**Files:**
+- Modify: `packages/shared/src/dto/ai.dto.ts`
+- Modify: `packages/backend/src/modules/ai/ai.controller.ts`
+- Modify: `packages/backend/src/modules/ai/ai.service.ts`
+- Test: `packages/backend/src/modules/ai/ai.service.spec.ts`
+
+- [ ] **Step 1: Write failing tests for repeated AI calls**
+
+Add tests proving identical `chat`, `ask`, `diagnose`, `transcribe`, and `advice` calls create different reservation idempotency keys. Repeated payloads must not reuse a confirmed reservation unless response replay/cache semantics exist.
+
+Run:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend test:unit -- src/modules/ai/ai.service.spec.ts
+```
+
+Expected before fix: at least one test fails because repeated calls reuse the same payload-derived reservation key.
+
+- [ ] **Step 2: Replace payload-derived reservation keys with operation keys**
+
+Use a helper with this behavior:
+
+```typescript
+private operationKey(kind: string, user: AuthUser): string {
+  const raw = randomUUID();
+  const digest = createHash('sha256').update(raw).digest('hex').slice(0, 16);
+  return `${kind}:${user.tenantId}:${user.userId}:${digest}`;
+}
+```
+
+For `advice`, include `refId: input.batchId` but do not make `batchId` the idempotency key.
+
+- [ ] **Step 3: Keep JSON AI DTOs unchanged**
+
+Do not add a client-supplied idempotency field for AI in this P0 fix. A future client retry idempotency feature must include durable response replay/cache semantics.
+
+- [ ] **Step 4: Verify targeted and full P0 tests**
+
+Run:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend test:unit -- src/modules/ai/ai.service.spec.ts
+corepack pnpm@10.33.2 test:unit
+```
+
+Expected: targeted AI tests and full unit suite pass.

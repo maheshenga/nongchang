@@ -112,7 +112,7 @@ describe('AiService billing reservation', () => {
     expect(billing.releaseReservation).not.toHaveBeenCalled();
   });
 
-  it('chat repeats use the same reservation idempotency key for the same payload', async () => {
+  it('chat repeats use different reservation idempotency keys for the same payload', async () => {
     const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) })));
     const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
@@ -120,8 +120,8 @@ describe('AiService billing reservation', () => {
     await svc.chat(user, 'same-payload');
     await svc.chat(user, 'same-payload');
 
-    expect(billing.reserve.mock.calls[0][3].idempotencyKey).toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
-    expect(billing.confirmReservation.mock.calls[0][2].idempotencyKey).toBe(billing.confirmReservation.mock.calls[1][2].idempotencyKey);
+    expect(billing.reserve.mock.calls[0][3].idempotencyKey).not.toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
+    expect(billing.confirmReservation.mock.calls[0][2].idempotencyKey).not.toBe(billing.confirmReservation.mock.calls[1][2].idempotencyKey);
   });
 
   it('reserve failure does not start the external AI call or release', async () => {
@@ -212,6 +212,18 @@ describe('AiService billing reservation', () => {
     }));
   });
 
+  it('transcribe repeats use different reservation idempotency keys for the same audio', async () => {
+    const billing = billingSvc();
+    const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
+    const factory = makeWsFactory([{ code: 0, data: { status: 2, result: { ws: [{ cw: [{ w: 'ok' }] }] } } }]);
+
+    await svc.transcribe(user, Buffer.from('audio'), factory);
+    await svc.transcribe(user, Buffer.from('audio'), factory);
+
+    expect(billing.reserve.mock.calls[0][3].idempotencyKey).not.toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
+    expect(billing.confirmReservation.mock.calls[0][2].idempotencyKey).not.toBe(billing.confirmReservation.mock.calls[1][2].idempotencyKey);
+  });
+
   it('transcribe releases the reservation when Xfyun fails', async () => {
     const billing = billingSvc();
     const svc = new AiService(noProv, integrationSvc({ appId: 'a', apiKey: 'k', apiSecret: 's' }), billing, {} as any, {} as any);
@@ -259,13 +271,33 @@ describe('AiService.advice', () => {
     expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: 'ai.advice:t1:u1:b1',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
     });
     expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: 'ai.advice:t1:u1:b1',
+      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
     });
+  });
+
+  it('advice repeats use different reservation idempotency keys for the same batch', async () => {
+    const billing = billingSvc();
+    const prisma: any = {
+      batch: { findFirst: async () => ({ id: 'b1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }) },
+      farmRecord: { findMany: async () => [{ action: 'water' }] },
+      cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
+    };
+    const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
+    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const svc = new AiService(providers, {} as any, billing, prisma, scope);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
+
+    await svc.advice(user, { batchId: 'b1' });
+    await svc.advice(user, { batchId: 'b1' });
+
+    expect(billing.reserve.mock.calls[0][3]).toEqual(expect.objectContaining({ refType: 'ai.advice', refId: 'b1' }));
+    expect(billing.reserve.mock.calls[1][3]).toEqual(expect.objectContaining({ refType: 'ai.advice', refId: 'b1' }));
+    expect(billing.reserve.mock.calls[0][3].idempotencyKey).not.toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
   });
 });
 
@@ -291,6 +323,22 @@ describe('AiService.ask', () => {
       refType: 'ai.ask',
       idempotencyKey: expect.stringMatching(keyPattern('ai.ask')),
     }));
+  });
+
+  it('ask repeats use different reservation idempotency keys for the same question', async () => {
+    const billing = billingSvc();
+    const prisma: any = {
+      batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
+    };
+    const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
+    const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const svc = new AiService(providers, {} as any, billing, prisma, scope);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
+
+    await svc.ask(user, { question: 'current batches?' });
+    await svc.ask(user, { question: 'current batches?' });
+
+    expect(billing.reserve.mock.calls[0][3].idempotencyKey).not.toBe(billing.reserve.mock.calls[1][3].idempotencyKey);
   });
 });
 
