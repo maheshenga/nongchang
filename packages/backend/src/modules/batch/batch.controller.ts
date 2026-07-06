@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { AuthUser, CreateBatchDto, createBatchSchema, listQuerySchema, ListQuery, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
+import { AuthUser, CreateBatchDto, createBatchSchema, listQuerySchema, ListQuery, Permission, Role, UpdateBatchCostDto, updateBatchCostSchema, UpdateBatchStatusDto, updateBatchStatusSchema } from '@nongchang/shared';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -14,17 +15,17 @@ export class BatchController {
     return this.svc.create(user, dto);
   }
 
-  @Get()
+  @Get() @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT) @Permissions(Permission.BATCH_VIEW)
   list(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
     return this.svc.list(user, query);
   }
 
-  @Get('by-code/:code')
+  @Get('by-code/:code') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT) @Permissions(Permission.BATCH_VIEW)
   byCode(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.svc.findByTraceCode(user, code);
   }
 
-  @Get(':id/lifecycle')
+  @Get(':id/lifecycle') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT) @Permissions(Permission.BATCH_VIEW)
   lifecycle(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.svc.lifecycle(user, id);
   }

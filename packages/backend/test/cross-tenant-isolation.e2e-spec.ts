@@ -122,7 +122,9 @@ describe('跨租户隔离(多租户深度)e2e', () => {
     const demoBatch = await prisma.batch.findFirst({ where: { batchNo: 'PA-2026-001' } });
     expect(demoBatch).toBeTruthy();
     await request(app.getHttpServer())
-      .post(`/api/trace/codes/${demoBatch!.id}?count=1`).set('Authorization', `Bearer ${t2MerchantToken}`)
+      .post(`/api/trace/codes/${demoBatch!.id}?count=1`)
+      .set('Authorization', `Bearer ${t2MerchantToken}`)
+      .set('Idempotency-Key', `cross-tenant-e2e-${Date.now()}`)
       .expect(403);
   });
 

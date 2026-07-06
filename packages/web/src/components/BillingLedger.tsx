@@ -5,6 +5,7 @@ import type { CreditLedgerItem, CreditResource, LedgerReason } from '@nongchang/
 
 const REASON_LABEL: Record<LedgerReason, string> = {
   RECHARGE: '充值', ALLOCATE_IN: '转入', ALLOCATE_OUT: '转出', CONSUME: '消费', REFUND: '退还', PURCHASE: '购买',
+  RESERVED: '预约', CONFIRMED: '确认', RELEASED: '释放',
 };
 const RESOURCE_LABEL: Record<CreditResource, string> = { AI: 'AI算力', CODE: '二维码' };
 

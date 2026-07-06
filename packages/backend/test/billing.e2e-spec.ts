@@ -26,6 +26,7 @@ describe('Billing e2e', () => {
   let agentToken: string;
   let merchantToken: string;
   let merchantUserId: string;
+  let merchantTenantId: string;
   let agentId: string;
   let batchId: string;
   const createdCodes: string[] = [];
@@ -46,6 +47,7 @@ describe('Billing e2e', () => {
 
     const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
     merchantUserId = userA!.id;
+    merchantTenantId = userA!.tenantId;
     agentId = userA!.agentId!;
     // merchantA 名下批次:若被历史清理删除则按需补建(并记录以便 afterAll 清理)。
     let batchA = await prisma.batch.findFirst({ where: { ownerId: merchantUserId } });
@@ -109,11 +111,15 @@ describe('Billing e2e', () => {
     expect(after - before).toBe(200);
   });
 
-  it('消费扣费 + 流水:生码扣 CODE 额度,产生 CONSUME 流水', async () => {
+  it('预约扣费 + 流水:生码扣 CODE 额度,产生 RESERVED 与 CONFIRMED 流水,同 key 重试不重复产码', async () => {
     const before = await codeBalance(app, merchantToken);
+    const requestKey = `billing-e2e-${Date.now()}`;
+    const generationKey = `trace.generate:${merchantTenantId}:${merchantUserId}:${batchId}:${requestKey}`;
 
     const gen = await request(app.getHttpServer())
-      .post(`/api/trace/codes/${batchId}?count=5`).set('Authorization', `Bearer ${merchantToken}`);
+      .post(`/api/trace/codes/${batchId}?count=5`)
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', requestKey);
     expect(gen.status).toBe(201);
     expect(gen.body).toHaveLength(5);
     for (const c of gen.body) createdCodes.push(c.code);
@@ -121,14 +127,38 @@ describe('Billing e2e', () => {
     const after = await codeBalance(app, merchantToken);
     expect(after).toBe(before - 5);
 
+    const retry = await request(app.getHttpServer())
+      .post(`/api/trace/codes/${batchId}?count=5`)
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', requestKey);
+    expect(retry.status).toBe(201);
+    expect(retry.body.map((item: any) => item.code)).toEqual(gen.body.map((item: any) => item.code));
+    expect(await codeBalance(app, merchantToken)).toBe(after);
+
     const ledger = await request(app.getHttpServer())
       .get('/api/billing/ledger?resource=CODE&page=1&pageSize=10').set('Authorization', `Bearer ${merchantToken}`);
     expect(ledger.status).toBe(200);
-    const consume = ledger.body.items.find(
-      (it: any) => it.reason === 'CONSUME' && it.resource === 'CODE' && it.delta === -5,
+    const reserved = ledger.body.items.find(
+      (it: any) => it.reason === 'RESERVED' && it.resource === 'CODE' && it.delta === -5 && it.refId === batchId,
     );
-    expect(consume).toBeDefined();
-    expect(consume.refType).toBe('trace.generate');
+    const confirmed = ledger.body.items.find(
+      (it: any) => it.reason === 'CONFIRMED' && it.resource === 'CODE' && it.delta === 0 && it.refId === batchId,
+    );
+    expect(reserved).toBeDefined();
+    expect(confirmed).toBeDefined();
+    expect(reserved.refType).toBe('trace.generate');
+    expect(confirmed.refType).toBe('trace.generate');
+
+    const generatedLedgers = await prisma.creditLedger.findMany({
+      where: { idempotencyKey: generationKey },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(generatedLedgers.map((item) => item.reason).sort()).toEqual(['CONFIRMED', 'RESERVED']);
+    expect(generatedLedgers).toHaveLength(2);
+    expect(generatedLedgers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ resource: 'CODE', delta: -5, refType: 'trace.generate', refId: batchId }),
+      expect.objectContaining({ resource: 'CODE', delta: 0, refType: 'trace.generate', refId: batchId }),
+    ]));
   });
 
   it('余额耗尽:CODE 不足时生码返回 403,不产码', async () => {
@@ -139,7 +169,9 @@ describe('Billing e2e', () => {
 
     const before = await prisma.traceCode.count({ where: { batchId } });
     const gen = await request(app.getHttpServer())
-      .post(`/api/trace/codes/${batchId}?count=5`).set('Authorization', `Bearer ${merchantToken}`);
+      .post(`/api/trace/codes/${batchId}?count=5`)
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', `billing-e2e-insufficient-${Date.now()}`);
     expect(gen.status).toBe(403);
 
     const after = await prisma.traceCode.count({ where: { batchId } });

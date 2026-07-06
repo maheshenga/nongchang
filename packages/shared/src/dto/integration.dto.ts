@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Permission, type Permission as PermissionValue } from '../enums';
 
 // ── 集成配置(第三方凭证)──
 // provider 类型:wechat(微信小程序登录)、xfyun(讯飞语音听写)、tianditu(天地图底图)
@@ -47,10 +48,13 @@ export const integrationConfigViewSchema = z.object({
 export type IntegrationConfigView = z.infer<typeof integrationConfigViewSchema>;
 
 // ── 用户组(叠加式权限)──
+const userGroupPermissionValues = Object.values(Permission) as [PermissionValue, ...PermissionValue[]];
+export const userGroupPermissionSchema = z.enum(userGroupPermissionValues);
+
 export const userGroupInputSchema = z.object({
   name: z.string().min(1).max(64),
   isDefault: z.boolean().optional(),
-  permissions: z.array(z.string()).optional(),
+  permissions: z.array(userGroupPermissionSchema).optional(),
 });
 export type UserGroupInput = z.infer<typeof userGroupInputSchema>;
 

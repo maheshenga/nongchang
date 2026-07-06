@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { AuthUser, CreateFarmRecordDto, createFarmRecordSchema, FarmRecordQueryDto, farmRecordQuerySchema, Role, UpdateFarmRecordStatusDto, updateFarmRecordStatusSchema } from '@nongchang/shared';
+import { AuthUser, CreateFarmRecordDto, createFarmRecordSchema, FarmRecordQueryDto, farmRecordQuerySchema, Permission, Role, UpdateFarmRecordStatusDto, updateFarmRecordStatusSchema } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { FarmRecordService } from './farm-record.service';
@@ -9,12 +10,12 @@ import { FarmRecordService } from './farm-record.service';
 export class FarmRecordController {
   constructor(private svc: FarmRecordService) {}
 
-  @Post() @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT)
+  @Post() @Roles(Role.SYSTEM_ADMIN, Role.MERCHANT) @Permissions(Permission.RECORD_CREATE)
   create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createFarmRecordSchema)) dto: CreateFarmRecordDto) {
     return this.svc.create(user, dto);
   }
 
-  @Get()
+  @Get() @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT) @Permissions(Permission.RECORD_VIEW)
   list(
     @CurrentUser() user: AuthUser,
     @Query(new ZodValidationPipe(farmRecordQuerySchema)) query: FarmRecordQueryDto,

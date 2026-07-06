@@ -8,6 +8,7 @@ export type CreditResource = z.infer<typeof creditResourceSchema>;
 
 export const ledgerReasonSchema = z.enum([
   'RECHARGE', 'ALLOCATE_IN', 'ALLOCATE_OUT', 'CONSUME', 'REFUND', 'PURCHASE',
+  'RESERVED', 'CONFIRMED', 'RELEASED',
 ]);
 export type LedgerReason = z.infer<typeof ledgerReasonSchema>;
 

@@ -43,9 +43,10 @@ model User {
   username     String
   passwordHash String   @map("password_hash")
   phone        String?
-  wxOpenid     String?  @unique @map("wx_openid")
+  wxOpenid     String?  @map("wx_openid")
   displayName  String   @map("display_name")
   status       String   @default("active")
+  sessionVersion Int    @default(0) @map("session_version")
   groupId      String?  @map("group_id")
   createdAt    DateTime @default(now()) @map("created_at")
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
@@ -59,6 +60,7 @@ model User {
   supplyIssues SupplyIssue[]
 
   @@unique([tenantId, username])
+  @@unique([tenantId, wxOpenid])
   @@index([tenantId])
   @@index([agentId])
   @@index([groupId])
@@ -155,17 +157,21 @@ model CropPhenology {
 }
 
 model TraceCode {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  batchId   String   @map("batch_id")
-  code      String   @unique
-  scanCount Int      @default(0) @map("scan_count")
-  status    String   @default("active") @map("status")
-  createdAt DateTime @default(now()) @map("created_at")
-  batch     Batch    @relation(fields: [batchId], references: [id])
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  batchId       String             @map("batch_id")
+  code          String             @unique
+  scanCount     Int                @default(0) @map("scan_count")
+  status        String             @default("active") @map("status")
+  reservationId String?            @map("reservation_id")
+  generationKey String?            @map("generation_key")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  batch         Batch              @relation(fields: [batchId], references: [id])
+  reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
 
   @@index([tenantId])
   @@index([batchId])
+  @@index([tenantId, batchId, generationKey])
   @@map("trace_codes")
 }
 
@@ -349,6 +355,7 @@ enum Role {
   system_admin
   agent_admin
   merchant
+  member
 }
 
 enum CreditOwnerType {
@@ -369,6 +376,15 @@ enum LedgerReason {
   CONSUME
   REFUND
   PURCHASE
+  RESERVED
+  CONFIRMED
+  RELEASED
+}
+
+enum CreditReservationStatus {
+  RESERVED
+  CONFIRMED
+  RELEASED
 }
 
 enum OrderStatus {
@@ -387,10 +403,37 @@ model CreditAccount {
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   ledgers     CreditLedger[]
+  reservations CreditReservation[]
 
   @@unique([tenantId, ownerType, ownerId])
   @@index([tenantId])
   @@map("credit_accounts")
+}
+
+model CreditReservation {
+  id             String                  @id @default(uuid())
+  tenantId       String                  @map("tenant_id")
+  accountId      String                  @map("account_id")
+  account        CreditAccount           @relation(fields: [accountId], references: [id])
+  resource       CreditResource
+  amount         Int
+  balanceAfter   Int                     @map("balance_after")
+  status         CreditReservationStatus @default(RESERVED)
+  refType        String?                 @map("ref_type")
+  refId          String?                 @map("ref_id")
+  idempotencyKey String                  @map("idempotency_key")
+  operatorId     String?                 @map("operator_id")
+  note           String?
+  confirmedAt    DateTime?               @map("confirmed_at")
+  releasedAt     DateTime?               @map("released_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  traceCodes     TraceCode[]
+
+  @@unique([accountId, resource, idempotencyKey])
+  @@index([tenantId, status, createdAt])
+  @@index([refType, refId])
+  @@map("credit_reservations")
 }
 
 model CreditLedger {

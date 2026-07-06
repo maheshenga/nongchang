@@ -43,7 +43,8 @@ describe('溯源码批量生成 POST /trace/codes/:batchId e2e', () => {
   it('merchantA 为自家批次批量生成 N 个唯一码 → 列表长度匹配', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/trace/codes/${batchAId}?count=3`)
-      .set('Authorization', `Bearer ${merchantAToken}`);
+      .set('Authorization', `Bearer ${merchantAToken}`)
+      .set('Idempotency-Key', `trace-codes-e2e-batch-${Date.now()}`);
     expect(res.status).toBe(201);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBe(3);
@@ -63,14 +64,23 @@ describe('溯源码批量生成 POST /trace/codes/:batchId e2e', () => {
   it('merchantB 为他人批次生成 → 403(越权拒绝)', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/trace/codes/${batchAId}?count=2`)
-      .set('Authorization', `Bearer ${merchantBToken}`);
+      .set('Authorization', `Bearer ${merchantBToken}`)
+      .set('Idempotency-Key', `trace-codes-e2e-forbidden-${Date.now()}`);
     expect(res.status).toBe(403);
+  });
+
+  it('missing Idempotency-Key returns 400 before charging', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/trace/codes/${batchAId}?count=1`)
+      .set('Authorization', `Bearer ${merchantAToken}`);
+    expect(res.status).toBe(400);
   });
 
   it('count 缺省为 1', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/trace/codes/${batchAId}`)
-      .set('Authorization', `Bearer ${merchantAToken}`);
+      .set('Authorization', `Bearer ${merchantAToken}`)
+      .set('Idempotency-Key', `trace-codes-e2e-default-${Date.now()}`);
     expect(res.status).toBe(201);
     expect(res.body.length).toBe(1);
     createdCodes.push(res.body[0].code);

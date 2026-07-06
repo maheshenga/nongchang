@@ -3,8 +3,18 @@ export const Role = {
   SYSTEM_ADMIN: 'system_admin',
   AGENT_ADMIN: 'agent_admin',
   MERCHANT: 'merchant',
+  MEMBER: 'member',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+export const Permission = {
+  RECORD_CREATE: 'record:create',
+  RECORD_VIEW: 'record:view',
+  TRACE_VIEW: 'trace:view',
+  BATCH_VIEW: 'batch:view',
+  FIELD_VIEW: 'field:view',
+} as const;
+export type Permission = (typeof Permission)[keyof typeof Permission];
 
 export const BatchStatus = {
   PLANTING: 'Planting', GROWING: 'Growing', HARVESTED: 'Harvested', DISTRIBUTED: 'Distributed',

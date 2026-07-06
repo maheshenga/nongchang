@@ -1,10 +1,10 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { QrCode, Bell, Sparkles, LogOut } from 'lucide-react';
 import { motion } from 'motion/react';
 import AppLogin from './components/AppLogin';
 import { useAuth } from './auth/auth-context';
 import { ToastBanner } from './hooks/useToast';
-import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
+import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
@@ -24,6 +24,7 @@ const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
 const AiAssistant = lazy(() => import('./components/AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
 const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
+const TenantManagement = lazy(() => import('./components/TenantManagement'));
 const PayResult = lazy(() => import('./components/PayResult'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 
@@ -40,21 +41,54 @@ const ViewSkeleton = () => (
   </div>
 );
 
+function roleDisplay(role: SystemRole | null): { title: string; subtitle: string; badge: string; short: string } {
+  if (role === 'platform_admin') {
+    return { title: 'Platform Admin', subtitle: '平台运营账户', badge: '平台管理员', short: 'Platform' };
+  }
+  if (role === 'system_admin') {
+    return { title: 'Super Admin', subtitle: '企业版授权账户', badge: '总管理员', short: 'Super Admin' };
+  }
+  if (role === 'agent_admin') {
+    return { title: 'Agent Admin', subtitle: '代理商管理专员', badge: '代理商', short: 'Agent' };
+  }
+  if (role === 'member') {
+    return { title: 'Member', subtitle: '普通会员账号', badge: '普通会员', short: 'Member' };
+  }
+  return { title: 'Merchant', subtitle: '商户专属工作台', badge: '商家', short: 'Merchant' };
+}
+
+function toSystemRole(role: string): SystemRole {
+  if (role === 'merchant') return 'merchant_admin';
+  if (isSystemRole(role)) return role;
+  return 'member';
+}
+
 export default function App() {
   const { user, profile, isAuthenticated, logout } = useAuth();
-  const systemRole: SystemRole | null = user
-    ? (user.role === 'merchant' ? 'merchant_admin' : user.role)
-    : null;
+  const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('fields');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const navRole = systemRole ?? 'system_admin';
+  const navItems = getNavItems(navRole);
+  const roleInfo = roleDisplay(systemRole);
+  const allowedTabs = useMemo(() => navItems.flatMap(category => category.items.map(item => item.id)), [navItems]);
+  const canOpenBilling = allowedTabs.includes('billing');
 
   useEffect(() => {
-    setMountedTabs(prev => new Set(prev).add(activeTab));
-  }, [activeTab]);
+    const allowedTab = firstAllowedTab(navRole, activeTab);
+    setMountedTabs(prev => {
+      const next = new Set<AppTab>();
+      for (const tab of prev) {
+        if (allowedTabs.includes(tab)) next.add(tab);
+      }
+      next.add(allowedTab);
+      return next;
+    });
+  }, [navRole, activeTab, allowedTabs]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -99,9 +133,6 @@ export default function App() {
     setActiveTab('fields');
   };
 
-  const navRole = systemRole ?? 'system_admin';
-  const navItems = getNavItems(navRole);
-
   // 默认/兜底:若当前 activeTab 不在该角色导航内(如已下线的 dashboard),自动跳到首个可用页。
   useEffect(() => {
     const fallbackTab = firstAllowedTab(navRole, activeTab);
@@ -129,6 +160,8 @@ export default function App() {
     );
   }
 
+  const isMounted = (tab: AppTab) => mountedTabs.has(tab) && allowedTabs.includes(tab);
+
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
       {/* Sidebar */}
@@ -144,8 +177,8 @@ export default function App() {
           <div className="bg-white/5 border border-white/10 rounded-xl p-1.5 lg:px-4 lg:py-3 flex items-center gap-3 backdrop-blur-sm cursor-pointer hover:bg-white/10 transition-colors whitespace-nowrap group-hover:px-4 group-hover:py-3">
             <div className="w-7 h-7 lg:w-8 lg:h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-300 font-bold text-xs ring-1 ring-emerald-500/50 shrink-0 transition-all">A</div>
             <div className="flex-1 opacity-0 w-0 lg:w-auto overflow-hidden group-hover:w-auto group-hover:opacity-100 lg:opacity-100 transition-all duration-300">
-              <div className="text-xs font-medium text-emerald-100">{systemRole === 'system_admin' ? 'Super Admin' : systemRole === 'agent_admin' ? 'Agent Admin' : 'Merchant'}</div>
-              <div className="text-[10px] text-emerald-500/80">{systemRole === 'system_admin' ? '企业版授权账户' : systemRole === 'agent_admin' ? '代理商管理专员' : '商户专属工作台'}</div>
+              <div className="text-xs font-medium text-emerald-100">{roleInfo.title}</div>
+              <div className="text-[10px] text-emerald-500/80">{roleInfo.subtitle}</div>
             </div>
           </div>
         </div>
@@ -188,20 +221,23 @@ export default function App() {
             </div>
           ))}
         </nav>
+        {canOpenBilling && (
         <div className="p-3 lg:p-5 group-hover:p-5 mt-auto border-t border-white/5 transition-all">
           <div className="bg-gradient-to-br from-emerald-900/40 to-teal-900/40 rounded-2xl p-2 lg:p-4 group-hover:p-4 border border-emerald-800/30 relative overflow-hidden transition-all flex flex-col items-center group-hover:items-stretch lg:items-stretch">
             <Sparkles className="absolute top-2 right-2 w-20 h-20 text-emerald-500/10 -rotate-12 pointer-events-none hidden group-hover:block lg:block" />
-            <div className="text-[10px] text-emerald-400 font-bold mb-1 tracking-wider uppercase whitespace-nowrap hidden group-hover:block lg:block">系统配额</div>
-            <div className="flex items-end gap-1 mb-0 group-hover:mb-4 lg:mb-4">
-              <span className="text-sm lg:text-2xl group-hover:text-2xl font-black text-white shrink-0">12K</span>
-              <span className="text-[10px] text-emerald-500 mb-1.5 uppercase font-bold hidden group-hover:inline lg:inline whitespace-nowrap">/ 20K</span>
-            </div>
-            <button className="w-full bg-white/10 hover:bg-emerald-500 hover:text-white text-emerald-100 text-[10px] lg:text-xs group-hover:text-xs font-bold py-1.5 lg:py-3 group-hover:py-3 rounded-lg lg:rounded-xl group-hover:rounded-xl transition-all duration-300 uppercase tracking-widest shadow-sm">
-              <span className="hidden group-hover:inline lg:inline">增订资源</span>
+            <div className="text-[10px] text-emerald-400 font-bold mb-1 tracking-wider uppercase whitespace-nowrap hidden group-hover:block lg:block">资源订购</div>
+            <button
+              type="button"
+              aria-label="Open billing resources"
+              onClick={() => setActiveTab('billing')}
+              className="w-full bg-white/10 hover:bg-emerald-500 hover:text-white text-emerald-100 text-[10px] lg:text-xs group-hover:text-xs font-bold py-1.5 lg:py-3 group-hover:py-3 rounded-lg lg:rounded-xl group-hover:rounded-xl transition-all duration-300 uppercase tracking-widest shadow-sm"
+            >
+              <span className="hidden group-hover:inline lg:inline">订购资源</span>
               <span className="inline group-hover:hidden lg:hidden">+</span>
             </button>
           </div>
         </div>
+        )}
       </aside>
       )}
 
@@ -216,14 +252,19 @@ export default function App() {
               </h2>
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-1 bg-gradient-to-r from-blue-50 to-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-md border border-indigo-100/50 shadow-sm">
-                 {systemRole === 'system_admin' ? '总管理员' : systemRole === 'agent_admin' ? '代理商' : '商家'}
+                 {roleInfo.badge}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-6">
-            <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
+            <button
+              type="button"
+              aria-label="Notifications unavailable"
+              disabled
+              title="Notifications are not available"
+              className="relative p-2 text-slate-300 cursor-not-allowed transition-colors"
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
             </button>
             <div className="h-6 w-px bg-slate-200"></div>
             <div onClick={() => setProfileOpen(true)} title="个人账号设置" className="flex items-center gap-3 cursor-pointer group">
@@ -232,7 +273,7 @@ export default function App() {
                   {profile?.displayName ?? '已登录用户'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  {systemRole === 'system_admin' ? 'Super Admin' : systemRole === 'agent_admin' ? 'Agent' : 'Merchant'}
+                  {roleInfo.short}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -251,23 +292,24 @@ export default function App() {
         <section className={`flex-1 overflow-auto relative ${isPresentationMode ? 'p-0' : 'p-4 md:p-8'}`}>
           <Suspense fallback={<ViewSkeleton />}>
             <div className="h-full relative">
-              {mountedTabs.has('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
-              {mountedTabs.has('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
-              {mountedTabs.has('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
-              {mountedTabs.has('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
-              {mountedTabs.has('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
-              {mountedTabs.has('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
-              {mountedTabs.has('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
-              {mountedTabs.has('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
-              {mountedTabs.has('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
-              {mountedTabs.has('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
-              {mountedTabs.has('integrations') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'integrations' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><IntegrationSettings /></div>}
-              {mountedTabs.has('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
-              {mountedTabs.has('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
-              {mountedTabs.has('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
-              {mountedTabs.has('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
-              {mountedTabs.has('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
-              {mountedTabs.has('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
+              {isMounted('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
+              {isMounted('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
+              {isMounted('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
+              {isMounted('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
+              {isMounted('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
+              {isMounted('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
+              {isMounted('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
+              {isMounted('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
+              {isMounted('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
+              {isMounted('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
+              {isMounted('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
+              {isMounted('integrations') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'integrations' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><IntegrationSettings /></div>}
+              {isMounted('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
+              {isMounted('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
+              {isMounted('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
+              {isMounted('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
+              {isMounted('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
+              {isMounted('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
             </div>
           </Suspense>
         </section>

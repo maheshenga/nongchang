@@ -74,6 +74,46 @@ describe('AuthService.login', () => {
     await expect(svc.login({ tenantCode: 'DEMO', username: 'agent', password: 'password123' }))
       .rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('member password login issues token payload with ownerId null', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({ id: 'mem1', tenantId: 't1', role: 'member', agentId: null, status: 'active', passwordHash: hash });
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'member1', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.role).toBe('member');
+    expect(payload.agentId).toBeNull();
+    expect(payload.ownerId).toBeNull();
+  });
+
+  it('password login includes sessionVersion in access token', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      passwordHash: hash,
+      sessionVersion: 3,
+    });
+
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.sessionVersion).toBe(3);
+    expect(payload.exp - payload.iat).toBe(15 * 60);
+  });
+
+  it('password login access token expires in 15 minutes', async () => {
+    const hash = await bcrypt.hash('password123', 10);
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash });
+
+    const res = await svc.login({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.exp - payload.iat).toBe(15 * 60);
+  });
 });
 
 describe('AuthService.refresh', () => {
@@ -110,6 +150,23 @@ describe('AuthService.refresh', () => {
     const { svc, jwt } = makeRefreshSvc({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', tenant: { status: 'suspended' } });
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(UnauthorizedException);
   });
+  it('rejects stale refresh token when sessionVersion no longer matches DB', async () => {
+    const { svc, jwt } = makeRefreshSvc({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      sessionVersion: 2,
+      tenant: activeTenant,
+    });
+    const stale = await jwt.signAsync(
+      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1', sessionVersion: 1 },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await expect(svc.refresh(stale)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
   it('rejects refresh when agent_admin linked agent is missing', async () => {
     const jwt = new JwtService({ secret: 'test' });
     const prisma = {
@@ -128,16 +185,53 @@ describe('AuthService.refresh', () => {
     const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('refresh rebuilds member payload with ownerId null', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const prisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'mem1',
+          tenantId: 't1',
+          role: 'member',
+          agentId: null,
+          status: 'active',
+          tenant: activeTenant,
+        }),
+      },
+    } as any;
+    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
+    const input = await jwt.signAsync(
+      { userId: 'mem1', tenantId: 't1', role: 'member', agentId: null, ownerId: null },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    const res = await svc.refresh(input);
+    const payload = jwt.verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.role).toBe('member');
+    expect(payload.ownerId).toBeNull();
+  });
 });
 
 const wxFetch = (body: any) => vi.fn().mockResolvedValue({ json: async () => body });
 
-function makeWechatService(opts: { lookup?: any; existingUser?: any }) {
+function makeWechatService(opts: { lookup?: any; existingUser?: any; users?: any[] }) {
   const jwt = new JwtService({ secret: 'test' });
   const created: any[] = [];
+  const users = opts.users ?? (opts.existingUser ? [opts.existingUser] : []);
+  const findByTenantOpenid = (tenantId: string, wxOpenid: string) => (
+    users.find(u => u.tenantId === tenantId && u.wxOpenid === wxOpenid) ?? null
+  );
   const prisma = {
     user: {
-      findFirst: vi.fn().mockResolvedValue(opts.existingUser ?? null),
+      findUnique: vi.fn().mockImplementation(async ({ where }: any) => {
+        if (where.tenantId_wxOpenid) {
+          return findByTenantOpenid(where.tenantId_wxOpenid.tenantId, where.tenantId_wxOpenid.wxOpenid);
+        }
+        return null;
+      }),
+      findFirst: vi.fn().mockImplementation(async ({ where }: any) => findByTenantOpenid(where.tenantId, where.wxOpenid)),
       create: vi.fn().mockImplementation(async ({ data }: any) => { const u = { id: 'newu', ...data }; created.push(u); return u; }),
     },
   } as any;
@@ -170,6 +264,28 @@ describe('AuthService.loginWechat', () => {
     const res = await svc.loginWechat({ code: 'c', appId: 'wxX' });
     expect(res.accessToken).toBeTypeOf('string');
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it('same wxOpenid in another tenant does not affect current tenant login', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'SHARED_OPENID' }));
+    const { svc, prisma } = makeWechatService({
+      lookup: { tenantId: 't2', secret: 's2' },
+      users: [
+        { id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SHARED_OPENID', tenant: activeTenant },
+        { id: 'u2', tenantId: 't2', role: 'merchant', agentId: null, status: 'active', wxOpenid: 'SHARED_OPENID', tenant: activeTenant },
+      ],
+    });
+
+    const res = await svc.loginWechat({ code: 'c', appId: 'wxTenant2' });
+    const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
+
+    expect(payload.userId).toBe('u2');
+    expect(payload.tenantId).toBe('t2');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { tenantId_wxOpenid: { tenantId: 't2', wxOpenid: 'SHARED_OPENID' } },
+      include: { tenant: { select: { status: true } } },
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 
   it('未注册 openid 抛 NotFound(引导去注册),绝不自动建号', async () => {
@@ -255,6 +371,25 @@ describe('AuthService.registerWechat', () => {
       .rejects.toBeInstanceOf(ConflictException);
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
+  it('same wxOpenid in another tenant does not block current tenant registration', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'CROSS_TENANT_OPENID' }));
+    const { svc, prisma, created } = makeWechatService({
+      lookup: { tenantId: 't2', secret: 's2' },
+      users: [
+        { id: 'u1', tenantId: 't1', wxOpenid: 'CROSS_TENANT_OPENID', status: 'active' },
+      ],
+    });
+
+    await expect(svc.registerWechat({ appId: 'wxTenant2', code: 'c', displayName: 'Zhao Liu' }))
+      .resolves.toEqual({ status: 'pending' });
+    expect(created).toHaveLength(1);
+    expect(created[0].tenantId).toBe('t2');
+    expect(created[0].wxOpenid).toBe('CROSS_TENANT_OPENID');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { tenantId_wxOpenid: { tenantId: 't2', wxOpenid: 'CROSS_TENANT_OPENID' } },
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
 });
 
 const actor = { userId: 'u1', tenantId: 't1', role: 'merchant' as any, agentId: null, ownerId: 'u1' };
@@ -310,6 +445,13 @@ describe('AuthService.changePassword', () => {
     const newHash = update.mock.calls[0][0].data.passwordHash;
     expect(newHash).not.toBe(oldHash);
     expect(await bcrypt.compare('newpass456', newHash)).toBe(true);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: {
+        passwordHash: newHash,
+        sessionVersion: { increment: 1 },
+      },
+    });
   });
   it('旧密码错误抛 Unauthorized 且不改密', async () => {
     const oldHash = await bcrypt.hash('oldpass123', 10);

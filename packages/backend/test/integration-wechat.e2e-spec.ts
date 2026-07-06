@@ -77,7 +77,14 @@ describe('Integration config + WeChat login + user-group e2e', () => {
     expect(res.body.status).toBe('pending');
     expect(res.body.accessToken).toBeUndefined();
 
-    const created = await prisma.user.findFirst({ where: { wxOpenid: TEST_OPENID } });
+    const integration = await prisma.integrationConfig.findFirst({
+      where: { appId: TEST_APPID, provider: 'wechat' },
+      select: { tenantId: true },
+    });
+    expect(integration).toBeTruthy();
+    const created = await prisma.user.findFirst({
+      where: { tenantId: integration!.tenantId, wxOpenid: TEST_OPENID },
+    });
     expect(created).toBeTruthy();
     expect(created!.role).toBe('merchant');
     expect(created!.status).toBe('pending');
@@ -91,7 +98,14 @@ describe('Integration config + WeChat login + user-group e2e', () => {
       .post('/api/auth/wechat/register')
       .send({ appId: TEST_APPID, code: 'js_code_reg2', displayName: '重复用户' });
     expect(res.status).toBe(409);
-    const count = await prisma.user.count({ where: { wxOpenid: TEST_OPENID } });
+    const integration = await prisma.integrationConfig.findFirst({
+      where: { appId: TEST_APPID, provider: 'wechat' },
+      select: { tenantId: true },
+    });
+    expect(integration).toBeTruthy();
+    const count = await prisma.user.count({
+      where: { tenantId: integration!.tenantId, wxOpenid: TEST_OPENID },
+    });
     expect(count).toBe(1);
   });
 

@@ -42,7 +42,7 @@ cp packages/backend/.env.example packages/backend/.env
 #   按注释填写 DATABASE_URL / JWT_SECRET / JWT_REFRESH_SECRET / APP_ENCRYPTION_KEY 等
 
 # 4. 迁移 + 种子数据
-pnpm --filter @nongchang/backend prisma:migrate
+pnpm --filter @nongchang/backend prisma:deploy
 pnpm --filter @nongchang/backend prisma:seed
 
 # 5. 构建共享层(backend/web/miniapp 都依赖它)
@@ -58,6 +58,11 @@ pnpm --filter @nongchang/miniapp dev:weapp    # 小程序(微信开发者工具�
 
 | 命令 | 说明 |
 |------|------|
+| `pnpm test:unit` | Run shared build plus backend/web/miniapp unit suites |
+| `pnpm test:e2e` | Run backend e2e after local PostGIS is running, migrated, and seeded |
+| `pnpm verify:local` | Run production non-e2e gates: shared build, backend build, web lint, unit suites |
+| `pnpm verify:production` | Run `verify:local` plus database-backed e2e |
+| `pnpm --filter @nongchang/backend e2e:check-db` | Check local PostGIS, migrations, and seed data before e2e |
 | `pnpm build` | 构建 shared + backend |
 | `pnpm build:shared` | 仅构建共享层 |
 | `pnpm build:backend` | 构建后端 |
@@ -69,6 +74,8 @@ pnpm --filter @nongchang/miniapp dev:weapp    # 小程序(微信开发者工具�
 ## 部署
 
 生产部署在宝塔服务器(Nginx 反代 + PM2 + 面板 PostgreSQL),详见 [docs/deploy/baota.md](docs/deploy/baota.md)。
+
+Release verification gates are documented in [docs/ops/production-verification.md](docs/ops/production-verification.md).
 
 ## 设计文档
 

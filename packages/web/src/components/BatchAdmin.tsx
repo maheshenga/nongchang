@@ -1,11 +1,11 @@
 import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2 } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
 import { showToast } from '../hooks/useToast';
 import { listBatches, createBatch, getBatchLifecycle, deleteBatch, type Batch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
-import { generateCodes, listCodes, type TraceCode } from '../api/trace';
+import { createTraceGenerationRequestKey, generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
@@ -116,6 +116,7 @@ export default function BatchAdmin() {
   const [qrAmount, setQrAmount] = useState<number>(100);
   // 一物一码:进入排版预览时为批次真实生成的溯源码列表。
   const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
+  const generationRequestKeys = useRef<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
   const [paperSize, setPaperSize] = useState('4x6');
   
@@ -290,12 +291,23 @@ export default function BatchAdmin() {
   const codeForIndex = (i: number) => generatedCodes[i] ?? `${activeBatch?.code ?? ''}-预览${i + 1}`;
 
   // 进入排版沙盒前为批次真实生成 qrAmount 个唯一溯源码。
+  const getGenerationRequestKey = (source: string, batchId: string, count: number) => {
+    const operationKey = `${source}:${batchId}:${count}`;
+    generationRequestKeys.current[operationKey] ??= createTraceGenerationRequestKey(source, batchId, count);
+    return generationRequestKeys.current[operationKey];
+  };
+  const clearGenerationRequestKey = (source: string, batchId: string, count: number) => {
+    delete generationRequestKeys.current[`${source}:${batchId}:${count}`];
+  };
+
   const handleGenerateCodes = async (): Promise<boolean> => {
     if (!showQrModal) return false;
     setGenerating(true);
     try {
-      const codes = await generateCodes(showQrModal, qrAmount);
+      const requestKey = getGenerationRequestKey('batch-label-preview', showQrModal, qrAmount);
+      const codes = await generateCodes(showQrModal, qrAmount, requestKey);
       setGeneratedCodes(codes.map(c => c.code));
+      clearGenerationRequestKey('batch-label-preview', showQrModal, qrAmount);
       return true;
     } catch (e) {
       showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');

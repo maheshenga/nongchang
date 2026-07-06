@@ -10,6 +10,36 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
 
 interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
+interface ReservationResult { reservationId: string; balanceAfter: number }
+interface StaleReservationQuery {
+  olderThanMinutes?: number;
+  now?: Date;
+  take?: number;
+  dryRun?: boolean;
+  resource?: CreditResource;
+  refType?: string;
+}
+interface StaleReservationItem {
+  id: string;
+  tenantId: string;
+  accountId: string;
+  ownerType: CreditOwnerType;
+  ownerId: string;
+  resource: CreditResource;
+  amount: number;
+  balanceAfter: number;
+  refType: string | null;
+  refId: string | null;
+  idempotencyKey: string;
+  operatorId: string | null;
+  createdAt: string;
+}
+interface ReservationRecoveryResult {
+  scanned: number;
+  released: number;
+  skipped: number;
+  errors: { reservationId: string; message: string }[];
+}
 
 @Injectable()
 export class BillingService {
@@ -97,6 +127,172 @@ export class BillingService {
     });
   }
 
+  async reserve(user: AuthUser, resource: CreditResource, amount: number, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法预约额度');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.creditReservation.findFirst({
+          where: { accountId: acct.id, resource, idempotencyKey },
+          select: { id: true, status: true, amount: true, balanceAfter: true },
+        });
+        if (existing) {
+          if (existing.status === 'RELEASED') throw new BadRequestException('预约已释放,不可重复使用该幂等键');
+          if (existing.amount !== amount) throw new BadRequestException('预约额度与当前请求额度不一致');
+          return { reservationId: existing.id, balanceAfter: existing.balanceAfter };
+        }
+        const upd = await tx.creditAccount.updateMany({
+          where: { id: acct.id, [field]: { gte: amount } },
+          data: { [field]: { decrement: amount } },
+        });
+        if (upd.count === 0) {
+          const label = resource === 'AI' ? 'AI 算力' : '二维码';
+          throw new ForbiddenException(`${label}额度不足,请联系上级充值`);
+        }
+        const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+        const balanceAfter = (after as any)[field] as number;
+        const reservation = await tx.creditReservation.create({
+          data: {
+            tenantId: user.tenantId,
+            accountId: acct.id,
+            resource,
+            amount,
+            balanceAfter,
+            status: 'RESERVED',
+            refType: ref.refType ?? null,
+            refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId,
+            note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        await tx.creditLedger.create({
+          data: {
+            accountId: acct.id, resource, delta: -amount, balanceAfter, reason: 'RESERVED',
+            refType: ref.refType ?? null, refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        return { reservationId: reservation.id, balanceAfter };
+      });
+    } catch (err) {
+      if ((err as any)?.code === 'P2002') {
+        const existing = await this.prisma.creditReservation.findFirst({
+          where: { accountId: acct.id, resource, idempotencyKey },
+          select: { id: true, status: true, amount: true, balanceAfter: true },
+        });
+        if (existing && existing.status !== 'RELEASED' && existing.amount === amount) {
+          return { reservationId: existing.id, balanceAfter: existing.balanceAfter };
+        }
+      }
+      throw err;
+    }
+  }
+
+  async confirmReservation(user: AuthUser, resource: CreditResource, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法确认预约');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    return this.prisma.$transaction(async (tx) => {
+      const existingConfirm = await tx.creditLedger.findFirst({
+        where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+        select: { balanceAfter: true },
+      });
+      const reservation = await tx.creditReservation.findFirst({
+        where: { accountId: acct.id, resource, idempotencyKey },
+        select: { id: true, status: true, balanceAfter: true },
+      });
+      if (!reservation) throw new BadRequestException('预约记录不存在,无法确认扣费');
+      if (reservation.status === 'RELEASED') throw new BadRequestException('预约已释放,无法确认扣费');
+      if (existingConfirm) return { reservationId: reservation.id, balanceAfter: existingConfirm.balanceAfter };
+      if (reservation.status === 'RESERVED') {
+        const flip = await tx.creditReservation.updateMany({
+          where: { id: reservation.id, status: 'RESERVED' },
+          data: { status: 'CONFIRMED', confirmedAt: new Date() },
+        });
+        if (flip.count === 0) {
+          const existing = await tx.creditLedger.findFirst({
+            where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+            select: { balanceAfter: true },
+          });
+          if (existing) return { reservationId: reservation.id, balanceAfter: existing.balanceAfter };
+          throw new BadRequestException('预约状态已变化,无法确认扣费');
+        }
+      }
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      const balanceAfter = (after as any)[field] as number;
+      try {
+        await tx.creditLedger.create({
+          data: {
+            accountId: acct.id, resource, delta: 0, balanceAfter, reason: 'CONFIRMED',
+            refType: ref.refType ?? null, refId: ref.refId ?? null,
+            operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+      } catch (err) {
+        if ((err as any)?.code !== 'P2002') throw err;
+        const existing = await tx.creditLedger.findFirst({
+          where: { accountId: acct.id, reason: 'CONFIRMED', idempotencyKey },
+          select: { balanceAfter: true },
+        });
+        if (!existing) throw err;
+        return { reservationId: reservation.id, balanceAfter: existing.balanceAfter };
+      }
+      return { reservationId: reservation.id, balanceAfter };
+    });
+  }
+
+  async releaseReservation(user: AuthUser, resource: CreditResource, amount: number, ref: ConsumeRef): Promise<ReservationResult> {
+    const idempotencyKey = ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法释放预约');
+    const { ownerType, ownerId } = this.resolveConsumer(user);
+    const acct = await this.ensureAccount(ownerType, ownerId, user.tenantId);
+    const field = BALANCE_FIELD[resource];
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.creditReservation.findFirst({
+        where: { accountId: acct.id, resource, idempotencyKey },
+        select: { id: true, status: true, amount: true, balanceAfter: true },
+      });
+      if (!reservation) throw new BadRequestException('预约记录不存在,无法释放额度');
+      if (reservation.status === 'CONFIRMED') throw new BadRequestException('预约已确认,无法释放额度');
+      const existingRelease = await tx.creditLedger.findFirst({
+        where: { accountId: acct.id, reason: 'RELEASED', idempotencyKey },
+        select: { balanceAfter: true },
+      });
+      if (existingRelease || reservation.status === 'RELEASED') {
+        return { reservationId: reservation.id, balanceAfter: existingRelease?.balanceAfter ?? reservation.balanceAfter };
+      }
+      if (amount !== reservation.amount) throw new BadRequestException('释放额度与预约额度不一致');
+      const flip = await tx.creditReservation.updateMany({
+        where: { id: reservation.id, status: 'RESERVED' },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+      if (flip.count === 0) throw new BadRequestException('预约状态已变化,无法释放额度');
+      await tx.creditAccount.updateMany({
+        where: { id: acct.id },
+        data: { [field]: { increment: reservation.amount } },
+      });
+      const after = await tx.creditAccount.findUnique({ where: { id: acct.id } });
+      const balanceAfter = (after as any)[field] as number;
+      await tx.creditLedger.create({
+        data: {
+          accountId: acct.id, resource, delta: reservation.amount, balanceAfter, reason: 'RELEASED',
+          refType: ref.refType ?? null, refId: ref.refId ?? null,
+          operatorId: ref.operatorId ?? user.userId, note: ref.note ?? null,
+          idempotencyKey,
+        },
+      });
+      return { reservationId: reservation.id, balanceAfter };
+    });
+  }
+
   // 校验 target 下级在调用方范围内
   private async resolveTarget(user: AuthUser, targetOwnerType: 'AGENT' | 'MERCHANT', targetOwnerId: string) {
     if (user.role === Role.SYSTEM_ADMIN) {
@@ -113,6 +309,181 @@ export class BillingService {
       return { ownerType: 'MERCHANT' as const, ownerId: targetOwnerId };
     }
     throw new ForbiddenException('无分配权限');
+  }
+
+  private staleReservationCutoff(query: StaleReservationQuery): Date {
+    const minutes = query.olderThanMinutes ?? 60;
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      throw new BadRequestException('olderThanMinutes must be a positive number');
+    }
+    const now = query.now ?? new Date();
+    return new Date(now.getTime() - minutes * 60_000);
+  }
+
+  private staleReservationTake(query: StaleReservationQuery): number {
+    const take = query.take ?? 100;
+    if (!Number.isInteger(take) || take <= 0 || take > 1000) {
+      throw new BadRequestException('take must be an integer between 1 and 1000');
+    }
+    return take;
+  }
+
+  private staleReservationWhere(query: StaleReservationQuery) {
+    return {
+      status: 'RESERVED' as const,
+      createdAt: { lt: this.staleReservationCutoff(query) },
+      ...(query.resource ? { resource: query.resource } : {}),
+      ...(query.refType ? { refType: query.refType } : {}),
+    };
+  }
+
+  async listStaleReservations(query: StaleReservationQuery = {}): Promise<StaleReservationItem[]> {
+    const rows = await this.prisma.creditReservation.findMany({
+      where: this.staleReservationWhere(query),
+      orderBy: { createdAt: 'asc' },
+      take: this.staleReservationTake(query),
+      select: {
+        id: true,
+        tenantId: true,
+        accountId: true,
+        resource: true,
+        amount: true,
+        balanceAfter: true,
+        refType: true,
+        refId: true,
+        idempotencyKey: true,
+        operatorId: true,
+        createdAt: true,
+        account: { select: { ownerType: true, ownerId: true } },
+      },
+    });
+    return rows.map((row: any) => ({
+      id: row.id,
+      tenantId: row.tenantId,
+      accountId: row.accountId,
+      ownerType: row.account.ownerType,
+      ownerId: row.account.ownerId,
+      resource: row.resource,
+      amount: row.amount,
+      balanceAfter: row.balanceAfter,
+      refType: row.refType,
+      refId: row.refId,
+      idempotencyKey: row.idempotencyKey,
+      operatorId: row.operatorId,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async releaseStaleReservations(query: StaleReservationQuery = {}): Promise<ReservationRecoveryResult> {
+    const candidates = await this.listStaleReservations(query);
+    const result: ReservationRecoveryResult = { scanned: candidates.length, released: 0, skipped: 0, errors: [] };
+    if (query.dryRun) {
+      result.skipped = candidates.length;
+      return result;
+    }
+    for (const candidate of candidates) {
+      try {
+        const released = await this.releaseReservedReservationById(candidate.id);
+        if (released) result.released += 1;
+        else result.skipped += 1;
+      } catch (err) {
+        result.errors.push({ reservationId: candidate.id, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return result;
+  }
+
+  private async releaseReservedReservationById(reservationId: string): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.creditReservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          tenantId: true,
+          accountId: true,
+          resource: true,
+          amount: true,
+          status: true,
+          refType: true,
+          refId: true,
+          idempotencyKey: true,
+        },
+      });
+      if (!reservation || reservation.status !== 'RESERVED') return false;
+      const existingTerminalLedger = await tx.creditLedger.findFirst({
+        where: {
+          accountId: reservation.accountId,
+          reason: { in: ['CONFIRMED', 'RELEASED'] },
+          idempotencyKey: reservation.idempotencyKey,
+        },
+        select: { id: true },
+      });
+      if (existingTerminalLedger) {
+        throw new BadRequestException('inconsistent reservation: RESERVED row already has terminal ledger');
+      }
+      if (reservation.resource === 'CODE' && reservation.refType === 'trace.generate') {
+        const producedCodes = await tx.traceCode.count({
+          where: {
+            reservationId: reservation.id,
+            tenantId: reservation.tenantId,
+            ...(reservation.refId ? { batchId: reservation.refId } : {}),
+            ...(reservation.idempotencyKey ? { generationKey: reservation.idempotencyKey } : {}),
+          },
+        });
+        if (producedCodes > 0) {
+          const flip = await tx.creditReservation.updateMany({
+            where: { id: reservation.id, status: 'RESERVED' },
+            data: { status: 'CONFIRMED', confirmedAt: new Date() },
+          });
+          if (flip.count === 0) return false;
+          const field = BALANCE_FIELD[reservation.resource as CreditResource];
+          const after = await tx.creditAccount.findUnique({ where: { id: reservation.accountId } });
+          const balanceAfter = (after as any)[field] as number;
+          await tx.creditLedger.create({
+            data: {
+              accountId: reservation.accountId,
+              resource: reservation.resource as CreditResource,
+              delta: 0,
+              balanceAfter,
+              reason: 'CONFIRMED',
+              refType: reservation.refType ?? null,
+              refId: reservation.refId ?? null,
+              operatorId: 'system:reservation-recovery',
+              note: `stale trace reservation confirmed after finding ${producedCodes} generated code(s)`,
+              idempotencyKey: reservation.idempotencyKey,
+            },
+          });
+          return false;
+        }
+      }
+      const flip = await tx.creditReservation.updateMany({
+        where: { id: reservation.id, status: 'RESERVED' },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+      if (flip.count === 0) return false;
+      const field = BALANCE_FIELD[reservation.resource as CreditResource];
+      await tx.creditAccount.updateMany({
+        where: { id: reservation.accountId },
+        data: { [field]: { increment: reservation.amount } },
+      });
+      const after = await tx.creditAccount.findUnique({ where: { id: reservation.accountId } });
+      const balanceAfter = (after as any)[field] as number;
+      await tx.creditLedger.create({
+        data: {
+          accountId: reservation.accountId,
+          resource: reservation.resource as CreditResource,
+          delta: reservation.amount,
+          balanceAfter,
+          reason: 'RELEASED',
+          refType: reservation.refType ?? null,
+          refId: reservation.refId ?? null,
+          operatorId: 'system:reservation-recovery',
+          note: 'stale reservation recovery',
+          idempotencyKey: reservation.idempotencyKey,
+        },
+      });
+      return true;
+    });
   }
 
   async allocate(user: AuthUser, dto: AllocateInput) {

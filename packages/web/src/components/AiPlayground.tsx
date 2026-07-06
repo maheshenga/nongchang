@@ -118,9 +118,10 @@ export default function AiPlayground() {
             </button>
             <button
               type="button"
-              onClick={() => window.alert('语音输入即将开放')}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-500 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-1.5"
-              title="语音输入即将开放"
+              aria-label="Voice input unavailable"
+              disabled
+              className="bg-slate-100 text-slate-400 px-4 py-2 rounded-lg text-sm font-bold transition-colors inline-flex items-center gap-1.5 cursor-not-allowed"
+              title="Voice input is not available"
             >
               <Mic className="w-3.5 h-3.5" /> 语音
             </button>
