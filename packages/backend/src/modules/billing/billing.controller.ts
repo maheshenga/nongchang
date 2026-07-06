@@ -5,6 +5,7 @@ import {
   createCreditPlanSchema, CreateCreditPlanInput, updateCreditPlanSchema, UpdateCreditPlanInput,
   createOrderSchema, CreateOrderInput, orderQuerySchema, OrderQuery,
   alipayConfigSchema, AlipayConfigInput, createPaymentSchema, CreatePaymentInput,
+  listQuerySchema, ListQuery,
 } from '@nongchang/shared';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -23,8 +24,8 @@ export class BillingController {
   }
 
   @Get('accounts')
-  accounts(@CurrentUser() user: AuthUser) {
-    return this.svc.listAccounts(user);
+  accounts(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.listAccounts(user, query);
   }
 
   @Get('ledger')
@@ -45,8 +46,8 @@ export class BillingController {
   // ===== 售卖套餐 =====
   // 列表对所有登录角色开放(购买方需看上架套餐);写操作仅 SYSTEM_ADMIN(服务层再校验)。
   @Get('plans')
-  listPlans(@CurrentUser() user: AuthUser) {
-    return this.svc.listPlans(user);
+  listPlans(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.listPlans(user, query);
   }
 
   @Post('plans') @Roles(Role.SYSTEM_ADMIN)

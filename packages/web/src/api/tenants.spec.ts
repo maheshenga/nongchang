@@ -13,6 +13,11 @@ describe('tenants api', () => {
     expect(requestMock).toHaveBeenCalledWith('/tenants');
   });
 
+  it('listTenants appends page query when pagination is requested', async () => {
+    await listTenants({ page: 2, pageSize: 50 });
+    expect(requestMock).toHaveBeenCalledWith('/tenants?page=2&pageSize=50');
+  });
+
   it('createTenant calls POST /tenants with the shared DTO payload', async () => {
     const dto = {
       name: 'Tenant One',

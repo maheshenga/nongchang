@@ -20,11 +20,12 @@ function makePrisma() {
   return {
     tenant: {
       findMany: vi.fn(),
+      count: vi.fn(),
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       update: vi.fn(),
     },
-    $transaction: vi.fn((fn: any) => fn(tx)),
+    $transaction: vi.fn((arg: any) => Array.isArray(arg) ? Promise.all(arg) : arg(tx)),
     __tx: tx,
   } as any;
 }
@@ -54,6 +55,45 @@ describe('TenantService', () => {
         agentCount: 1,
       },
     ]);
+  });
+
+  it('returns a paginated envelope when tenants are requested with page/pageSize', async () => {
+    const prisma = makePrisma();
+    prisma.tenant.findMany.mockResolvedValue([
+      {
+        id: 't2',
+        name: 'Tenant B',
+        code: 'TENANT_B',
+        status: 'active',
+        createdAt: new Date('2026-07-06T00:00:00.000Z'),
+        _count: { users: 3, agents: 2 },
+      },
+    ]);
+    prisma.tenant.count.mockResolvedValue(3);
+
+    const result = await new TenantService(prisma).list({ page: 2, pageSize: 1 });
+
+    expect(prisma.tenant.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      skip: 1,
+      take: 1,
+    }));
+    expect(prisma.tenant.count).toHaveBeenCalledWith({});
+    expect(result).toEqual({
+      items: [
+        {
+          id: 't2',
+          name: 'Tenant B',
+          code: 'TENANT_B',
+          status: 'active',
+          createdAt: '2026-07-06T00:00:00.000Z',
+          userCount: 3,
+          agentCount: 2,
+        },
+      ],
+      total: 3,
+      page: 2,
+      pageSize: 1,
+    });
   });
 
   it('creates a tenant with an initial tenant system_admin and default group', async () => {

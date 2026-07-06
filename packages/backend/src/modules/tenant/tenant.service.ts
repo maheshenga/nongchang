@@ -5,11 +5,16 @@ import {
   AuthUser,
   CreateTenantDto,
   CreateTenantResponse,
+  ListQuery,
+  Paginated,
   Role,
   TenantListItem,
   TenantStatus,
+  isPaginated,
 } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+
+const DEFAULT_LIST_CAP = 500;
 
 interface TenantRow {
   id: string;
@@ -36,17 +41,33 @@ export class TenantService {
     };
   }
 
-  list(): Promise<TenantListItem[]> {
+  async list(query?: ListQuery): Promise<TenantListItem[] | Paginated<TenantListItem>> {
+    const select = {
+      id: true,
+      name: true,
+      code: true,
+      status: true,
+      createdAt: true,
+      _count: { select: { users: true, agents: true } },
+    };
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [rows, total] = await this.prisma.$transaction([
+        this.prisma.tenant.findMany({
+          orderBy: { createdAt: 'desc' },
+          select,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        this.prisma.tenant.count({}),
+      ]);
+      return { items: rows.map(row => this.toListItem(row as TenantRow)), total, page, pageSize };
+    }
     return this.prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        status: true,
-        createdAt: true,
-        _count: { select: { users: true, agents: true } },
-      },
+      select,
+      take: DEFAULT_LIST_CAP,
     }).then(rows => rows.map(row => this.toListItem(row as TenantRow)));
   }
 

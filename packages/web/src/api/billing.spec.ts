@@ -5,6 +5,7 @@ vi.mock('./request', () => ({ request: (...args: any[]) => requestMock(...args) 
 
 import {
   getBillingSummary, listCreditAccounts, getLedger, allocateCredit, rechargeCredit,
+  listCreditPlans,
 } from './billing';
 
 beforeEach(() => requestMock.mockReset().mockResolvedValue(undefined));
@@ -17,6 +18,14 @@ describe('billing api client', () => {
   it('listCreditAccounts GET /billing/accounts', async () => {
     await listCreditAccounts();
     expect(requestMock).toHaveBeenCalledWith('/billing/accounts');
+  });
+  it('listCreditAccounts 带分页参数时拼接 querystring', async () => {
+    await listCreditAccounts({ page: 2, pageSize: 20 });
+    expect(requestMock).toHaveBeenCalledWith('/billing/accounts?page=2&pageSize=20');
+  });
+  it('listCreditPlans 带分页参数时拼接 querystring', async () => {
+    await listCreditPlans({ page: 3, pageSize: 10 });
+    expect(requestMock).toHaveBeenCalledWith('/billing/plans?page=3&pageSize=10');
   });
   it('getLedger 无参数 GET /billing/ledger', async () => {
     await getLedger({});

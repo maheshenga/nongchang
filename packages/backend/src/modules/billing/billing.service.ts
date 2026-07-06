@@ -4,10 +4,13 @@ import type {
   CreditAccountItem, LedgerQuery, PaginatedLedger, AllocateInput, RechargeInput,
   CreateCreditPlanInput, UpdateCreditPlanInput, CreditPlanView,
   CreateOrderInput, CreditOrderView, OrderQuery, PaginatedOrders,
+  ListQuery, Paginated,
 } from '@nongchang/shared';
-import { Role } from '@nongchang/shared';
+import { Role, isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
+
+const DEFAULT_LIST_CAP = 500;
 
 interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
 interface ReservationResult { reservationId: string; balanceAfter: number }
@@ -526,25 +529,53 @@ export class BillingService {
   }
 
   // 下级账户列表:平台看代理商;代理商看旗下商户;商户无下级返回空。
-  async listAccounts(user: AuthUser): Promise<CreditAccountItem[]> {
+  async listAccounts(user: AuthUser, query?: ListQuery): Promise<CreditAccountItem[] | Paginated<CreditAccountItem>> {
+    const page = query?.page ?? 1;
+    const pageSize = query?.pageSize ?? 20;
     if (user.role === Role.SYSTEM_ADMIN) {
-      const agents = await this.prisma.agent.findMany({ where: { tenantId: user.tenantId }, select: { id: true, name: true } });
+      const where = { tenantId: user.tenantId };
+      const findMany = {
+        where,
+        orderBy: { createdAt: 'desc' as const },
+        ...(isPaginated(query) ? { skip: (page - 1) * pageSize, take: pageSize } : { take: DEFAULT_LIST_CAP }),
+        select: { id: true, name: true },
+      };
+      const [agents, total] = isPaginated(query)
+        ? await this.prisma.$transaction([
+            this.prisma.agent.findMany(findMany),
+            this.prisma.agent.count({ where }),
+          ])
+        : [await this.prisma.agent.findMany(findMany), null];
       const balances = await this.loadBalances('AGENT', agents.map((a) => a.id), user.tenantId);
-      return agents.map((a) => {
+      const items = agents.map((a) => {
         const b = balances.get(a.id);
         return { id: b?.id ?? `pending:AGENT:${a.id}`, ownerType: 'AGENT' as const, ownerId: a.id, ownerName: a.name, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
       });
+      return total === null ? items : { items, total, page, pageSize };
     }
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
-      const merchants = await this.prisma.user.findMany({ where: { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId }, select: { id: true, displayName: true } });
+      const where = { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId };
+      const findMany = {
+        where,
+        orderBy: { createdAt: 'desc' as const },
+        ...(isPaginated(query) ? { skip: (page - 1) * pageSize, take: pageSize } : { take: DEFAULT_LIST_CAP }),
+        select: { id: true, displayName: true },
+      };
+      const [merchants, total] = isPaginated(query)
+        ? await this.prisma.$transaction([
+            this.prisma.user.findMany(findMany),
+            this.prisma.user.count({ where }),
+          ])
+        : [await this.prisma.user.findMany(findMany), null];
       const balances = await this.loadBalances('MERCHANT', merchants.map((m) => m.id), user.tenantId);
-      return merchants.map((m) => {
+      const items = merchants.map((m) => {
         const b = balances.get(m.id);
         return { id: b?.id ?? `pending:MERCHANT:${m.id}`, ownerType: 'MERCHANT' as const, ownerId: m.id, ownerName: m.displayName ?? m.id, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
       });
+      return total === null ? items : { items, total, page, pageSize };
     }
-    return [];
+    return isPaginated(query) ? { items: [], total: 0, page, pageSize } : [];
   }
 
   // 批量取一组下级账户余额,一次 findMany(ownerId in [...]) 取代逐个 ensureAccount(消除 N+1)。
@@ -576,11 +607,20 @@ export class BillingService {
 
   // ===== 套餐管理(SYSTEM_ADMIN) =====
 
-  async listPlans(user: AuthUser): Promise<CreditPlanView[]> {
+  async listPlans(user: AuthUser, query?: ListQuery): Promise<CreditPlanView[] | Paginated<CreditPlanView>> {
     // 购买方(代理/商户)只看上架套餐;系统管理员看全部(含下架)以便管理。
     const where: any = { tenantId: user.tenantId };
     if (user.role !== Role.SYSTEM_ADMIN) where.active = true;
-    const plans = await this.prisma.creditPlan.findMany({ where, orderBy: { createdAt: 'asc' } });
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [plans, total] = await this.prisma.$transaction([
+        this.prisma.creditPlan.findMany({ where, orderBy: { createdAt: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.creditPlan.count({ where }),
+      ]);
+      return { items: plans.map((p) => this.toPlanView(p)), total, page, pageSize };
+    }
+    const plans = await this.prisma.creditPlan.findMany({ where, orderBy: { createdAt: 'asc' }, take: DEFAULT_LIST_CAP });
     return plans.map((p) => this.toPlanView(p));
   }
 

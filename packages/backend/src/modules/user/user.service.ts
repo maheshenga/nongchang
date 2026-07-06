@@ -137,11 +137,28 @@ export class UserService {
     return where;
   }
 
-  async listPending(actor: AuthUser) {
+  async listPending(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = { ...this.scopedWhere(actor), role: Role.MERCHANT, status: 'pending' };
+    const select = { id: true, displayName: true, phone: true, createdAt: true };
+    if (isPaginated(query)) {
+      const page = query.page ?? 1;
+      const pageSize = query.pageSize ?? 20;
+      const [items, total] = await this.prisma.$transaction([
+        this.prisma.user.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select,
+        }),
+        this.prisma.user.count({ where }),
+      ]);
+      return { items, total, page, pageSize };
+    }
     return this.prisma.user.findMany({
       where, orderBy: { createdAt: 'desc' },
-      select: { id: true, displayName: true, phone: true, createdAt: true },
+      take: DEFAULT_LIST_CAP,
+      select,
     });
   }
 

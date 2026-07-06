@@ -29,6 +29,7 @@ describe('UserService.listPending', () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
     await new UserService(prisma, new ScopeService()).listPending(ctx({ role: Role.SYSTEM_ADMIN, agentId: null }));
     expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ tenantId: 't1', role: Role.MERCHANT, status: 'pending' });
+    expect(prisma.user.findMany.mock.calls[0][0].take).toBe(500);
   });
   it('agent_admin:where 含 agentId + status pending', async () => {
     const prisma = { user: { findMany: vi.fn().mockResolvedValue([]) } } as any;
@@ -39,6 +40,38 @@ describe('UserService.listPending', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
     await expect(new UserService(prisma, new ScopeService()).listPending(ctx({ agentId: null }))).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+  it('page/pageSize returns a paginated pending-user envelope', async () => {
+    const prisma = {
+      user: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'p2', displayName: 'Pending B', phone: '13800000002', createdAt: new Date('2026-07-06T00:00:00.000Z') },
+        ]),
+        count: vi.fn().mockResolvedValue(3),
+      },
+      $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as any;
+    const result = await new UserService(prisma, new ScopeService()).listPending(
+      ctx({ role: Role.SYSTEM_ADMIN, agentId: null }),
+      { page: 2, pageSize: 1 },
+    );
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', role: Role.MERCHANT, status: 'pending' },
+      orderBy: { createdAt: 'desc' },
+      skip: 1,
+      take: 1,
+      select: { id: true, displayName: true, phone: true, createdAt: true },
+    });
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: { tenantId: 't1', role: Role.MERCHANT, status: 'pending' },
+    });
+    expect(result).toEqual({
+      items: [{ id: 'p2', displayName: 'Pending B', phone: '13800000002', createdAt: new Date('2026-07-06T00:00:00.000Z') }],
+      total: 3,
+      page: 2,
+      pageSize: 1,
+    });
   });
 });
 

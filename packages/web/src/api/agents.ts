@@ -1,4 +1,4 @@
-import type { CreateAgentDto, AgentListItem, UpdateAgentDto } from '@nongchang/shared';
+import type { CreateAgentDto, AgentListItem, UpdateAgentDto, ListQuery, Paginated } from '@nongchang/shared';
 import { request } from './request';
 
 // 兼容旧引用(SystemAdmin.tsx):代理商列表项改用 shared 的 AgentListItem,tenantId 可选
@@ -12,8 +12,18 @@ export interface MerchantUser {
   displayName: string;
 }
 
-export function listAgents(): Promise<AgentListItem[]> {
-  return request<AgentListItem[]>('/agents');
+function withListQuery(path: string, query: Partial<ListQuery> = {}) {
+  const qs = new URLSearchParams();
+  if (query.page) qs.set('page', String(query.page));
+  if (query.pageSize) qs.set('pageSize', String(query.pageSize));
+  const s = qs.toString();
+  return `${path}${s ? `?${s}` : ''}`;
+}
+
+export function listAgents<T extends Partial<ListQuery> | undefined = undefined>(
+  query?: T,
+): Promise<T extends undefined ? AgentListItem[] : Paginated<AgentListItem>> {
+  return request(withListQuery('/agents', query ?? {}));
 }
 
 export function createAgent(dto: CreateAgentDto): Promise<AgentListItem> {
@@ -28,6 +38,8 @@ export function setAgentStatus(id: string, status: 'active' | 'suspended'): Prom
   return request(`/agents/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
 }
 
-export function listMerchants(): Promise<MerchantUser[]> {
-  return request<MerchantUser[]>('/agents/merchants');
+export function listMerchants<T extends Partial<ListQuery> | undefined = undefined>(
+  query?: T,
+): Promise<T extends undefined ? MerchantUser[] : Paginated<MerchantUser>> {
+  return request(withListQuery('/agents/merchants', query ?? {}));
 }

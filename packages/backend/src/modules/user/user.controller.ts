@@ -29,7 +29,7 @@ export class UserController {
   }
 
   @Get('pending') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN)
-  listPending(@CurrentUser() user: AuthUser) { return this.svc.listPending(user); }
+  listPending(@CurrentUser() user: AuthUser, @Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) { return this.svc.listPending(user, query); }
 
   @Patch(':id') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN)
   update(@CurrentUser() user: AuthUser, @Param('id') id: string,

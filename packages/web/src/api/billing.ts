@@ -4,6 +4,7 @@ import type {
   CreditPlanView, CreateCreditPlanInput, UpdateCreditPlanInput,
   CreateOrderInput, CreditOrderView, OrderQuery, PaginatedOrders,
   AlipayConfigInput, AlipayConfigView, CreatePaymentInput, PaymentView,
+  ListQuery, Paginated,
 } from '@nongchang/shared';
 import { request } from './request';
 
@@ -11,8 +12,18 @@ export function getBillingSummary(): Promise<BillingSummary> {
   return request<BillingSummary>('/billing/summary');
 }
 
-export function listCreditAccounts(): Promise<CreditAccountItem[]> {
-  return request<CreditAccountItem[]>('/billing/accounts');
+function withListQuery(path: string, query: Partial<ListQuery> = {}) {
+  const qs = new URLSearchParams();
+  if (query.page) qs.set('page', String(query.page));
+  if (query.pageSize) qs.set('pageSize', String(query.pageSize));
+  const s = qs.toString();
+  return `${path}${s ? `?${s}` : ''}`;
+}
+
+export function listCreditAccounts<T extends Partial<ListQuery> | undefined = undefined>(
+  query?: T,
+): Promise<T extends undefined ? CreditAccountItem[] : Paginated<CreditAccountItem>> {
+  return request(withListQuery('/billing/accounts', query ?? {}));
 }
 
 export function getLedger(query: Partial<LedgerQuery> = {}): Promise<PaginatedLedger> {
@@ -34,8 +45,10 @@ export function rechargeCredit(input: RechargeInput): Promise<unknown> {
 }
 
 // ── 套餐 ──
-export function listCreditPlans(): Promise<CreditPlanView[]> {
-  return request<CreditPlanView[]>('/billing/plans');
+export function listCreditPlans<T extends Partial<ListQuery> | undefined = undefined>(
+  query?: T,
+): Promise<T extends undefined ? CreditPlanView[] : Paginated<CreditPlanView>> {
+  return request(withListQuery('/billing/plans', query ?? {}));
 }
 
 export function createCreditPlan(input: CreateCreditPlanInput): Promise<CreditPlanView> {

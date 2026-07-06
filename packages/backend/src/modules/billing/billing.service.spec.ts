@@ -682,6 +682,39 @@ describe('BillingService.listAccounts (N+1 修复)', () => {
     const svc = new BillingService({} as any);
     await expect(svc.listAccounts(merchant)).resolves.toEqual([]);
   });
+
+  it('SYSTEM_ADMIN:page/pageSize returns a paginated account envelope', async () => {
+    const prisma: any = {
+      agent: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'a2', name: '代理二' }]),
+        count: vi.fn().mockResolvedValue(3),
+      },
+      creditAccount: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'accA2', ownerId: 'a2', aiBalance: 7, codeBalance: 9 }]),
+      },
+      $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    const svc = new BillingService(prisma);
+
+    const out = await svc.listAccounts(sysadmin, { page: 2, pageSize: 1 });
+
+    expect(prisma.agent.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1' },
+      orderBy: { createdAt: 'desc' },
+      skip: 1,
+      take: 1,
+      select: { id: true, name: true },
+    });
+    expect(prisma.agent.count).toHaveBeenCalledWith({ where: { tenantId: 't1' } });
+    expect(out).toEqual({
+      items: [
+        { id: 'accA2', ownerType: 'AGENT', ownerId: 'a2', ownerName: '代理二', aiBalance: 7, codeBalance: 9 },
+      ],
+      total: 3,
+      page: 2,
+      pageSize: 1,
+    });
+  });
 });
 
 describe('BillingService 套餐管理', () => {
@@ -721,6 +754,37 @@ describe('BillingService 套餐管理', () => {
     const svc = new BillingService(prisma);
     const list = await svc.listPlans(merchant);
     expect(list.map((p) => p.name)).toEqual(['on']);
+  });
+
+  it('listPlans returns a paginated envelope when page/pageSize are provided', async () => {
+    const prisma: any = {
+      creditPlan: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'p2', tenantId: 't1', name: 'AI200', resource: 'AI', quantity: 200, priceCents: 2000, isUnit: false, active: true, createdAt: new Date('2026-07-06T00:00:00.000Z') },
+        ]),
+        count: vi.fn().mockResolvedValue(3),
+      },
+      $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    const svc = new BillingService(prisma);
+
+    const out = await svc.listPlans(sysadmin, { page: 2, pageSize: 1 });
+
+    expect(prisma.creditPlan.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1' },
+      orderBy: { createdAt: 'asc' },
+      skip: 1,
+      take: 1,
+    });
+    expect(prisma.creditPlan.count).toHaveBeenCalledWith({ where: { tenantId: 't1' } });
+    expect(out).toEqual({
+      items: [
+        { id: 'p2', name: 'AI200', resource: 'AI', quantity: 200, priceCents: 2000, isUnit: false, active: true, createdAt: '2026-07-06T00:00:00.000Z' },
+      ],
+      total: 3,
+      page: 2,
+      pageSize: 1,
+    });
   });
 
   it('removePlan:有订单引用则改下架而非删除', async () => {

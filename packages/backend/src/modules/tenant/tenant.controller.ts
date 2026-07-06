@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   AuthUser,
   CreateTenantDto,
   createTenantSchema,
+  ListQuery,
+  listQuerySchema,
   Role,
   SetTenantStatusInput,
   setTenantStatusSchema,
@@ -18,8 +20,8 @@ export class TenantController {
   constructor(private svc: TenantService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  list(@Query(new ZodValidationPipe(listQuerySchema)) query: ListQuery) {
+    return this.svc.list(query);
   }
 
   @Post()
