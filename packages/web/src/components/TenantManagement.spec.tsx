@@ -24,6 +24,15 @@ const tenants: TenantListItem[] = [
     userCount: 4,
     agentCount: 2,
   },
+  {
+    id: 'tenant-2',
+    name: 'Suspended Tenant',
+    code: 'SUSP',
+    status: 'suspended',
+    createdAt: '2026-07-05T00:00:00.000Z',
+    userCount: 1,
+    agentCount: 0,
+  },
 ];
 
 beforeEach(() => {
@@ -31,7 +40,7 @@ beforeEach(() => {
   listTenantsMock.mockResolvedValue(tenants);
   createTenantMock.mockResolvedValue({
     ...tenants[0],
-    id: 'tenant-2',
+    id: 'tenant-3',
     name: 'New Tenant',
     code: 'NEW',
     adminUser: {
@@ -46,25 +55,28 @@ beforeEach(() => {
 });
 
 describe('TenantManagement', () => {
-  it('renders real tenant list fields', async () => {
+  it('renders real tenant list fields in a Fluent table', async () => {
     render(<TenantManagement />);
     await screen.findByText('Demo Tenant');
 
     expect(screen.getByRole('heading', { name: '租户管理' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新建租户' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '租户' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '编码' })).toBeTruthy();
     expect(screen.getByText('DEMO')).toBeTruthy();
     expect(screen.getByText('4')).toBeTruthy();
-    expect(screen.getByText('2')).toBeTruthy();
+    expect(screen.getAllByText('启用').length).toBeGreaterThan(0);
   });
 
-  it('creates a tenant and shows the generated initial password', async () => {
+  it('creates a tenant with trimmed payload and shows the generated initial password', async () => {
     render(<TenantManagement />);
     await screen.findByText('Demo Tenant');
 
     fireEvent.click(screen.getByRole('button', { name: '新建租户' }));
-    fireEvent.change(screen.getByLabelText('租户名称'), { target: { value: 'New Tenant' } });
-    fireEvent.change(screen.getByLabelText('机构编码'), { target: { value: 'NEW' } });
-    fireEvent.change(screen.getByLabelText('管理员账号'), { target: { value: 'admin' } });
-    fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: 'Tenant Admin' } });
+    fireEvent.change(screen.getByLabelText('租户名称'), { target: { value: ' New Tenant ' } });
+    fireEvent.change(screen.getByLabelText('机构编码'), { target: { value: ' NEW ' } });
+    fireEvent.change(screen.getByLabelText('管理员账号'), { target: { value: ' admin ' } });
+    fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: ' Tenant Admin ' } });
     fireEvent.click(screen.getByRole('button', { name: '创建' }));
 
     await waitFor(() => {
@@ -79,7 +91,26 @@ describe('TenantManagement', () => {
     expect(listTenantsMock).toHaveBeenCalledTimes(2);
   });
 
-  it('suspends an active tenant through the real status API', async () => {
+  it('sends non-empty admin phone and trims it', async () => {
+    render(<TenantManagement />);
+    await screen.findByText('Demo Tenant');
+
+    fireEvent.click(screen.getByRole('button', { name: '新建租户' }));
+    fireEvent.change(screen.getByLabelText('租户名称'), { target: { value: 'Phone Tenant' } });
+    fireEvent.change(screen.getByLabelText('机构编码'), { target: { value: 'PHONE' } });
+    fireEvent.change(screen.getByLabelText('管理员账号'), { target: { value: 'phone-admin' } });
+    fireEvent.change(screen.getByLabelText('管理员姓名'), { target: { value: 'Phone Admin' } });
+    fireEvent.change(screen.getByLabelText('管理员手机号'), { target: { value: ' 13800000000 ' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    await waitFor(() => {
+      expect(createTenantMock).toHaveBeenCalledWith(expect.objectContaining({
+        adminPhone: '13800000000',
+      }));
+    });
+  });
+
+  it('toggles tenant status through the real status API', async () => {
     render(<TenantManagement />);
     await screen.findByText('Demo Tenant');
 
@@ -87,6 +118,10 @@ describe('TenantManagement', () => {
     await waitFor(() => {
       expect(setTenantStatusMock).toHaveBeenCalledWith('tenant-1', 'suspended');
     });
-    expect(listTenantsMock).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole('button', { name: '启用 SUSP' }));
+    await waitFor(() => {
+      expect(setTenantStatusMock).toHaveBeenCalledWith('tenant-2', 'active');
+    });
   });
 });

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Building2, Loader2, Plus, Power, PowerOff, X } from 'lucide-react';
 import type { CreateTenantResponse, TenantListItem, TenantStatus } from '@nongchang/shared';
 import { createTenant, listTenants, setTenantStatus } from '../api/tenants';
+import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 
 type FormState = {
   name: string;
@@ -19,9 +20,6 @@ const emptyForm: FormState = {
   adminPhone: '',
 };
 
-const inputClass =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100';
-
 function statusLabel(status: TenantStatus): string {
   return status === 'active' ? '启用' : '停用';
 }
@@ -31,6 +29,7 @@ export default function TenantManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [creatingTenant, setCreatingTenant] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [lastCreated, setLastCreated] = useState<CreateTenantResponse | null>(null);
   const [busyTenantId, setBusyTenantId] = useState<string | null>(null);
@@ -51,9 +50,16 @@ export default function TenantManagement() {
     void reload();
   }, []);
 
+  const openCreate = () => {
+    setLastCreated(null);
+    setForm(emptyForm);
+    setCreating(true);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    setCreatingTenant(true);
     try {
       const created = await createTenant({
         name: form.name.trim(),
@@ -68,6 +74,8 @@ export default function TenantManagement() {
       await reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : '租户创建失败');
+    } finally {
+      setCreatingTenant(false);
     }
   };
 
@@ -86,48 +94,44 @@ export default function TenantManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <header className="flex shrink-0 flex-col gap-3 border border-[#E1DFDD] bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold text-slate-900">
-            <Building2 className="h-5 w-5 text-emerald-600" />
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-[#242424]">
+            <Building2 className="h-5 w-5 text-[#0078D4]" />
             租户管理
           </h2>
-          <p className="mt-1 text-sm text-slate-500">平台管理员用于开通、停用和恢复租户。</p>
+          <p className="mt-1 text-sm text-[#605E5C]">平台管理员用于开通、停用和恢复租户，初始密码仅来自后端创建结果。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-        >
+        <button type="button" onClick={openCreate} className={fluentButton('primary')}>
           <Plus className="h-4 w-4" />
           新建租户
         </button>
-      </div>
+      </header>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && <div className="border border-[#F1B8BD] bg-[#FDE7E9] px-4 py-3 text-sm text-[#A4262C]">{error}</div>}
       {lastCreated && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <div className="border border-[#92C353] bg-[#F1F9EE] px-4 py-3 text-sm text-[#107C10]">
           已创建 {lastCreated.name}，初始管理员 {lastCreated.adminUser.username}，初始密码 {lastCreated.initialPassword}
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[760px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs font-semibold text-slate-500">
+      <div className={`${fluentTable.wrapper} overflow-x-auto`}>
+        <table className={`${fluentTable.table} min-w-[760px]`}>
+          <thead className={fluentTable.thead}>
             <tr>
-              <th className="px-4 py-3">租户</th>
-              <th className="px-4 py-3">编码</th>
-              <th className="px-4 py-3">状态</th>
-              <th className="px-4 py-3 text-right">用户</th>
-              <th className="px-4 py-3 text-right">代理商</th>
-              <th className="px-4 py-3 text-right">操作</th>
+              <th className={fluentTable.th}>租户</th>
+              <th className={fluentTable.th}>编码</th>
+              <th className={fluentTable.th}>状态</th>
+              <th className={`${fluentTable.th} text-right`}>用户</th>
+              <th className={`${fluentTable.th} text-right`}>代理商</th>
+              <th className={`${fluentTable.th} text-right`}>操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-slate-700">
+          <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-slate-500">
+                <td colSpan={6} className={`${fluentTable.td} text-[#605E5C]`}>
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     加载中...
@@ -137,29 +141,29 @@ export default function TenantManagement() {
             )}
             {!loading && tenants.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">暂无租户</td>
+                <td colSpan={6} className={`${fluentTable.td} text-center text-[#605E5C]`}>暂无租户</td>
               </tr>
             )}
             {!loading && tenants.map((tenant) => (
-              <tr key={tenant.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-900">{tenant.name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-600">{tenant.code}</td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${tenant.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              <tr key={tenant.id} className={fluentTable.row}>
+                <td className={`${fluentTable.td} font-semibold`}>{tenant.name}</td>
+                <td className={`${fluentTable.td} font-mono text-xs`}>{tenant.code}</td>
+                <td className={fluentTable.td}>
+                  <span className={fluentStatusTag(tenant.status === 'active' ? 'success' : 'neutral')}>
                     {statusLabel(tenant.status)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums">{tenant.userCount}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{tenant.agentCount}</td>
-                <td className="px-4 py-3 text-right">
+                <td className={`${fluentTable.td} text-right tabular-nums`}>{tenant.userCount}</td>
+                <td className={`${fluentTable.td} text-right tabular-nums`}>{tenant.agentCount}</td>
+                <td className={`${fluentTable.td} text-right`}>
                   <button
                     type="button"
                     onClick={() => void changeStatus(tenant)}
                     disabled={busyTenantId === tenant.id}
                     aria-label={`${tenant.status === 'active' ? '停用' : '启用'} ${tenant.code}`}
-                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className={fluentButton('secondary')}
                   >
-                    {tenant.status === 'active' ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                    {tenant.status === 'active' ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
                     {tenant.status === 'active' ? '停用' : '启用'}
                   </button>
                 </td>
@@ -170,74 +174,40 @@ export default function TenantManagement() {
       </div>
 
       {creating && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true">
-          <form onSubmit={(event) => void submit(event)} className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">新建租户</h3>
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                aria-label="关闭"
-                className="rounded-md p-1 text-slate-500 hover:bg-slate-100"
-              >
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="新建租户">
+          <form onSubmit={(event) => void submit(event)} className="w-full max-w-lg overflow-hidden rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl">
+            <div className="flex h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5">
+              <h3 className="text-base font-semibold text-[#242424]">新建租户</h3>
+              <button type="button" onClick={() => setCreating(false)} aria-label="关闭" className={fluentButton('icon')}>
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="grid gap-4">
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+            <div className="grid gap-4 p-5">
+              <label htmlFor="tenant-name" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
                 租户名称
-                <input
-                  value={form.name}
-                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  required
-                  className={inputClass}
-                />
+                <input id="tenant-name" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} required className={`${fluentInput} w-full`} />
               </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label htmlFor="tenant-code" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
                 机构编码
-                <input
-                  value={form.code}
-                  onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))}
-                  required
-                  className={inputClass}
-                />
+                <input id="tenant-code" value={form.code} onChange={(event) => setForm((prev) => ({ ...prev, code: event.target.value }))} required className={`${fluentInput} w-full`} />
               </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label htmlFor="tenant-admin-username" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
                 管理员账号
-                <input
-                  value={form.adminUsername}
-                  onChange={(event) => setForm((prev) => ({ ...prev, adminUsername: event.target.value }))}
-                  required
-                  className={inputClass}
-                />
+                <input id="tenant-admin-username" value={form.adminUsername} onChange={(event) => setForm((prev) => ({ ...prev, adminUsername: event.target.value }))} required className={`${fluentInput} w-full`} />
               </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label htmlFor="tenant-admin-display-name" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
                 管理员姓名
-                <input
-                  value={form.adminDisplayName}
-                  onChange={(event) => setForm((prev) => ({ ...prev, adminDisplayName: event.target.value }))}
-                  required
-                  className={inputClass}
-                />
+                <input id="tenant-admin-display-name" value={form.adminDisplayName} onChange={(event) => setForm((prev) => ({ ...prev, adminDisplayName: event.target.value }))} required className={`${fluentInput} w-full`} />
               </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label htmlFor="tenant-admin-phone" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
                 管理员手机号
-                <input
-                  value={form.adminPhone}
-                  onChange={(event) => setForm((prev) => ({ ...prev, adminPhone: event.target.value }))}
-                  className={inputClass}
-                />
+                <input id="tenant-admin-phone" value={form.adminPhone} onChange={(event) => setForm((prev) => ({ ...prev, adminPhone: event.target.value }))} className={`${fluentInput} w-full`} />
               </label>
             </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-              >
-                取消
-              </button>
-              <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+              <button type="button" onClick={() => setCreating(false)} className={fluentButton('secondary')}>取消</button>
+              <button type="submit" disabled={creatingTenant} className={fluentButton('primary')}>
+                {creatingTenant && <Loader2 className="h-4 w-4 animate-spin" />}
                 创建
               </button>
             </div>
