@@ -88,4 +88,21 @@ describe('App role wiring', () => {
     await waitFor(() => expect(screen.queryByText('Farm Fields View')).toBeNull());
     expect(screen.queryByText('Merchant Management View')).toBeNull();
   });
+
+  it('renders the Fluent console shell for authenticated users', async () => {
+    render(<App />);
+
+    expect(await screen.findByText('农场溯源管理')).toBeTruthy();
+    expect(screen.getByPlaceholderText('搜索资源、菜单和功能')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /退出/ })).toBeTruthy();
+  });
+
+  it('keeps batch navigation reachable from the shell', async () => {
+    authMock.role = 'agent_admin';
+    render(<App />);
+
+    const batchTab = await screen.findByRole('button', { name: /批次管理/ });
+    fireEvent.click(batchTab);
+    expect(batchTab.getAttribute('aria-pressed')).toBe('true');
+  });
 });
