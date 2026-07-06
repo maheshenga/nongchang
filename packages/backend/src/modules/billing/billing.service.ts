@@ -11,6 +11,35 @@ import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
 
 interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
 interface ReservationResult { reservationId: string; balanceAfter: number }
+interface StaleReservationQuery {
+  olderThanMinutes?: number;
+  now?: Date;
+  take?: number;
+  dryRun?: boolean;
+  resource?: CreditResource;
+  refType?: string;
+}
+interface StaleReservationItem {
+  id: string;
+  tenantId: string;
+  accountId: string;
+  ownerType: CreditOwnerType;
+  ownerId: string;
+  resource: CreditResource;
+  amount: number;
+  balanceAfter: number;
+  refType: string | null;
+  refId: string | null;
+  idempotencyKey: string;
+  operatorId: string | null;
+  createdAt: string;
+}
+interface ReservationRecoveryResult {
+  scanned: number;
+  released: number;
+  skipped: number;
+  errors: { reservationId: string; message: string }[];
+}
 
 @Injectable()
 export class BillingService {
@@ -280,6 +309,145 @@ export class BillingService {
       return { ownerType: 'MERCHANT' as const, ownerId: targetOwnerId };
     }
     throw new ForbiddenException('无分配权限');
+  }
+
+  private staleReservationCutoff(query: StaleReservationQuery): Date {
+    const minutes = query.olderThanMinutes ?? 60;
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      throw new BadRequestException('olderThanMinutes must be a positive number');
+    }
+    const now = query.now ?? new Date();
+    return new Date(now.getTime() - minutes * 60_000);
+  }
+
+  private staleReservationTake(query: StaleReservationQuery): number {
+    const take = query.take ?? 100;
+    if (!Number.isInteger(take) || take <= 0 || take > 1000) {
+      throw new BadRequestException('take must be an integer between 1 and 1000');
+    }
+    return take;
+  }
+
+  private staleReservationWhere(query: StaleReservationQuery) {
+    return {
+      status: 'RESERVED' as const,
+      createdAt: { lt: this.staleReservationCutoff(query) },
+      ...(query.resource ? { resource: query.resource } : {}),
+      ...(query.refType ? { refType: query.refType } : {}),
+    };
+  }
+
+  async listStaleReservations(query: StaleReservationQuery = {}): Promise<StaleReservationItem[]> {
+    const rows = await this.prisma.creditReservation.findMany({
+      where: this.staleReservationWhere(query),
+      orderBy: { createdAt: 'asc' },
+      take: this.staleReservationTake(query),
+      select: {
+        id: true,
+        tenantId: true,
+        accountId: true,
+        resource: true,
+        amount: true,
+        balanceAfter: true,
+        refType: true,
+        refId: true,
+        idempotencyKey: true,
+        operatorId: true,
+        createdAt: true,
+        account: { select: { ownerType: true, ownerId: true } },
+      },
+    });
+    return rows.map((row: any) => ({
+      id: row.id,
+      tenantId: row.tenantId,
+      accountId: row.accountId,
+      ownerType: row.account.ownerType,
+      ownerId: row.account.ownerId,
+      resource: row.resource,
+      amount: row.amount,
+      balanceAfter: row.balanceAfter,
+      refType: row.refType,
+      refId: row.refId,
+      idempotencyKey: row.idempotencyKey,
+      operatorId: row.operatorId,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async releaseStaleReservations(query: StaleReservationQuery = {}): Promise<ReservationRecoveryResult> {
+    const candidates = await this.listStaleReservations(query);
+    const result: ReservationRecoveryResult = { scanned: candidates.length, released: 0, skipped: 0, errors: [] };
+    if (query.dryRun) {
+      result.skipped = candidates.length;
+      return result;
+    }
+    for (const candidate of candidates) {
+      try {
+        const released = await this.releaseReservedReservationById(candidate.id);
+        if (released) result.released += 1;
+        else result.skipped += 1;
+      } catch (err) {
+        result.errors.push({ reservationId: candidate.id, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return result;
+  }
+
+  private async releaseReservedReservationById(reservationId: string): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const reservation = await tx.creditReservation.findUnique({
+        where: { id: reservationId },
+        select: {
+          id: true,
+          accountId: true,
+          resource: true,
+          amount: true,
+          status: true,
+          refType: true,
+          refId: true,
+          idempotencyKey: true,
+        },
+      });
+      if (!reservation || reservation.status !== 'RESERVED') return false;
+      const existingTerminalLedger = await tx.creditLedger.findFirst({
+        where: {
+          accountId: reservation.accountId,
+          reason: { in: ['CONFIRMED', 'RELEASED'] },
+          idempotencyKey: reservation.idempotencyKey,
+        },
+        select: { id: true },
+      });
+      if (existingTerminalLedger) {
+        throw new BadRequestException('inconsistent reservation: RESERVED row already has terminal ledger');
+      }
+      const flip = await tx.creditReservation.updateMany({
+        where: { id: reservation.id, status: 'RESERVED' },
+        data: { status: 'RELEASED', releasedAt: new Date() },
+      });
+      if (flip.count === 0) return false;
+      const field = BALANCE_FIELD[reservation.resource as CreditResource];
+      await tx.creditAccount.updateMany({
+        where: { id: reservation.accountId },
+        data: { [field]: { increment: reservation.amount } },
+      });
+      const after = await tx.creditAccount.findUnique({ where: { id: reservation.accountId } });
+      const balanceAfter = (after as any)[field] as number;
+      await tx.creditLedger.create({
+        data: {
+          accountId: reservation.accountId,
+          resource: reservation.resource as CreditResource,
+          delta: reservation.amount,
+          balanceAfter,
+          reason: 'RELEASED',
+          refType: reservation.refType ?? null,
+          refId: reservation.refId ?? null,
+          operatorId: 'system:reservation-recovery',
+          note: 'stale reservation recovery',
+          idempotencyKey: reservation.idempotencyKey,
+        },
+      });
+      return true;
+    });
   }
 
   async allocate(user: AuthUser, dto: AllocateInput) {

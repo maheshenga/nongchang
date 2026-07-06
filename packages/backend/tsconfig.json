@@ -5,5 +5,5 @@
     "outDir": "dist", "strict": true, "esModuleInterop": true,
     "skipLibCheck": true, "baseUrl": "."
   },
-  "include": ["src", "prisma", "test"]
+  "include": ["src", "prisma", "test", "scripts"]
 }

@@ -7,11 +7,12 @@ const sysadmin: AuthUser = { userId: 'u1', tenantId: 't1', role: Role.SYSTEM_ADM
 const agent: AuthUser = { userId: 'u2', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null };
 const merchant: AuthUser = { userId: 'u3', tenantId: 't1', role: Role.MERCHANT, agentId: null, ownerId: 'm1' };
 
-function makeService(opts: { aiBalance?: number; codeBalance?: number; account?: any } = {}) {
+function makeService(opts: { aiBalance?: number; codeBalance?: number; account?: any; now?: Date } = {}) {
   const state: any = { aiBalance: opts.aiBalance ?? 0, codeBalance: opts.codeBalance ?? 0 };
   const ledgers: any[] = [];
   const reservations: any[] = [];
   const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
+  const now = opts.now ?? new Date('2026-07-06T00:00:00.000Z');
   const tx = {
     creditAccount: {
       upsert: async () => ({ ...accountRow, ...state }),
@@ -35,19 +36,37 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
     creditLedger: {
       findFirst: async (a: any) => ledgers.find((l) =>
         l.accountId === a.where.accountId &&
-        l.reason === a.where.reason &&
+        (Array.isArray(a.where.reason?.in) ? a.where.reason.in.includes(l.reason) : l.reason === a.where.reason) &&
         l.idempotencyKey === a.where.idempotencyKey,
       ) ?? null,
       create: async (a: any) => { ledgers.push(a.data); return a.data; },
     },
     creditReservation: {
+      findMany: async (a: any) => reservations
+        .filter((r) => {
+          if (a.where?.status && r.status !== a.where.status) return false;
+          if (a.where?.resource && r.resource !== a.where.resource) return false;
+          if (a.where?.refType && r.refType !== a.where.refType) return false;
+          if (a.where?.createdAt?.lt && !(new Date(r.createdAt) < a.where.createdAt.lt)) return false;
+          return true;
+        })
+        .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+        .slice(0, a.take ?? reservations.length)
+        .map((r) => ({
+          ...r,
+          account: { ownerType: accountRow.ownerType, ownerId: accountRow.ownerId },
+        })),
       findFirst: async (a: any) => reservations.find((r) =>
         r.accountId === a.where.accountId &&
         r.resource === a.where.resource &&
         r.idempotencyKey === a.where.idempotencyKey,
       ) ?? null,
+      findUnique: async (a: any) => {
+        const row = reservations.find((r) => r.id === a.where.id);
+        return row ? { ...row, account: { ownerType: accountRow.ownerType, ownerId: accountRow.ownerId } } : null;
+      },
       create: async (a: any) => {
-        const row = { id: `res${reservations.length + 1}`, ...a.data };
+        const row = { id: `res${reservations.length + 1}`, createdAt: now, updatedAt: now, ...a.data };
         reservations.push(row);
         return row;
       },
@@ -252,6 +271,211 @@ describe('BillingService reservation model', () => {
     expect(out).toMatchObject({ reservationId: 'res1', balanceAfter: 5 });
     expect(state.codeBalance).toBe(5);
     expect(ledgers.filter((l) => l.reason === 'CONFIRMED')).toHaveLength(1);
+  });
+
+  it('listStaleReservations returns only old RESERVED rows', async () => {
+    const { svc, reservations } = makeService({ codeBalance: 10 });
+    reservations.push(
+      {
+        id: 'old-reserved',
+        tenantId: 't1',
+        accountId: 'acc1',
+        resource: 'CODE',
+        amount: 5,
+        balanceAfter: 5,
+        status: 'RESERVED',
+        refType: 'trace.generate',
+        refId: 'b1',
+        idempotencyKey: 'trace:old',
+        operatorId: 'u3',
+        note: null,
+        createdAt: new Date('2026-07-06T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-06T00:00:00.000Z'),
+      },
+      {
+        id: 'fresh-reserved',
+        tenantId: 't1',
+        accountId: 'acc1',
+        resource: 'CODE',
+        amount: 2,
+        balanceAfter: 8,
+        status: 'RESERVED',
+        refType: 'trace.generate',
+        refId: 'b2',
+        idempotencyKey: 'trace:fresh',
+        operatorId: 'u3',
+        note: null,
+        createdAt: new Date('2026-07-06T00:55:00.000Z'),
+        updatedAt: new Date('2026-07-06T00:55:00.000Z'),
+      },
+    );
+
+    const rows = await svc.listStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(rows.map((row) => row.id)).toEqual(['old-reserved']);
+    expect(rows[0]).toMatchObject({
+      resource: 'CODE',
+      amount: 5,
+      refType: 'trace.generate',
+      ownerType: 'MERCHANT',
+      ownerId: 'm1',
+    });
+  });
+
+  it('releaseStaleReservations dry-run reports candidates without changing balance', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:dry' });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+      dryRun: true,
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 0, skipped: 1, errors: [] });
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(0);
+  });
+
+  it('releaseStaleReservations releases stale RESERVED rows once', async () => {
+    const { svc, state, ledgers, reservations } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:release' });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 1, skipped: 0, errors: [] });
+    expect(state.codeBalance).toBe(10);
+    expect(reservations[0].status).toBe('RELEASED');
+    expect(ledgers.find((ledger) => ledger.reason === 'RELEASED')).toMatchObject({
+      resource: 'CODE',
+      delta: 5,
+      idempotencyKey: 'trace:release',
+      operatorId: 'system:reservation-recovery',
+    });
+  });
+
+  it('releaseStaleReservations skips rows no longer RESERVED', async () => {
+    const { svc, state, prisma } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:race' });
+    prisma.creditReservation.updateMany = async () => ({ count: 0 });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 0, skipped: 1, errors: [] });
+    expect(state.codeBalance).toBe(5);
+  });
+
+  it('releaseStaleReservations ignores stale terminal reservations', async () => {
+    const { svc, state, ledgers, reservations } = makeService({ codeBalance: 10 });
+    reservations.push(
+      {
+        id: 'old-confirmed',
+        tenantId: 't1',
+        accountId: 'acc1',
+        resource: 'CODE',
+        amount: 5,
+        balanceAfter: 5,
+        status: 'CONFIRMED',
+        refType: 'trace.generate',
+        refId: 'b1',
+        idempotencyKey: 'trace:confirmed',
+        operatorId: 'u3',
+        note: null,
+        createdAt: new Date('2026-07-06T00:00:00.000Z'),
+        updatedAt: new Date('2026-07-06T00:10:00.000Z'),
+      },
+      {
+        id: 'old-reserved',
+        tenantId: 't1',
+        accountId: 'acc1',
+        resource: 'CODE',
+        amount: 2,
+        balanceAfter: 3,
+        status: 'RESERVED',
+        refType: 'trace.generate',
+        refId: 'b2',
+        idempotencyKey: 'trace:reserved',
+        operatorId: 'u3',
+        note: null,
+        createdAt: new Date('2026-07-06T00:05:00.000Z'),
+        updatedAt: new Date('2026-07-06T00:05:00.000Z'),
+      },
+    );
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 1, skipped: 0, errors: [] });
+    expect(reservations.find((row) => row.id === 'old-confirmed')?.status).toBe('CONFIRMED');
+    expect(reservations.find((row) => row.id === 'old-reserved')?.status).toBe('RELEASED');
+    expect(state.codeBalance).toBe(12);
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(1);
+  });
+
+  it('releaseStaleReservations errors without balance mutation when RELEASED ledger already exists', async () => {
+    const { svc, state, ledgers } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:dirty' });
+    ledgers.push({
+      accountId: 'acc1',
+      resource: 'CODE',
+      delta: 5,
+      balanceAfter: 10,
+      reason: 'RELEASED',
+      idempotencyKey: 'trace:dirty',
+    });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out.scanned).toBe(1);
+    expect(out.released).toBe(0);
+    expect(out.errors[0]).toMatchObject({ reservationId: 'res1' });
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(1);
+  });
+
+  it('releaseStaleReservations errors without balance mutation when CONFIRMED ledger already exists', async () => {
+    const { svc, state, ledgers, reservations } = makeService({ codeBalance: 10 });
+    await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:confirmed-dirty' });
+    ledgers.push({
+      accountId: 'acc1',
+      resource: 'CODE',
+      delta: 0,
+      balanceAfter: 5,
+      reason: 'CONFIRMED',
+      idempotencyKey: 'trace:confirmed-dirty',
+    });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out.scanned).toBe(1);
+    expect(out.released).toBe(0);
+    expect(out.errors[0]).toMatchObject({ reservationId: 'res1' });
+    expect(reservations[0].status).toBe('RESERVED');
+    expect(state.codeBalance).toBe(5);
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(0);
+  });
+
+  it('releaseStaleReservations validates take bounds in the service layer', async () => {
+    const { svc } = makeService({ codeBalance: 10 });
+    await expect(svc.listStaleReservations({ take: 0 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.listStaleReservations({ take: 1001 })).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
