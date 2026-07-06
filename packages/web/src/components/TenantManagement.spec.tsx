@@ -7,7 +7,7 @@ const createTenantMock = vi.fn();
 const setTenantStatusMock = vi.fn();
 
 vi.mock('../api/tenants', () => ({
-  listTenants: () => listTenantsMock(),
+  listTenants: (...args: unknown[]) => listTenantsMock(...args),
   createTenant: (...args: unknown[]) => createTenantMock(...args),
   setTenantStatus: (...args: unknown[]) => setTenantStatusMock(...args),
 }));
@@ -123,5 +123,26 @@ describe('TenantManagement', () => {
     await waitFor(() => {
       expect(setTenantStatusMock).toHaveBeenCalledWith('tenant-2', 'active');
     });
+  });
+
+  it('loads paginated tenant pages so later tenants remain reachable', async () => {
+    listTenantsMock.mockImplementation((query: { page: number; pageSize: number }) => Promise.resolve({
+      items: tenants,
+      total: 201,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
+
+    render(<TenantManagement />);
+    await screen.findByText('Page 1 / 3');
+
+    expect(listTenantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    await waitFor(() => {
+      expect(listTenantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+    });
+    expect(await screen.findByText('Page 2 / 3')).toBeTruthy();
   });
 });

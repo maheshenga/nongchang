@@ -8,7 +8,7 @@ const updateAgentMock = vi.fn();
 const setAgentStatusMock = vi.fn();
 
 vi.mock('../api/agents', () => ({
-  listAgents: () => listAgentsMock(),
+  listAgents: (...args: unknown[]) => listAgentsMock(...args),
   createAgent: (...args: unknown[]) => createAgentMock(...args),
   updateAgent: (...args: unknown[]) => updateAgentMock(...args),
   setAgentStatus: (...args: unknown[]) => setAgentStatusMock(...args),
@@ -103,5 +103,26 @@ describe('AgentManagement Fluent table', () => {
     await waitFor(() => {
       expect(setAgentStatusMock).toHaveBeenCalledWith('agent-2', 'active');
     });
+  });
+
+  it('loads paginated pages so records beyond the first page remain reachable', async () => {
+    listAgentsMock.mockImplementation((query: { page: number; pageSize: number }) => Promise.resolve({
+      items: agents,
+      total: 201,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
+
+    render(<AgentManagement />);
+    await screen.findByText('Page 1 / 3');
+
+    expect(listAgentsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    await waitFor(() => {
+      expect(listAgentsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+    });
+    expect(await screen.findByText('Page 2 / 3')).toBeTruthy();
   });
 });

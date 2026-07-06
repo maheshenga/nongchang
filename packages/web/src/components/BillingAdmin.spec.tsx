@@ -13,7 +13,7 @@ vi.mock('../auth/auth-context', () => ({
 
 vi.mock('../api/billing', () => ({
   getBillingSummary: () => getBillingSummaryMock(),
-  listCreditAccounts: () => listCreditAccountsMock(),
+  listCreditAccounts: (...args: unknown[]) => listCreditAccountsMock(...args),
   allocateCredit: (...args: unknown[]) => allocateCreditMock(...args),
   rechargeCredit: (...args: unknown[]) => rechargeCreditMock(...args),
 }));
@@ -92,5 +92,28 @@ describe('BillingAdmin Fluent operations', () => {
     expect(screen.getByText('purchase-real-component')).toBeTruthy();
     expect(screen.queryByText('plans-real-component')).toBeNull();
     expect(screen.queryByText('alipay-real-component')).toBeNull();
+  });
+
+  it('loads paginated child account pages so later accounts remain reachable', async () => {
+    listCreditAccountsMock.mockImplementation((query: { page: number; pageSize: number }) => Promise.resolve({
+      items: [
+        { id: 'acc-1', ownerType: 'MERCHANT', ownerId: 'merchant-1', ownerName: 'Merchant One', aiBalance: 12, codeBalance: 30 },
+      ],
+      total: 201,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
+
+    render(<BillingAdmin />);
+    await screen.findByText('Page 1 / 3');
+
+    expect(listCreditAccountsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    await waitFor(() => {
+      expect(listCreditAccountsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+    });
+    expect(await screen.findByText('Page 2 / 3')).toBeTruthy();
   });
 });

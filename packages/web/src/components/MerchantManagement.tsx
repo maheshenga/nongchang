@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { CheckCircle2, Filter, Pencil, Plus, Power, Search, Store, X, XCircle } from 'lucide-react';
 import { Role, type CreateUserDto, type MerchantListItem, type UpdateUserDto } from '@nongchang/shared';
 import { createUser, listMerchants, setUserStatus, updateUser } from '../api/users';
 import { useApi } from '../hooks/useApi';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
 type FormState = { displayName: string; username: string; phone: string };
 type StatusFilter = 'all' | 'active' | 'suspended';
@@ -38,8 +39,11 @@ const statusOptions: Array<{ key: StatusFilter; label: string }> = [
 ];
 
 export default function MerchantManagement() {
-  const { data: rawMerchants, loading, error, reload } = useApi(listMerchants);
-  const merchants: MerchantListItem[] = rawMerchants ?? [];
+  const [page, setPage] = useState(1);
+  const fetchMerchants = useCallback(() => listMerchants({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
+  const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants);
+  const merchantPage = normalizePage<MerchantListItem>(rawMerchants, page);
+  const merchants = merchantPage.items;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showModal, setShowModal] = useState(false);
@@ -232,6 +236,15 @@ export default function MerchantManagement() {
             </table>
           )}
         </div>
+        {!error && (
+          <PaginationControls
+            page={merchantPage.page}
+            pageSize={merchantPage.pageSize}
+            total={merchantPage.total}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        )}
       </section>
 
       {showModal && (

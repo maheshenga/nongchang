@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Building2, CheckCircle2, Pencil, Plus, Power, Search, X, XCircle } from 'lucide-react';
 import { type AgentListItem, type CreateAgentDto, type UpdateAgentDto } from '@nongchang/shared';
 import { createAgent, listAgents, setAgentStatus, updateAgent } from '../api/agents';
 import { useApi } from '../hooks/useApi';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
 type FormState = { name: string; region: string };
 
@@ -31,8 +32,11 @@ function statusTag(status: string) {
 }
 
 export default function AgentManagement() {
-  const { data: rawAgents, loading, error, reload } = useApi(listAgents);
-  const agents: AgentListItem[] = rawAgents ?? [];
+  const [page, setPage] = useState(1);
+  const fetchAgents = useCallback(() => listAgents({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
+  const { data: rawAgents, loading, error, reload } = useApi(fetchAgents);
+  const agentPage = normalizePage<AgentListItem>(rawAgents, page);
+  const agents = agentPage.items;
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -192,6 +196,15 @@ export default function AgentManagement() {
             </table>
           )}
         </div>
+        {!error && (
+          <PaginationControls
+            page={agentPage.page}
+            pageSize={agentPage.pageSize}
+            total={agentPage.total}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        )}
       </section>
 
       {showModal && (

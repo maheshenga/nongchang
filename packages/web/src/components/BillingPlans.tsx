@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Package, Plus, Loader2, Trash2, Pencil, X } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { listCreditPlans, createCreditPlan, updateCreditPlan, removeCreditPlan } from '../api/billing';
 import type { CreditPlanView, CreditResource, CreateCreditPlanInput } from '@nongchang/shared';
+import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -17,8 +18,11 @@ const EMPTY: Form = { name: '', resource: 'AI', quantity: 100, priceCents: 1000,
 
 // 套餐管理(仅 SYSTEM_ADMIN):固定套餐 + 单价基准(isUnit)的增删改。
 export default function BillingPlans() {
-  const plansApi = useApi(listCreditPlans);
-  const plans: CreditPlanView[] = plansApi.data ?? [];
+  const [page, setPage] = useState(1);
+  const fetchPlans = useCallback(() => listCreditPlans({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
+  const plansApi = useApi(fetchPlans);
+  const planPage = normalizePage<CreditPlanView>(plansApi.data, page);
+  const plans = planPage.items;
 
   const [toast, setToast] = useState('');
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
@@ -113,6 +117,16 @@ export default function BillingPlans() {
               ))}
             </tbody>
           </table>
+        )}
+        {!plansApi.error && (
+          <PaginationControls
+            page={planPage.page}
+            pageSize={planPage.pageSize}
+            total={planPage.total}
+            loading={plansApi.loading}
+            onPageChange={setPage}
+            className="mt-4 rounded-lg border"
+          />
         )}
       </div>
 

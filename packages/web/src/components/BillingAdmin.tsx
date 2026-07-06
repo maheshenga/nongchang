@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { AlertTriangle, ArrowRightLeft, Loader2, Plus, QrCode, Wallet, X, Zap } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../auth/auth-context';
@@ -10,6 +10,7 @@ import BillingPlans from './BillingPlans';
 import BillingAlipayConfig from './BillingAlipayConfig';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
 const LOW = 100;
 
@@ -23,8 +24,14 @@ export default function BillingAdmin() {
   const canAllocate = user?.role === 'system_admin' || user?.role === 'agent_admin';
 
   const sum = useApi(getBillingSummary);
-  const acc = useApi(listCreditAccounts);
-  const accounts: CreditAccountItem[] = acc.data ?? [];
+  const [accountPageNumber, setAccountPageNumber] = useState(1);
+  const fetchAccounts = useCallback(
+    () => listCreditAccounts({ page: accountPageNumber, pageSize: MANAGEMENT_PAGE_SIZE }),
+    [accountPageNumber],
+  );
+  const acc = useApi(fetchAccounts);
+  const accountPage = normalizePage<CreditAccountItem>(acc.data, accountPageNumber);
+  const accounts = accountPage.items;
 
   const [toast, setToast] = useState('');
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
@@ -180,6 +187,15 @@ export default function BillingAdmin() {
                 </tbody>
               </table>
             </div>
+          )}
+          {!acc.error && (
+            <PaginationControls
+              page={accountPage.page}
+              pageSize={accountPage.pageSize}
+              total={accountPage.total}
+              loading={acc.loading}
+              onPageChange={setAccountPageNumber}
+            />
           )}
         </section>
 

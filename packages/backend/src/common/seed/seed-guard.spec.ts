@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { assertDemoSeedAllowed, shouldAllowDemoSeed } from './seed-guard';
 
 describe('demo seed production guard', () => {
@@ -21,5 +22,16 @@ describe('demo seed production guard', () => {
 
     expect(shouldAllowDemoSeed(env)).toBe(true);
     expect(() => assertDemoSeedAllowed(env)).not.toThrow();
+  });
+});
+
+describe('demo seed package scripts', () => {
+  it('keeps the default prisma:seed script guarded and uses an explicit demo alias for overrides', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(pkg.scripts['prisma:seed']).toBe('tsx prisma/seed.ts');
+    expect(pkg.scripts['prisma:seed:demo']).toBe('tsx scripts/run-demo-seed.ts');
   });
 });

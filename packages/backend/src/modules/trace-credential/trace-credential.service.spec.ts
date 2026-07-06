@@ -22,7 +22,7 @@ function make(batchInScope = true, credInScope = true) {
       findFirst: vi.fn().mockResolvedValue(credInScope ? { id: 'cr1', batchId: 'b1' } : null),
       delete: vi.fn().mockResolvedValue({ id: 'cr1' }),
     },
-    ossConfig: { findUnique: vi.fn().mockResolvedValue(null) },
+    ossConfig: { findUnique: vi.fn().mockResolvedValue({ enabled: true, baseUrl: 'https://oss.example.com/uploads' }) },
   };
   return { svc: new TraceCredentialService(prisma as any, new ScopeService()), prisma };
 }
@@ -52,6 +52,22 @@ describe('TraceCredentialService', () => {
     await expect(h.svc.create(merchant, { ...input, fileUrl: 'https://evil.example/cert.pdf' }))
       .rejects.toThrow();
     expect(h.prisma.traceCredential.create).not.toHaveBeenCalled();
+  });
+
+  it('create: rejects external credential file urls when no trusted storage origin is configured', async () => {
+    const previousBaseUrl = process.env.OSS_BASE_URL;
+    delete process.env.OSS_BASE_URL;
+    const h = make(true);
+    h.prisma.ossConfig.findUnique.mockResolvedValueOnce(null);
+
+    try {
+      await expect(h.svc.create(merchant, { ...input, fileUrl: 'https://evil.example/cert.pdf' }))
+        .rejects.toThrow();
+      expect(h.prisma.traceCredential.create).not.toHaveBeenCalled();
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.OSS_BASE_URL;
+      else process.env.OSS_BASE_URL = previousBaseUrl;
+    }
   });
 
   it('list:batch 在范围内查询并返回视图列表', async () => {

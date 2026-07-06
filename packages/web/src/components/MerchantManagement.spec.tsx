@@ -8,7 +8,7 @@ const updateUserMock = vi.fn();
 const setUserStatusMock = vi.fn();
 
 vi.mock('../api/users', () => ({
-  listMerchants: () => listMerchantsMock(),
+  listMerchants: (...args: unknown[]) => listMerchantsMock(...args),
   createUser: (...args: unknown[]) => createUserMock(...args),
   updateUser: (...args: unknown[]) => updateUserMock(...args),
   setUserStatus: (...args: unknown[]) => setUserStatusMock(...args),
@@ -129,5 +129,26 @@ describe('MerchantManagement Fluent table', () => {
     await waitFor(() => {
       expect(setUserStatusMock).toHaveBeenCalledWith('merchant-2', 'active');
     });
+  });
+
+  it('loads paginated merchant pages so later records remain reachable', async () => {
+    listMerchantsMock.mockImplementation((query: { page: number; pageSize: number }) => Promise.resolve({
+      items: merchants,
+      total: 201,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
+
+    render(<MerchantManagement />);
+    await screen.findByText('Page 1 / 3');
+
+    expect(listMerchantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    await waitFor(() => {
+      expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+    });
+    expect(await screen.findByText('Page 2 / 3')).toBeTruthy();
   });
 });

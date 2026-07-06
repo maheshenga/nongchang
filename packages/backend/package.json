@@ -12,7 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "tsx scripts/run-demo-seed.ts",
+    "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed:demo": "tsx scripts/run-demo-seed.ts",
     "billing:recover-reservations": "tsx scripts/recover-stale-reservations.ts"
   },

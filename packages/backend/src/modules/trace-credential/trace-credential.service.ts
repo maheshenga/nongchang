@@ -47,12 +47,14 @@ export class TraceCredentialService {
 
   private async assertTrustedFileUrl(tenantId: string, fileUrl: string): Promise<void> {
     const trustedOrigins = await this.trustedFileOrigins(tenantId);
-    if (trustedOrigins.size === 0) return;
     let parsed: URL;
     try {
       parsed = new URL(fileUrl);
     } catch {
       throw new BadRequestException('资质文件 URL 无效');
+    }
+    if (trustedOrigins.size === 0) {
+      throw new BadRequestException('No trusted storage origin is configured for credential files');
     }
     if (!trustedOrigins.has(parsed.origin)) {
       throw new BadRequestException('资质文件 URL 不在可信存储域名内');

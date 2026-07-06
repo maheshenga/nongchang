@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Building2, Loader2, Plus, Power, PowerOff, X } from 'lucide-react';
 import type { CreateTenantResponse, TenantListItem, TenantStatus } from '@nongchang/shared';
 import { createTenant, listTenants, setTenantStatus } from '../api/tenants';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
 type FormState = {
   name: string;
@@ -26,7 +27,9 @@ function statusLabel(status: TenantStatus): string {
 }
 
 export default function TenantManagement() {
+  const [page, setPage] = useState(1);
   const [tenants, setTenants] = useState<TenantListItem[]>([]);
+  const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: MANAGEMENT_PAGE_SIZE });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -35,21 +38,23 @@ export default function TenantManagement() {
   const [lastCreated, setLastCreated] = useState<CreateTenantResponse | null>(null);
   const [busyTenantId, setBusyTenantId] = useState<string | null>(null);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setTenants(await listTenants());
+      const result = normalizePage(await listTenants({ page, pageSize: MANAGEMENT_PAGE_SIZE }), page);
+      setTenants(result.items);
+      setPagination({ total: result.total, page: result.page, pageSize: result.pageSize });
     } catch (err) {
       setError(err instanceof Error ? err.message : '租户列表加载失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
 
   useEffect(() => {
     void reload();
-  }, []);
+  }, [reload]);
 
   const openCreate = () => {
     setLastCreated(null);
@@ -172,6 +177,15 @@ export default function TenantManagement() {
           </tbody>
         </table>
       </div>
+      {!error && (
+        <PaginationControls
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          loading={loading}
+          onPageChange={setPage}
+        />
+      )}
 
       {creating && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="新建租户">
