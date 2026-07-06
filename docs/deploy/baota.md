@@ -29,6 +29,15 @@
 ## 3. 拉取代码并构建后端
 
 在项目根目录执行:
+
+Before deploying a production-hardening branch, run the non-e2e gate from the repository root:
+
+```bash
+pnpm verify:local
+```
+
+For the full local release gate, including PostGIS e2e setup, follow [docs/ops/production-verification.md](../ops/production-verification.md).
+
 ```bash
 pnpm install
 pnpm build:shared
@@ -41,6 +50,8 @@ pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 mi
 ```bash
 pnpm --filter @nongchang/backend prisma:seed
 ```
+
+After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
 
 ## 4. PM2 管理器启动后端
 
@@ -56,6 +67,7 @@ pnpm --filter @nongchang/backend prisma:seed
   JWT_SECRET=强随机值
   JWT_REFRESH_SECRET=另一个强随机值
   PORT=3001
+  ALLOW_MANUAL_PAY=false
   ```
 
 ## 5. 构建前端
@@ -88,4 +100,5 @@ location / {
   ```
 - PostgreSQL 仅监听 `127.0.0.1`,不对公网开放。
 - `.env` 不入库(已在 `.gitignore` 中通过 `.env*` 排除)。
+- Keep `ALLOW_MANUAL_PAY=false` in production. The backend env validator rejects `ALLOW_MANUAL_PAY=true` when `NODE_ENV=production`.
 - 定期备份数据库(宝塔「计划任务」可配置定时 `pg_dump`)。
