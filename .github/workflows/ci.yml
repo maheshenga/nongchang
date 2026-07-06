@@ -70,18 +70,10 @@ jobs:
           DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
         run: pnpm prisma:seed
 
-      - name: Backend build (typecheck via nest build)
+      - name: Production verification gates (non-e2e)
         env:
           DATABASE_URL: postgresql://unit:unit@127.0.0.1:1/unit?schema=public
-        run: pnpm build:backend
-
-      - name: Web typecheck
-        run: pnpm --filter web lint
-
-      - name: Unit tests
-        env:
-          DATABASE_URL: postgresql://unit:unit@127.0.0.1:1/unit?schema=public
-        run: pnpm test:unit
+        run: pnpm verify:local
 
       - name: Backend e2e tests
         env:

@@ -8,7 +8,9 @@
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:shared && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
-    "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e"
+    "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e",
+    "verify:local": "pnpm --filter @nongchang/shared build && pnpm --filter @nongchang/backend build && pnpm --filter web lint && pnpm test:unit",
+    "verify:production": "pnpm verify:local && pnpm test:e2e"
   },
   "engines": {
     "node": ">=20"
