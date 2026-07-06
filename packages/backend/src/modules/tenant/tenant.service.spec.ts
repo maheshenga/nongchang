@@ -133,7 +133,12 @@ describe('TenantService', () => {
       status: 'active',
     });
     expect(prisma.__tx.userGroup.create).toHaveBeenCalledWith({
-      data: { tenantId: 'tenant-new', name: '默认用户组', isDefault: true, permissions: [] },
+      data: {
+        tenantId: 'tenant-new',
+        name: '默认用户组',
+        isDefault: true,
+        permissions: ['record:create', 'record:view', 'field:view', 'batch:view', 'trace:view'],
+      },
     });
     expect(result.initialPassword.length).toBeGreaterThan(10);
     expect(result.adminUser).toMatchObject({ id: 'admin-new', username: 'admin', role: Role.SYSTEM_ADMIN });

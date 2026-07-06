@@ -64,6 +64,7 @@ describe('UserGroupService', () => {
   it('ensureDefault 无默认组时创建一个', async () => {
     const g = await svc.ensureDefault('t1');
     expect(g.isDefault).toBe(true);
+    expect(g.permissions).toEqual(['record:create', 'record:view', 'field:view', 'batch:view', 'trace:view']);
     expect(prisma.groups).toHaveLength(1);
     // 再次调用复用现有
     const g2 = await svc.ensureDefault('t1');

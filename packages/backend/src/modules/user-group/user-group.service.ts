@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import type { AuthUser, UserGroupInput, UserGroupView, AssignUserGroupInput } from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DEFAULT_USER_GROUP_PERMISSIONS } from './default-permissions';
 
 interface UserGroupRow {
   id: string;
@@ -90,7 +91,12 @@ export class UserGroupService {
     })) as UserGroupRow | null;
     if (existing) return this.toView(existing);
     const row = (await this.prisma.userGroup.create({
-      data: { tenantId, name: '默认用户组', isDefault: true, permissions: [] },
+      data: {
+        tenantId,
+        name: '默认用户组',
+        isDefault: true,
+        permissions: [...DEFAULT_USER_GROUP_PERMISSIONS],
+      },
     })) as UserGroupRow;
     return this.toView(row);
   }

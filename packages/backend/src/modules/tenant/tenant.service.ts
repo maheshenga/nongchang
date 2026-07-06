@@ -13,6 +13,7 @@ import {
   isPaginated,
 } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DEFAULT_USER_GROUP_PERMISSIONS } from '../user-group/default-permissions';
 
 const DEFAULT_LIST_CAP = 500;
 
@@ -95,7 +96,12 @@ export class TenantService {
         select: { id: true, username: true, role: true, displayName: true },
       });
       await tx.userGroup.create({
-        data: { tenantId: tenant.id, name: '默认用户组', isDefault: true, permissions: [] },
+        data: {
+          tenantId: tenant.id,
+          name: '默认用户组',
+          isDefault: true,
+          permissions: [...DEFAULT_USER_GROUP_PERMISSIONS],
+        },
       });
       return {
         ...this.toListItem({ ...tenant, _count: { users: 1, agents: 0 } }),
