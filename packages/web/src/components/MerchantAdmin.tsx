@@ -314,8 +314,13 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                       >
                         发货流向绑定未开通
                       </button>
-                      <button className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 font-bold text-[10px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white transition-colors shadow-sm">
-                        生命周期追溯档案
+                      <button
+                        disabled
+                        aria-label="Lifecycle trace archive unavailable"
+                        title="Lifecycle trace archive is not available"
+                        className="text-slate-400 font-bold text-[10px] px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-100 shadow-sm cursor-not-allowed"
+                      >
+                        追溯档案未开放
                       </button>
                       <button 
                         onClick={() => {

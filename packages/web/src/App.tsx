@@ -76,6 +76,7 @@ export default function App() {
   const navItems = getNavItems(navRole);
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => navItems.flatMap(category => category.items.map(item => item.id)), [navItems]);
+  const canOpenBilling = allowedTabs.includes('billing');
 
   useEffect(() => {
     const allowedTab = firstAllowedTab(navRole, activeTab);
@@ -220,20 +221,23 @@ export default function App() {
             </div>
           ))}
         </nav>
+        {canOpenBilling && (
         <div className="p-3 lg:p-5 group-hover:p-5 mt-auto border-t border-white/5 transition-all">
           <div className="bg-gradient-to-br from-emerald-900/40 to-teal-900/40 rounded-2xl p-2 lg:p-4 group-hover:p-4 border border-emerald-800/30 relative overflow-hidden transition-all flex flex-col items-center group-hover:items-stretch lg:items-stretch">
             <Sparkles className="absolute top-2 right-2 w-20 h-20 text-emerald-500/10 -rotate-12 pointer-events-none hidden group-hover:block lg:block" />
-            <div className="text-[10px] text-emerald-400 font-bold mb-1 tracking-wider uppercase whitespace-nowrap hidden group-hover:block lg:block">系统配额</div>
-            <div className="flex items-end gap-1 mb-0 group-hover:mb-4 lg:mb-4">
-              <span className="text-sm lg:text-2xl group-hover:text-2xl font-black text-white shrink-0">12K</span>
-              <span className="text-[10px] text-emerald-500 mb-1.5 uppercase font-bold hidden group-hover:inline lg:inline whitespace-nowrap">/ 20K</span>
-            </div>
-            <button className="w-full bg-white/10 hover:bg-emerald-500 hover:text-white text-emerald-100 text-[10px] lg:text-xs group-hover:text-xs font-bold py-1.5 lg:py-3 group-hover:py-3 rounded-lg lg:rounded-xl group-hover:rounded-xl transition-all duration-300 uppercase tracking-widest shadow-sm">
-              <span className="hidden group-hover:inline lg:inline">增订资源</span>
+            <div className="text-[10px] text-emerald-400 font-bold mb-1 tracking-wider uppercase whitespace-nowrap hidden group-hover:block lg:block">资源订购</div>
+            <button
+              type="button"
+              aria-label="Open billing resources"
+              onClick={() => setActiveTab('billing')}
+              className="w-full bg-white/10 hover:bg-emerald-500 hover:text-white text-emerald-100 text-[10px] lg:text-xs group-hover:text-xs font-bold py-1.5 lg:py-3 group-hover:py-3 rounded-lg lg:rounded-xl group-hover:rounded-xl transition-all duration-300 uppercase tracking-widest shadow-sm"
+            >
+              <span className="hidden group-hover:inline lg:inline">订购资源</span>
               <span className="inline group-hover:hidden lg:hidden">+</span>
             </button>
           </div>
         </div>
+        )}
       </aside>
       )}
 
@@ -253,9 +257,14 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-6">
-            <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
+            <button
+              type="button"
+              aria-label="Notifications unavailable"
+              disabled
+              title="Notifications are not available"
+              className="relative p-2 text-slate-300 cursor-not-allowed transition-colors"
+            >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
             </button>
             <div className="h-6 w-px bg-slate-200"></div>
             <div onClick={() => setProfileOpen(true)} title="个人账号设置" className="flex items-center gap-3 cursor-pointer group">

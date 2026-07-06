@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMock = vi.hoisted(() => ({ role: 'platform_admin' }));
@@ -16,6 +16,7 @@ vi.mock('./components/FarmFields', () => ({ default: () => <div>Farm Fields View
 vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant Management View</div> }));
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
+vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
 
 import App from './App';
 
@@ -41,6 +42,26 @@ describe('App role wiring', () => {
     expect(await screen.findByText('Settings View')).toBeTruthy();
     expect(screen.queryByText('Merchant Management View')).toBeNull();
     expect(screen.queryByText('Farm Fields View')).toBeNull();
+    expect(screen.queryByText('12K')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open billing resources' })).toBeNull();
+  });
+
+  it('opens billing resources only for roles with billing access', async () => {
+    authMock.role = 'agent_admin';
+
+    render(<App />);
+
+    const billingShortcut = await screen.findByRole('button', { name: 'Open billing resources' });
+    fireEvent.click(billingShortcut);
+
+    expect(await screen.findByText('Billing Admin View')).toBeTruthy();
+  });
+
+  it('marks notifications as unavailable instead of leaving an inert header action', async () => {
+    render(<App />);
+
+    const notificationButton = await screen.findByRole('button', { name: 'Notifications unavailable' });
+    expect((notificationButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('falls back to the safe settings surface for unknown token roles', async () => {

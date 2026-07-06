@@ -129,4 +129,12 @@ describe('MerchantAdmin production actions', () => {
     const disabledButtons = Array.from(container.querySelectorAll('button:disabled'));
     expect(disabledButtons.length).toBeGreaterThanOrEqual(3);
   });
+
+  it('marks lifecycle trace archive as unavailable', async () => {
+    render(<MerchantAdmin />);
+    await screen.findByText('Peony');
+
+    const archiveButton = screen.getByRole('button', { name: 'Lifecycle trace archive unavailable' });
+    expect((archiveButton as HTMLButtonElement).disabled).toBe(true);
+  });
 });
