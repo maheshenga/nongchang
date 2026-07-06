@@ -1,4 +1,4 @@
-import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2 } from 'lucide-react';
+import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2, RefreshCw } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
@@ -9,6 +9,7 @@ import { createTraceGenerationRequestKey, generateCodes, listCodes, type TraceCo
 import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
+import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 
 interface ViewBatch {
   id: string;
@@ -377,10 +378,208 @@ export default function BatchAdmin() {
   };
 
   const closeDelete = () => { setDeleteTarget(null); setForceConfirm(false); };
+  const statusTone = (stage: string): 'active' | 'success' | 'warning' | 'neutral' | 'danger' => {
+    if (stage === BatchStatus.HARVESTED || stage === BatchStatus.DISTRIBUTED) return 'success';
+    if (stage === BatchStatus.GROWING || stage === BatchStatus.PLANTING) return 'active';
+    return 'neutral';
+  };
 
   return (
-    <div className="flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-lg overflow-visible relative">
-      <div className="p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between bg-slate-50/50 shrink-0 gap-4">
+    <div className="relative flex flex-col overflow-visible rounded-[6px] border border-[#E1DFDD] bg-white shadow-sm">
+      <div className="shrink-0 border-b border-[#E1DFDD] bg-white px-5 py-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="text-xs text-[#605E5C]">首页 / 批次管理</div>
+            <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-[#242424]">
+              <span className="grid h-8 w-8 place-items-center rounded-[4px] bg-[#E5F1FB] text-[#0078D4]">
+                <Layers className="h-4 w-4" />
+              </span>
+              批次全生命周期管理
+            </h1>
+            <p className="mt-1 text-sm text-[#605E5C]">管理种植、采收、包装、溯源码签发与扫码核验链路。</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setShowCreateModal(true)} className={fluentButton('primary')}>
+              <Plus className="h-4 w-4" />
+              新建批次
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                disabled={isExporting !== null}
+                className={fluentButton('secondary')}
+              >
+                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {isExporting ? `正在导出 ${isExporting.toUpperCase()}...` : selectedIds.size > 0 ? `导出 (${selectedIds.size})` : '导出'}
+              </button>
+              {exportDropdownOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-[4px] border border-[#E1DFDD] bg-white shadow-lg">
+                  <button onClick={() => handleExport('pdf')} className="flex w-full items-center gap-2 border-b border-[#EDEBE9] px-3 py-2 text-left text-sm text-[#242424] hover:bg-[#F3F2F1]">
+                    <FileText className="h-4 w-4 text-[#A4262C]" /> 标准 PDF 溯源版
+                  </button>
+                  <button onClick={() => handleExport('excel')} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#242424] hover:bg-[#F3F2F1]">
+                    <FileSpreadsheet className="h-4 w-4 text-[#107C10]" /> 原始 Excel 数据表
+                  </button>
+                </div>
+              )}
+            </div>
+            <button onClick={() => setShowAdvancedFilter(!showAdvancedFilter)} className={fluentButton('secondary')}>
+              <Filter className="h-4 w-4" />
+              筛选
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvancedFilter ? 'rotate-180' : ''}`} />
+            </button>
+            <button onClick={() => void reload()} className={fluentButton('subtle')}>
+              <RefreshCw className="h-4 w-4" />
+              刷新
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="relative w-full max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+            <input
+              type="text"
+              placeholder="按批次号搜索"
+              value={searchCode}
+              onChange={(e) => setSearchCode(e.target.value)}
+              className={`${fluentInput} w-full pl-8`}
+            />
+          </div>
+          <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}>
+            <option value="all">全部品种</option>
+            <option value="阳光玫瑰">阳光玫瑰</option>
+            <option value="美早">美早</option>
+            <option value="芍药">芍药</option>
+          </select>
+          <select value={filterHouse} onChange={(e) => setFilterHouse(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}>
+            <option value="all">全部地块</option>
+            {(fields ?? []).slice(0, 6).map((field: Field) => (
+              <option key={field.id} value={field.id.slice(0, 8)}>{field.name}</option>
+            ))}
+          </select>
+          <select value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}>
+            <option value="all">全部日期</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto bg-white">
+        {loading && <div className="p-8 text-center text-sm text-[#605E5C]">加载中...</div>}
+        {error && (
+          <div className="p-8 text-center text-sm text-[#A4262C]">
+            {error} <button onClick={() => void reload()} className="ml-2 font-semibold underline">重试</button>
+          </div>
+        )}
+        <div className={fluentTable.wrapper}>
+          <table className={fluentTable.table}>
+            <thead className={fluentTable.thead}>
+              <tr>
+                <th className={`${fluentTable.th} w-12`}>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[#0078D4]"
+                    checked={filteredData.length > 0 && filteredData.every(b => selectedIds.has(b.id))}
+                    ref={el => { if (el) el.indeterminate = filteredData.some(b => selectedIds.has(b.id)) && !filteredData.every(b => selectedIds.has(b.id)); }}
+                    onChange={(e) => {
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) filteredData.forEach(b => next.add(b.id));
+                        else filteredData.forEach(b => next.delete(b.id));
+                        return next;
+                      });
+                    }}
+                  />
+                </th>
+                <th className={fluentTable.th}>批次号</th>
+                <th className={fluentTable.th}>品种</th>
+                <th className={fluentTable.th}>地块</th>
+                <th className={fluentTable.th}>状态</th>
+                <th className={`${fluentTable.th} text-right`}>签发码数</th>
+                <th className={`${fluentTable.th} text-right`}>扫码量</th>
+                <th className={fluentTable.th}>最近更新</th>
+                <th className={`${fluentTable.th} text-right`}>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedData.map((b) => (
+                <tr key={b.id} className={`${fluentTable.row} ${selectedIds.has(b.id) ? fluentTable.rowSelected : ''}`}>
+                  <td className={fluentTable.td}>
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-[#0078D4]"
+                      checked={selectedIds.has(b.id)}
+                      onChange={(e) => {
+                        setSelectedIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(b.id);
+                          else next.delete(b.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  </td>
+                  <td className={`${fluentTable.td} font-mono font-semibold`}>{b.code}</td>
+                  <td className={fluentTable.td}>{b.type}</td>
+                  <td className={fluentTable.td}>{b.house}</td>
+                  <td className={fluentTable.td}>
+                    <span className={fluentStatusTag(statusTone(b.stage))}>{STATUS_LABEL[b.stage] ?? b.stage}</span>
+                  </td>
+                  <td className={`${fluentTable.td} text-right font-mono`}>{b.generated.toLocaleString('zh-CN')}</td>
+                  <td className={`${fluentTable.td} text-right font-mono`}>{b.scanTotal.toLocaleString('zh-CN')}</td>
+                  <td className={fluentTable.td}>{b.date}</td>
+                  <td className={`${fluentTable.td} text-right`}>
+                    <div className="flex max-w-[520px] flex-wrap justify-end gap-1">
+                      <button onClick={() => openDetail(b.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        <Eye className="h-3.5 w-3.5" />
+                        查看
+                      </button>
+                      <button onClick={() => setShowQrModal(b.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        <QrCode className="h-3.5 w-3.5" />
+                        生码
+                      </button>
+                      <button onClick={() => openCodes(b.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        <ScanLine className="h-3.5 w-3.5" />
+                        已生成码
+                      </button>
+                      <button onClick={() => handleScanCompliance(b.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        {isScanningCompliance ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                        合规
+                      </button>
+                      <button onClick={() => setCredentialBatch({ id: b.id, label: b.code })} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        资质
+                      </button>
+                      <button onClick={() => setShowProfitModal(b.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
+                        <Calculator className="h-3.5 w-3.5" />
+                        利润
+                      </button>
+                      <button
+                        onClick={() => handleExportBatchReport(b.id)}
+                        disabled={isExportingReport === b.id}
+                        className={`${fluentButton('subtle')} whitespace-nowrap`}
+                      >
+                        {isExportingReport === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                        报告
+                      </button>
+                      <button onClick={() => setDeleteTarget({ id: b.id, label: b.code, generated: b.generated })} className={`${fluentButton('subtle')} whitespace-nowrap text-[#A4262C]`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        删除
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && filteredData.length === 0 && (
+                <tr><td colSpan={9} className="px-6 py-12 text-center text-sm text-[#605E5C]">暂无符合条件的批次</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div hidden aria-hidden="true" className="p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between bg-slate-50/50 shrink-0 gap-4">
         <div>
           <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
             <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg shadow-sm">
@@ -438,40 +637,52 @@ export default function BatchAdmin() {
       </div>
       
       {showAdvancedFilter && (
-        <div className="bg-slate-50/80 border-b border-slate-200/60 p-5 shrink-0 flex flex-wrap items-end gap-5 animate-in fade-in slide-in-from-top-2">
-          <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">目标农产品种类</label>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-48 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-              <option value="all">全产品类别</option>
-              <option value="春白芍">春白芍组系列</option>
-              <option value="紫凤">紫凤朝阳系</option>
-              <option value="墨玉">冠世墨玉系列</option>
-              <option value="滇红">滇红系列</option>
-            </select>
+        <div className="shrink-0 border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+          <div className="mb-3 text-xs font-semibold text-[#605E5C]">高级筛选</div>
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
+            <label className="flex w-full flex-col gap-1 text-xs font-semibold text-[#605E5C] md:w-48">
+              品种
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className={`${fluentSelect} w-full`}>
+                <option value="all">全部品种</option>
+                <option value="阳光玫瑰">阳光玫瑰</option>
+                <option value="美早">美早</option>
+                <option value="芍药">芍药</option>
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 text-xs font-semibold text-[#605E5C] md:w-56">
+              地块
+              <select value={filterHouse} onChange={(e) => setFilterHouse(e.target.value)} className={`${fluentSelect} w-full`}>
+                <option value="all">全部地块</option>
+                {(fields ?? []).slice(0, 6).map((field: Field) => (
+                  <option key={field.id} value={field.id.slice(0, 8)}>{field.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex w-full flex-col gap-1 text-xs font-semibold text-[#605E5C] md:w-48">
+              日期
+              <select value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} className={`${fluentSelect} w-full`}>
+                <option value="all">全部日期</option>
+                <option value="2024">2024</option>
+                <option value="2023">2023</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchCode('');
+                setFilterType('all');
+                setFilterHouse('all');
+                setFilterDateRange('all');
+              }}
+              className={fluentButton('secondary')}
+            >
+              清空筛选
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">源头所属地块/大棚</label>
-            <select value={filterHouse} onChange={(e) => setFilterHouse(e.target.value)} className="w-48 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-              <option value="all">所有源头区域记录</option>
-              <option value="A区">云岭 A区-温室大棚</option>
-              <option value="B区">云岭 B区-露地防寒林</option>
-              <option value="C区">科创 C区-组培研发站</option>
-              <option value="D区">农大 D区-试验改良田</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">批次创建时间跨度</label>
-            <select value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} className="w-48 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all">
-              <option value="all">全时间段沉淀</option>
-              <option value="2024">2024 自然年度</option>
-              <option value="2023">2023 自然年度</option>
-            </select>
-          </div>
-          <div className="flex-1"></div>
         </div>
       )}
 
-      <div className="p-0 bg-slate-50/30">
+      <div hidden aria-hidden="true" className="p-0 bg-slate-50/30">
         {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
         {error && (
           <div className="p-8 text-center text-rose-500 text-sm">
@@ -617,23 +828,23 @@ export default function BatchAdmin() {
 
       {/* 分页器 */}
       {filteredData.length > 0 && (
-        <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-3 flex items-center justify-between">
-          <div className="text-xs text-slate-500 font-medium">
-            共 <span className="font-bold text-slate-700">{filteredData.length}</span> 个批次,第 {page} / {totalPages} 页
+        <div className="flex shrink-0 flex-col gap-3 border-t border-[#E1DFDD] bg-white px-5 py-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-xs text-[#605E5C]">
+            共 <span className="font-semibold text-[#242424]">{filteredData.length}</span> 个批次，第 {page} / {totalPages} 页
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className={fluentButton('secondary')}
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> 上一页
+              <ChevronLeft className="h-3.5 w-3.5" /> 上一页
             </button>
             {Array.from({ length: totalPages }).map((_, i) => i + 1).map(p => (
               <button
                 key={p}
                 onClick={() => setPage(p)}
-                className={`min-w-[32px] px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${p === page ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 border border-slate-200 bg-white hover:bg-slate-50'}`}
+                className={`h-8 min-w-8 rounded-[4px] border px-2 text-sm font-semibold transition-colors ${p === page ? 'border-[#0078D4] bg-[#0078D4] text-white' : 'border-[#C8C6C4] bg-white text-[#242424] hover:bg-[#F3F2F1]'}`}
               >
                 {p}
               </button>
@@ -641,9 +852,9 @@ export default function BatchAdmin() {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className={fluentButton('secondary')}
             >
-              下一页 <ChevronRight className="w-3.5 h-3.5" />
+              下一页 <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
