@@ -3,64 +3,24 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
 import { showToast } from '../hooks/useToast';
-import { listBatches, createBatch, getBatchLifecycle, deleteBatch, type Batch } from '../api/batches';
+import { listBatches, createBatch, getBatchLifecycle, deleteBatch } from '../api/batches';
 import { listFields, type Field } from '../api/fields';
 import { createTraceGenerationRequestKey, generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
 import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
-
-interface ViewBatch {
-  id: string;
-  code: string;
-  type: string;
-  date: string;
-  house: string;
-  owner: string;
-  stage: string;
-  color: string;
-  inputCost: number;
-  laborCost: number;
-  sellPrice: number;
-  generated: number;
-  scanTotal: number;
-}
-
-const STATUS_COLOR: Record<string, string> = {
-  [BatchStatus.PLANTING]: 'cyan',
-  [BatchStatus.GROWING]: 'emerald',
-  [BatchStatus.HARVESTED]: 'amber',
-  [BatchStatus.DISTRIBUTED]: 'indigo',
-};
-
-// 生长阶段中文展示。
-const STATUS_LABEL: Record<string, string> = {
-  [BatchStatus.PLANTING]: '种植中',
-  [BatchStatus.GROWING]: '生长中',
-  [BatchStatus.HARVESTED]: '已收获',
-  [BatchStatus.DISTRIBUTED]: '已分销',
-};
-
-const PAGE_SIZE = 10;
-
-function toViewBatch(b: Batch): ViewBatch {
-  return {
-    id: b.id,
-    code: b.batchNo,
-    type: b.cropName,
-    date: b.plantDate.slice(0, 10),
-    house: b.fieldId.slice(0, 8),
-    owner: b.ownerName ?? '—',
-    stage: b.status,
-    color: STATUS_COLOR[b.status] ?? 'slate',
-    inputCost: b.inputCost,
-    laborCost: b.laborCost,
-    sellPrice: b.sellPrice,
-    generated: b.codeCount,
-    scanTotal: b.scanTotal,
-  };
-}
+import {
+  PAGE_SIZE,
+  STATUS_LABEL,
+  calculateMargin,
+  filterBatches,
+  paginateBatches,
+  statusTone,
+  toBatchExportRows,
+  toViewBatch,
+  type ViewBatch,
+} from './BatchAdmin.model';
 
 export default function BatchAdmin() {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches);
@@ -74,26 +34,17 @@ export default function BatchAdmin() {
   const [filterDateRange, setFilterDateRange] = useState('all');
 
   // computed
-  const filteredData = useMemo(() => {
-    return batches.filter(b => {
-      const matchCode = searchCode ? b.code.toLowerCase().includes(searchCode.toLowerCase()) : true;
-      const matchType = filterType === 'all' ? true : b.type.includes(filterType);
-      const matchHouse = filterHouse === 'all' ? true : b.house.includes(filterHouse);
-      
-      let matchDate = true;
-      if (filterDateRange === '2024') matchDate = b.date.startsWith('2024');
-      if (filterDateRange === '2023') matchDate = b.date.startsWith('2023');
-
-      return matchCode && matchType && matchHouse && matchDate;
-    });
-  }, [searchCode, filterType, filterHouse, filterDateRange, batches]);
+  const filteredData = useMemo(
+    () => filterBatches(batches, { searchCode, filterType, filterHouse, filterDateRange }),
+    [searchCode, filterType, filterHouse, filterDateRange, batches],
+  );
 
   // 客户端分页:数据已全量拉取,仅在前端切片。
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(filteredData.length / PAGE_SIZE));
   useEffect(() => { setPage(1); }, [searchCode, filterType, filterHouse, filterDateRange]);
   const pagedData = useMemo(
-    () => filteredData.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    () => paginateBatches(filteredData, page, PAGE_SIZE),
     [filteredData, page],
   );
 
@@ -185,10 +136,6 @@ export default function BatchAdmin() {
   };
 
   // 计算批次毛利率文本,供 CSV 导出复用。
-  const marginText = (input: number, labor: number, sell: number) => {
-    if (sell === 0) return '待分销预测';
-    return `${(((sell - (input + labor)) / sell) * 100).toFixed(1)}%`;
-  };
 
   const handleExport = (format: 'pdf' | 'excel') => {
     setExportDropdownOpen(false);
@@ -209,11 +156,7 @@ export default function BatchAdmin() {
         try {
           if (format === 'excel') {
             const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
-            const rows = targets.map(b => [
-              b.code, b.type, b.date, b.house, b.owner, b.stage,
-              b.generated, b.scanTotal, b.inputCost, b.laborCost, b.sellPrice,
-              marginText(b.inputCost, b.laborCost, b.sellPrice),
-            ]);
+            const rows = toBatchExportRows(targets);
             downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
             showToast(`已导出 ${targets.length} 个批次的 Excel 数据报表`);
           } else {
@@ -273,12 +216,6 @@ export default function BatchAdmin() {
     });
   };
 
-  const calculateMargin = (input: number, labor: number, sell: number) => {
-    const totalCost = input + labor;
-    if (sell === 0) return { margin: 0, text: '待分销预测', expectedSell: totalCost * 1.5 };
-    const margin = ((sell - totalCost) / sell) * 100;
-    return { margin, text: `${margin.toFixed(1)}%`, expectedSell: sell };
-  };
 
   const activeBatch = batches.find(b => b.id === showQrModal);
 
@@ -378,11 +315,6 @@ export default function BatchAdmin() {
   };
 
   const closeDelete = () => { setDeleteTarget(null); setForceConfirm(false); };
-  const statusTone = (stage: string): 'active' | 'success' | 'warning' | 'neutral' | 'danger' => {
-    if (stage === BatchStatus.HARVESTED || stage === BatchStatus.DISTRIBUTED) return 'success';
-    if (stage === BatchStatus.GROWING || stage === BatchStatus.PLANTING) return 'active';
-    return 'neutral';
-  };
 
   return (
     <div className="relative flex flex-col overflow-visible rounded-[6px] border border-[#E1DFDD] bg-white shadow-sm">
