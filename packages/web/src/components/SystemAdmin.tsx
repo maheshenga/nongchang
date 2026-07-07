@@ -7,6 +7,7 @@ import { showToast } from '../hooks/useToast';
 import { listAgents, createAgent, type Agent as ApiAgent } from '../api/agents';
 import type { CreateAgentDto } from '@nongchang/shared';
 import DemoBadge from './DemoBadge';
+import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 
 function toUiAgent(a: ApiAgent): Agent {
   return {
@@ -88,7 +89,7 @@ export default function SystemAdmin() {
       {showCreateAgent && <CreateAgentModal onClose={() => setShowCreateAgent(false)} onCreated={() => { setShowCreateAgent(false); void reloadAgents(); }} />}
       {/* System Command Center Header */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-white rounded-2xl p-6 text-slate-800 shadow-sm border border-slate-200 relative overflow-hidden">
+        <div className="xl:col-span-2 bg-white rounded-[6px] p-6 text-slate-800 shadow-sm border border-slate-200 relative overflow-hidden">
           <div className="flex justify-between items-start mb-6 relative z-10">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
@@ -111,7 +112,7 @@ export default function SystemAdmin() {
               { label: '接口性能', description: '待接入真实网关延迟与错误率指标' },
               { label: '商户在线', description: '待接入真实商户会话或设备心跳数据' },
             ].map((item) => (
-              <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div key={item.label} className="rounded-[4px] border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs font-bold text-slate-500">{item.label}</div>
                 <div className="mt-2 text-sm font-semibold text-slate-800">待接入</div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
@@ -121,25 +122,25 @@ export default function SystemAdmin() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
+          <div className="bg-white rounded-[6px] border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
             <p className="text-xs text-slate-500 font-medium mb-2">监控数据源</p>
             <div className="text-lg font-black text-slate-800 tracking-tight">未配置</div>
             <div className="mt-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded w-max font-bold">等待后端接入</div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
+          <div className="bg-white rounded-[6px] border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
             <p className="text-xs text-slate-500 font-medium mb-2">自动化告警</p>
             <div className="text-lg font-black text-slate-800 tracking-tight">未启用</div>
             <div className="mt-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded w-max font-bold">不生成模拟告警</div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
+          <div className="bg-white rounded-[6px] border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
             <p className="text-xs text-slate-500 font-medium mb-2">运营审批提醒</p>
             <div className="text-lg font-black text-slate-800 tracking-tight">待接入</div>
             <div className="mt-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded w-max font-bold">不伪造未读数量</div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
+          <div className="bg-white rounded-[6px] border border-slate-200 p-5 shadow-sm flex flex-col justify-center">
             <p className="text-xs text-slate-500 font-medium mb-2">归档自动化</p>
             <div className="text-lg font-black text-slate-800 tracking-tight">未接入</div>
             <div className="mt-2 text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded w-max font-bold">需真实任务状态</div>
@@ -150,7 +151,7 @@ export default function SystemAdmin() {
         {/* Left Column: Configs */}
         <div className="space-y-6">
           {/* Global Feature Management */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="bg-white p-5 rounded-[6px] border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-lg">
@@ -170,7 +171,7 @@ export default function SystemAdmin() {
                 { name: '消费者端防伪溯源 H5', note: '需接入真实扫码统计与访问分析接口', action: '消费者端防伪溯源 H5' },
                 { name: '跨国节点多语言支持', note: '模块尚未激活，需部署海外边缘节点', action: '跨国节点多语言支持' },
               ].map((feature) => (
-                <div key={feature.name} className="group flex flex-col p-4 rounded-xl border border-slate-200 bg-slate-50/70 gap-3 transition-colors hover:bg-slate-50">
+                <div key={feature.name} className="group flex flex-col p-4 rounded-[4px] border border-slate-200 bg-[#FAFAFA] gap-3 transition-colors hover:bg-slate-50">
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2.5">
                       <div className="w-2 h-2 rounded-full bg-slate-300"></div>
@@ -192,7 +193,7 @@ export default function SystemAdmin() {
             </div>
           </div>
           {/* Permission & Approval Config */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="bg-white p-5 rounded-[6px] border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-blue-50 text-blue-600 rounded-lg">
@@ -213,7 +214,7 @@ export default function SystemAdmin() {
               ].map((flow, i) => (
                 <div 
                   key={i} 
-                  className="group flex flex-col p-4 rounded-xl border border-slate-100 bg-slate-50/50 gap-2.5 hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-all hover:shadow-sm"
+                  className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-slate-50/50 gap-2.5 hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-all hover:shadow-sm"
                   onClick={() => handleSensitiveAction(`修改 [${flow.role}] 审批流`)}
                 >
                   <div className="flex justify-between items-center mb-0.5">
@@ -236,7 +237,7 @@ export default function SystemAdmin() {
               
               <button 
                 onClick={() => handleSensitiveAction('添加新审批流')}
-                className="w-full py-2.5 mt-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl text-xs font-bold hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                className="w-full py-2.5 mt-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-[4px] text-xs font-bold hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
               >
                 + 添加新业务审批流
               </button>
@@ -244,7 +245,7 @@ export default function SystemAdmin() {
           </div>
 
           {/* Global Configuration Panel */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="bg-white p-5 rounded-[6px] border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-slate-100 text-slate-600 rounded-lg">
@@ -258,7 +259,7 @@ export default function SystemAdmin() {
             </div>
 
             <div className="space-y-3">
-              <div className="group flex flex-col p-4 rounded-xl border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
+              <div className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
                  <div className="flex justify-between items-center">
                    <div className="text-sm font-bold text-slate-800">强制全员双重认证 (2FA)</div>
                    <button onClick={() => handleSensitiveAction('强制全员双重认证 (2FA)')} className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
@@ -268,7 +269,7 @@ export default function SystemAdmin() {
                  </div>
                  <div className="text-[10px] text-slate-500">强制要求所有商家/代理商账单登录时启用二次面容或短信验证，防范撞库攻击。</div>
               </div>
-              <div className="group flex flex-col p-4 rounded-xl border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
+              <div className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
                  <div className="flex justify-between items-center">
                    <div className="text-sm font-bold text-slate-800">严格防伪溯源流转模式</div>
                    <button onClick={() => handleSensitiveAction('严格防伪溯源流转模式')} className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
@@ -282,7 +283,7 @@ export default function SystemAdmin() {
               <div className="h-px w-full bg-slate-100 my-2"></div>
               
               <button 
-                 className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm"
+                 className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-[4px] text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm"
                  onClick={() => handleSensitiveAction('立即触发全量区块链快照备份')}
               >
                  <DatabaseBackup className="w-4 h-4 text-emerald-600" />
@@ -293,7 +294,7 @@ export default function SystemAdmin() {
         </div>
 
         {/* Right Column: Agents & Distributors List */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[760px] overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-[6px] border border-slate-200 shadow-sm flex flex-col h-[760px] overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
             <div>
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -328,10 +329,10 @@ export default function SystemAdmin() {
                    批量注销
                  </button>
               </div>
-              <button onClick={() => setShowCreateAgent(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs transition-colors shadow-sm font-bold">
+              <button onClick={() => setShowCreateAgent(true)} className={fluentButton('primary')}>
                 新增代理
               </button>
-              <button className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-1.5 rounded-lg text-xs transition-colors shadow-sm font-medium">
+              <button className={fluentButton('secondary')}>
                 <Download className="w-3.5 h-3.5 text-slate-500" />
                 导出数据
               </button>
@@ -346,13 +347,13 @@ export default function SystemAdmin() {
                 placeholder="搜索网络节点名称 / 负责人 / 流通区域..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/50"
+                className={`${fluentInput} w-full pl-9`}
               />
             </div>
              <select 
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 bg-slate-50/50 font-medium text-slate-600">
+                className={fluentSelect}>
                 <option value="all">所有网络状态</option>
                 <option value="active">正常运作节点</option>
                 <option value="pending">待审批加入网络</option>
@@ -361,7 +362,7 @@ export default function SystemAdmin() {
              <select 
                 value={levelFilter}
                 onChange={(e) => setLevelFilter(e.target.value)}
-                className="px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 bg-slate-50/50 font-medium text-slate-600">
+                className={fluentSelect}>
                 <option value="all">分级网络 (全部级别)</option>
                 <option value="一级代理">L1 核心代理节点 (一级代理)</option>
                 <option value="二级代理">L2 区域分销节点 (二级代理)</option>
@@ -372,10 +373,10 @@ export default function SystemAdmin() {
           <div className="flex-1 overflow-x-auto p-0 min-h-0 bg-slate-50/30">
              {agentsLoading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
              {agentsError && <div className="p-8 text-center text-rose-500 text-sm">{agentsError} <button onClick={() => void reloadAgents()} className="underline font-bold ml-2">重试</button></div>}
-             <table className="w-full text-left whitespace-nowrap">
-              <thead className="text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 sticky top-0 border-b border-slate-200 z-10 backdrop-blur-sm">
+             <table className={fluentTable.table}>
+              <thead className={fluentTable.thead}>
                 <tr>
-                  <th className="px-6 py-4 font-bold border-l-2 border-transparent w-12">
+                  <th className={`${fluentTable.th} w-12`}>
                     <input
                       type="checkbox"
                       checked={selectedAgents.size === filteredAgents.length && filteredAgents.length > 0}
@@ -383,19 +384,19 @@ export default function SystemAdmin() {
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-6 py-4 font-bold">代理商机构识别信息</th>
-                  <th className="px-6 py-4 font-bold">网络级别及上游节点</th>
-                  <th className="px-6 py-4 font-bold">授权流通区域</th>
-                  <th className="px-6 py-4 font-bold">异常扫码监控阈值</th>
-                  <th className="px-6 py-4 font-bold">节点流通量/销售业绩估算</th>
-                  <th className="px-6 py-4 font-bold">连通状态</th>
-                  <th className="px-6 py-4 font-bold cursor-pointer text-right">操作管理</th>
+                  <th className={fluentTable.th}>代理商机构识别信息</th>
+                  <th className={fluentTable.th}>网络级别及上游节点</th>
+                  <th className={fluentTable.th}>授权流通区域</th>
+                  <th className={fluentTable.th}>异常扫码监控阈值</th>
+                  <th className={fluentTable.th}>节点流通量/销售业绩估算</th>
+                  <th className={fluentTable.th}>连通状态</th>
+                  <th className={`${fluentTable.th} text-right`}>操作管理</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/80">
                 {filteredAgents.map((agent) => (
-                  <tr key={agent.id} className="hover:bg-blue-50/20 transition-colors group">
-                    <td className="px-6 py-4 border-l-2 border-transparent group-hover:border-blue-500">
+                  <tr key={agent.id} className={`${fluentTable.row} group`}>
+                    <td className={`${fluentTable.td} border-l-2 border-transparent group-hover:border-blue-500`}>
                       <input 
                         type="checkbox" 
                         checked={selectedAgents.has(agent.id)}
@@ -403,30 +404,30 @@ export default function SystemAdmin() {
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className={fluentTable.td}>
                       <div className="font-bold text-slate-800 text-sm">{agent.name}</div>
                       <div className="text-[10px] text-slate-400 mt-1 font-mono hover:text-blue-600 transition-colors cursor-pointer w-max">Node ID: {agent.id}</div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className={fluentTable.td}>
                       <div className="flex flex-col gap-1.5 flex-start">
                         <span className="font-bold text-blue-700 bg-blue-100 w-max px-2.5 py-1 rounded-md text-[10px] border border-blue-200 uppercase tracking-widest shadow-sm">{agent.level}</span>
                         {agent.parent && <span className="text-[10px] text-slate-500 flex items-center gap-1 font-medium"><span className="w-1.5 h-1.5 bg-slate-300 rounded-full group-hover:bg-blue-400 transition-colors"></span> 上级: {agent.parent}</span>}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600 text-xs font-medium max-w-[150px] truncate" title={agent.region}>{agent.region}</td>
-                    <td className="px-6 py-4">
+                    <td className={`${fluentTable.td} max-w-[150px] truncate text-xs text-[#605E5C]`} title={agent.region}>{agent.region}</td>
+                    <td className={fluentTable.td}>
                       <div className="flex items-center gap-2">
-                        <input type="number" defaultValue="5000" className="w-[80px] border border-slate-200 rounded-md px-2 py-1.5 text-xs text-slate-700 font-mono font-bold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-sm bg-white" />
+                        <input type="number" defaultValue="5000" className={`${fluentInput} w-[80px] font-mono font-bold`} />
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">次 / 异常</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-mono text-emerald-600 font-black text-sm">¥ {agent.sales.toLocaleString()}</td>
-                    <td className="px-6 py-4">
-                      {agent.status === 'Active' && <span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2.5 py-1 border border-emerald-200/60 rounded-md text-[10px] font-bold uppercase tracking-widest shadow-sm"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"/> 正常在网</span>}
-                      {agent.status === 'Pending' && <span className="inline-flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 border border-amber-200/60 rounded-md text-[10px] font-bold uppercase tracking-widest shadow-sm"><div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0"/> 接入审核中</span>}
-                      {agent.status === 'Inactive' && <span className="inline-flex items-center gap-1.5 text-slate-600 bg-slate-100 px-2.5 py-1 border border-slate-200 rounded-md text-[10px] font-bold uppercase tracking-widest shadow-sm"><div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"/> 连接处于冻结/断开</span>}
+                    <td className={`${fluentTable.td} text-sm font-semibold text-[#107C10]`}>¥ {agent.sales.toLocaleString()}</td>
+                    <td className={fluentTable.td}>
+                      {agent.status === 'Active' && <span className={fluentStatusTag('success')}>正常在网</span>}
+                      {agent.status === 'Pending' && <span className={fluentStatusTag('warning')}>接入审核中</span>}
+                      {agent.status === 'Inactive' && <span className={fluentStatusTag('neutral')}>连接处于冻结/断开</span>}
                     </td>
-                    <td className="px-6 py-4 text-right opacity-80 group-hover:opacity-100 transition-opacity">
+                    <td className={`${fluentTable.td} text-right`}>
                       <div className="flex items-center justify-end gap-2">
                         <button className="text-[10px] text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors font-bold uppercase tracking-wider" onClick={() => handleSensitiveAction(`查看 [${agent.name}] 流水日记`)}>下级数据穿透</button>
                         <button className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-100 px-3 py-1.5 rounded-lg shadow-sm transition-colors font-bold uppercase tracking-wider" onClick={() => handleSensitiveAction(`配置 [${agent.name}] 额度权限`)}>调整权属</button>
@@ -445,7 +446,7 @@ export default function SystemAdmin() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         {/* Environment Monitor */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+        <div className="bg-white rounded-[6px] border border-slate-200 shadow-sm flex flex-col overflow-hidden">
           <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50">
              <div>
                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-base">
@@ -458,23 +459,23 @@ export default function SystemAdmin() {
              </div>
           </div>
           <div className="p-5 flex flex-col gap-4 bg-slate-50 flex-1">
-             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+             <div className="rounded-[4px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                当前未配置仓储传感器数据源。请接入真实 IoT / WMS 监控 API 后，再启用温湿度阈值、告警和自动化处置展示。
              </div>
              <div className="flex flex-col gap-4">
                 {['冷库 B 区 (鲜切花暂存区)', '冷库 A 区 (干茎与繁育种球)'].map((name) => (
-                  <div key={name} className="p-5 border border-slate-200 bg-white shadow-sm rounded-xl transition-colors">
+                  <div key={name} className="p-5 border border-slate-200 bg-white shadow-sm rounded-[4px] transition-colors">
                     <div className="text-sm font-bold text-slate-700 mb-4 flex justify-between items-center">
                       <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-slate-300"></div>{name}</span>
                       <span className="text-slate-600 text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded border border-slate-200">待接入</span>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                       <div className="p-4 rounded-[4px] bg-slate-50 border border-slate-100">
                          <div className="text-xs text-slate-500 mb-1 font-medium">温度数据</div>
                          <div className="text-base font-bold text-slate-700">暂无实时数据</div>
                          <div className="text-[10px] text-slate-400 mt-2 tracking-wide">等待真实传感器接口</div>
                        </div>
-                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                       <div className="p-4 rounded-[4px] bg-slate-50 border border-slate-100">
                          <div className="text-xs text-slate-500 mb-1 font-medium">湿度数据</div>
                          <div className="text-base font-bold text-slate-700">暂无实时数据</div>
                          <div className="text-[10px] text-slate-400 mt-2 tracking-wide">等待真实传感器接口</div>
@@ -486,7 +487,7 @@ export default function SystemAdmin() {
           </div>
         </div>
       {/* Inventory & Consumable Write-off Module */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+      <div className="bg-white rounded-[6px] border border-slate-200 shadow-sm flex flex-col overflow-hidden">
         <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50 gap-4 flex-col sm:flex-row">
            <div>
              <h3 className="font-bold text-slate-800 flex items-center gap-2 text-base">
@@ -497,19 +498,19 @@ export default function SystemAdmin() {
              </h3>
              <p className="text-xs text-slate-500 mt-1">暂无真实库存、核销、预警或请购自动化接口；接入 WMS/ERP 后再展示库存水位和处置状态。</p>
            </div>
-          <button onClick={() => handleSensitiveAction('手工盘点录入入口')} className="text-xs bg-white text-slate-700 px-4 py-2.5 rounded-xl font-bold hover:bg-slate-50 transition-colors border border-slate-200 shadow-sm whitespace-nowrap">
+          <button onClick={() => handleSensitiveAction('手工盘点录入入口')} className={fluentButton('secondary')}>
             手工盘点录入入口
           </button>
         </div>
         <div className="p-5 bg-slate-50">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <div className="rounded-[4px] border border-slate-200 bg-white p-5 text-sm text-slate-600">
             库存台账、耗材核销、低库存提醒和自动请购需要真实后端数据源。当前页面不展示模拟库存数量或自动化结论。
           </div>
         </div>
       </div>
       </div>
       {/* System Audit Logs */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col mt-6 overflow-hidden">
+      <div className="bg-white rounded-[6px] border border-slate-200 shadow-sm flex flex-col mt-6 overflow-hidden">
         <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between sm:items-center bg-slate-50 gap-4">
            <div>
              <h3 className="font-bold text-slate-800 flex items-center gap-2 text-base">
@@ -520,13 +521,13 @@ export default function SystemAdmin() {
              </h3>
              <p className="text-xs text-slate-500 mt-1">暂无真实审计日志接口。接入后端审计服务前，不展示模拟账号、IP、交易哈希或成功状态。</p>
            </div>
-           <button onClick={() => handleSensitiveAction('导出审计报告')} className="text-xs border border-slate-200 text-slate-700 bg-white px-4 py-2.5 rounded-xl hover:bg-slate-50 hover:text-indigo-600 transition-colors shadow-sm font-bold whitespace-nowrap flex items-center gap-2">
+           <button onClick={() => handleSensitiveAction('导出审计报告')} className={fluentButton('secondary')}>
              <Download className="w-3.5 h-3.5 text-slate-400" />
              导出报告待接入
            </button>
         </div>
         <div className="p-5 bg-slate-50">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <div className="rounded-[4px] border border-slate-200 bg-white p-5 text-sm text-slate-600">
             操作审计、留存策略和报告导出均需真实后端接口支持。当前仅保留安全二次确认入口，不伪造历史日志。
           </div>
         </div>
@@ -534,7 +535,7 @@ export default function SystemAdmin() {
       {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[6px] shadow-xl w-full max-w-md overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
@@ -542,14 +543,14 @@ export default function SystemAdmin() {
                 </div>
                 <h3 className="font-bold text-slate-800 text-lg">安全二次确认</h3>
               </div>
-              <button onClick={() => setShowConfirmModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
+              <button onClick={() => setShowConfirmModal(false)} className={fluentButton('icon')}>
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 bg-slate-50/50">
               <p className="text-sm text-slate-600 mb-4">
                 您正在尝试进行敏感权限操作：<br/>
-                <span className="font-bold text-slate-800 block mt-3 p-4 bg-white rounded-xl border border-amber-200 shadow-sm text-base text-center">
+                <span className="font-bold text-slate-800 block mt-3 p-4 bg-white rounded-[4px] border border-amber-200 shadow-sm text-base text-center">
                   {actionPending}
                 </span>
               </p>
@@ -561,13 +562,13 @@ export default function SystemAdmin() {
             <div className="p-5 bg-white border-t border-slate-100 flex justify-end gap-3">
               <button 
                 onClick={() => setShowConfirmModal(false)}
-                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                className={fluentButton('secondary')}
               >
                 取消
               </button>
               <button
                 onClick={confirmAction}
-                className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors shadow-sm focus:ring-4 focus:ring-amber-500/20 flex items-center gap-2"
+                className={fluentButton('danger')}
               >
                 确认并执行操作
               </button>
@@ -598,28 +599,28 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   };
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="create-agent-title">
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+      <form onSubmit={submit} className="bg-white rounded-[6px] shadow-sm w-full max-w-md p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 id="create-agent-title" className="font-bold text-slate-800 text-lg">新增代理商</h3>
-          <button type="button" onClick={onClose} aria-label="关闭" className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors">
+          <button type="button" onClick={onClose} aria-label="关闭" className={fluentButton('icon')}>
             <X className="w-5 h-5" />
           </button>
         </div>
         <div>
           <label htmlFor="create-agent-name" className="block text-xs font-bold text-slate-500">名称</label>
           <input id="create-agent-name" value={name} onChange={(e) => setName(e.target.value)} required
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            className={`${fluentInput} mt-1 w-full`} />
         </div>
         <div>
           <label htmlFor="create-agent-region" className="block text-xs font-bold text-slate-500">区域</label>
           <input id="create-agent-region" value={region} onChange={(e) => setRegion(e.target.value)} required
-            className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+            className={`${fluentInput} mt-1 w-full`} />
         </div>
         {err && <p className="text-rose-500 text-xs">{err}</p>}
         <div className="flex justify-end gap-3 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600">取消</button>
+          <button type="button" onClick={onClose} className={fluentButton('secondary')}>取消</button>
           <button type="submit" disabled={submitting}
-            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50">
+            className={fluentButton('primary')}>
             {submitting ? '提交中…' : '创建'}
           </button>
         </div>
