@@ -1,5 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ComposedChart, BarChart, Bar } from 'recharts';
-import { Sprout, ScanLine, Smartphone, Layers, AlertTriangle, Thermometer, Bug, FileSpreadsheet, MapPin, Clock, Sparkles, Map, Loader2, Calendar, X, ImageIcon, Mail, AlertOctagon, FileBadge, Image as ImageIcon2, QrCode, PenTool, CloudRainWind, CheckCircle2, CheckCircle, ChevronsRightLeft } from 'lucide-react';
+import { Sprout, ScanLine, Smartphone, Layers, ArrowLeft, AlertTriangle, Thermometer, Bug, FileSpreadsheet, MapPin, Clock, Sparkles, Map, Loader2, Calendar, X, ImageIcon, Mail, AlertOctagon, FileBadge, Image as ImageIcon2, QrCode, PenTool, CloudRainWind, CheckCircle2, CheckCircle, ChevronsRightLeft } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
@@ -102,7 +102,57 @@ const plotYieldData = [
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6'];
 
+function ProductionDashboardStatus({ onEnterDemo }: { onEnterDemo: () => void }) {
+  return (
+    <div className="flex h-full min-h-[520px] flex-col gap-4 bg-white p-6">
+      <div className="rounded-lg border border-[#E1DFDD] bg-[#FAFAFA] p-5">
+        <div className="text-xs font-semibold uppercase text-[#605E5C]">Production mode</div>
+        <h2 className="mt-2 text-2xl font-semibold text-[#242424]">生产数据看板</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[#605E5C]">
+          当前页面已进入生产默认模式。系统不会把模拟 AI 预测、模拟自动刷新或硬编码经营指标展示为真实运营数据。
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <section className="rounded-lg border border-[#E1DFDD] bg-white p-4">
+          <h3 className="text-sm font-semibold text-[#242424]">真实数据接入状态</h3>
+          <p className="mt-2 text-sm text-[#605E5C]">批次、农事、溯源扫码、额度消耗等数据已有业务模块承载。</p>
+        </section>
+        <section className="rounded-lg border border-[#E1DFDD] bg-white p-4">
+          <h3 className="text-sm font-semibold text-[#242424]">模拟能力隔离</h3>
+          <p className="mt-2 text-sm text-[#605E5C]">AI 预测、PDF 报告、自动预警等演示动作仅在显式进入演示看板后出现。</p>
+        </section>
+        <section className="rounded-lg border border-[#E1DFDD] bg-white p-4">
+          <h3 className="text-sm font-semibold text-[#242424]">下一步接入</h3>
+          <p className="mt-2 text-sm text-[#605E5C]">后续可新增真实聚合 API，把这里替换为生产 KPI、趋势图和告警。</p>
+        </section>
+      </div>
+
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        演示看板仍可用于售前或内部评审，但必须带有演示标识，避免和生产数据混淆。
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={onEnterDemo}
+          className="inline-flex h-9 items-center rounded-[4px] bg-[#0078D4] px-4 text-sm font-semibold text-white hover:bg-[#106EBE]"
+        >
+          进入演示看板
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
+  const [dashboardMode, setDashboardMode] = useState<'production' | 'demo'>('production');
+  return dashboardMode === 'production'
+    ? <ProductionDashboardStatus onEnterDemo={() => setDashboardMode('demo')} />
+    : <DashboardDemo onExitDemo={() => setDashboardMode('production')} />;
+}
+
+function DashboardDemo({ onExitDemo }: { onExitDemo: () => void }) {
   const [exportRange, setExportRange] = useState('7days');
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingGantt, setIsExportingGantt] = useState(false);
@@ -325,6 +375,13 @@ export default function Dashboard() {
         <h2 className="font-bold text-slate-800 flex items-center gap-2">可拖拽自定义监控看板 <DemoBadge /></h2>
         <div className="flex items-center gap-3">
           <span className="text-slate-500">所有卡片均可拖拽排序改变布局</span>
+          <button
+             type="button"
+             onClick={onExitDemo}
+             className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+          >
+             <ArrowLeft className="h-3 w-3" /> 返回生产状态
+          </button>
           <button 
              onClick={() => setIsPdfModalOpen(true)}
              className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded transition-colors hover:bg-indigo-100 font-medium shadow-sm"
