@@ -7,10 +7,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
 
 describe('public metadata', () => {
-  it('uses production SaaS title and description instead of scaffold placeholders', () => {
-    expect(html).toContain('<title>农业溯源 SaaS 平台');
+  it('uses readable production SaaS title and description instead of scaffold or mojibake placeholders', () => {
+    expect(html).toContain('<title>农业溯源 SaaS 平台 | 农场生产、资质存证与一物一码管理</title>');
     expect(html).toContain('name="description"');
+    expect(html).toContain('农业溯源 SaaS 平台提供农场生产管理');
     expect(html).not.toContain('My Google AI Studio App');
+    expect(html).not.toMatch(/鍐|鐢|绉|骞|鎴|�/);
   });
 
   it('includes share and crawl metadata for the public shell', () => {
