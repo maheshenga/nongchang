@@ -6,12 +6,23 @@ const apiMocks = vi.hoisted(() => ({
   listFields: vi.fn(),
   listFarmRecords: vi.fn(),
 }));
+const demoModuleMock = vi.hoisted(() => ({ imports: 0 }));
 
 vi.mock('../api/batches', () => ({ listBatches: apiMocks.listBatches }));
 vi.mock('../api/fields', () => ({ listFields: apiMocks.listFields }));
 vi.mock('../api/farm-records', () => ({ listFarmRecords: apiMocks.listFarmRecords }));
 
-import Dashboard from './Dashboard';
+vi.mock('./DashboardDemo', () => {
+  demoModuleMock.imports += 1;
+  return {
+    default: ({ onExitDemo }: { onExitDemo: () => void }) => (
+      <div>
+        <div>Lazy Demo Dashboard</div>
+        <button type="button" onClick={onExitDemo}>Return from lazy demo</button>
+      </div>
+    ),
+  };
+});
 
 vi.mock('react-grid-layout/legacy', () => ({
   Responsive: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -50,6 +61,8 @@ vi.mock('./AntiFakeMonitor', () => ({
   default: () => <div>防伪监控演示占位</div>,
 }));
 
+import Dashboard from './Dashboard';
+
 beforeAll(() => {
   class ResizeObserverMock {
     observe() {}
@@ -66,6 +79,7 @@ beforeEach(() => {
   apiMocks.listBatches.mockReset();
   apiMocks.listFields.mockReset();
   apiMocks.listFarmRecords.mockReset();
+  demoModuleMock.imports = 0;
 
   apiMocks.listBatches.mockResolvedValue([
     { id: 'b1', batchNo: 'B-001', cropName: '番茄', status: 'growing', scanTotal: 4 },
@@ -98,6 +112,18 @@ describe('Dashboard truthfulness boundary', () => {
     expect(screen.queryByText('供应链金融数据分析 (信用与回款)')).toBeNull();
   });
 
+  it('lazy-loads the demo dashboard only after explicit opt-in', async () => {
+    render(<Dashboard />);
+
+    expect(await screen.findByText('Production mode')).toBeTruthy();
+    expect(demoModuleMock.imports).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: '\u8fdb\u5165\u6f14\u793a\u770b\u677f' }));
+
+    expect(await screen.findByText('Lazy Demo Dashboard')).toBeTruthy();
+    expect(demoModuleMock.imports).toBe(1);
+  });
+
   it('shows a retryable error when production data fails to load', async () => {
     apiMocks.listBatches.mockRejectedValueOnce(new Error('Batch API down'));
 
@@ -115,23 +141,15 @@ describe('Dashboard truthfulness boundary', () => {
   it('requires explicit demo opt-in and can return to the production boundary', async () => {
     render(<Dashboard />);
 
-    expect(await screen.findByText(/数据来源：真实业务 API/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '进入演示看板' }));
+    expect(await screen.findByText('Production mode')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '\u8fdb\u5165\u6f14\u793a\u770b\u677f' }));
 
-    expect(screen.getByText(/演示数据 \/ 待接入/)).toBeTruthy();
-    expect(screen.getByText('智能种植顾问 (AI)')).toBeTruthy();
-    expect(screen.getByText('年度溯源决策报告 (PDF)')).toBeTruthy();
-    expect(screen.getByText('自动刷新: 关闭')).toBeTruthy();
-    expect(screen.getByText('供应链金融数据分析 (信用与回款)')).toBeTruthy();
-    expect(screen.getByText('返回生产状态')).toBeTruthy();
+    expect(await screen.findByText('Lazy Demo Dashboard')).toBeTruthy();
+    expect(screen.getByText('Return from lazy demo')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '返回生产状态' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Return from lazy demo' }));
 
-    expect(screen.getByText('生产数据看板')).toBeTruthy();
-    expect(await screen.findByText(/数据来源：真实业务 API/)).toBeTruthy();
-    expect(screen.queryByText('智能种植顾问 (AI)')).toBeNull();
-    expect(screen.queryByText('年度溯源决策报告 (PDF)')).toBeNull();
-    expect(screen.queryByText('自动刷新: 关闭')).toBeNull();
-    expect(screen.queryByText('供应链金融数据分析 (信用与回款)')).toBeNull();
+    expect(await screen.findByText('Production mode')).toBeTruthy();
+    expect(screen.queryByText('Lazy Demo Dashboard')).toBeNull();
   });
 });
