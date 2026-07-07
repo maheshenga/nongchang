@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMock = vi.hoisted(() => ({ role: 'platform_admin' }));
@@ -17,6 +17,7 @@ vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
+vi.mock('./components/Dashboard', () => ({ default: () => <div>Production Overview View</div> }));
 
 import App from './App';
 
@@ -44,6 +45,43 @@ describe('App role wiring', () => {
     expect(screen.queryByText('Farm Fields View')).toBeNull();
     expect(screen.queryByText('12K')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Open billing resources' })).toBeNull();
+  });
+
+  it('starts tenant business roles on the production overview', async () => {
+    authMock.role = 'merchant';
+
+    render(<App />);
+
+    expect(await screen.findByText('Production Overview View')).toBeTruthy();
+    expect(screen.queryByText('Tenant Management View')).toBeNull();
+  });
+
+  it('opens production overview from global search for system admins', async () => {
+    authMock.role = 'system_admin';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /地块管理/ }));
+    expect(await screen.findByText('Farm Fields View')).toBeTruthy();
+
+    const overviewLabel = '\u751f\u4ea7\u603b\u89c8';
+    fireEvent.change(await screen.findByPlaceholderText('\u641c\u7d22\u8d44\u6e90\u3001\u83dc\u5355\u548c\u529f\u80fd'), { target: { value: overviewLabel } });
+    fireEvent.click(await screen.findByRole('button', { name: `\u6253\u5f00 ${overviewLabel}` }));
+
+    expect(await screen.findByText('Production Overview View')).toBeTruthy();
+  });
+
+  it('does not expose production overview to platform admins or ordinary members', async () => {
+    render(<App />);
+    expect(screen.queryByText('Production Overview View')).toBeNull();
+    expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
+
+    cleanup();
+    authMock.role = 'member';
+    render(<App />);
+
+    expect(await screen.findByText('Settings View')).toBeTruthy();
+    expect(screen.queryByText('Production Overview View')).toBeNull();
+    expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
   });
 
   it('opens billing resources only for roles with billing access', async () => {
@@ -79,12 +117,13 @@ describe('App role wiring', () => {
     authMock.role = 'merchant';
     const { rerender } = render(<App />);
 
-    expect(await screen.findByText('Farm Fields View')).toBeTruthy();
+    expect(await screen.findByText('Production Overview View')).toBeTruthy();
 
     authMock.role = 'member';
     rerender(<App />);
 
     expect(await screen.findByText('Settings View')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Production Overview View')).toBeNull());
     await waitFor(() => expect(screen.queryByText('Farm Fields View')).toBeNull());
     expect(screen.queryByText('Merchant Management View')).toBeNull();
   });

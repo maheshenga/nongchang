@@ -2,6 +2,7 @@ import {
   Building2,
   FileSpreadsheet,
   Layers,
+  LayoutDashboard,
   LayoutTemplate,
   Map,
   Plug,
@@ -21,6 +22,7 @@ import {
 export type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin' | 'platform_admin' | 'member';
 
 export type AppTab =
+  | 'overview'
   | 'tenants'
   | 'fields'
   | 'merchant'
@@ -52,20 +54,21 @@ const PLATFORM_ADMIN_NAV: NavCategory[] = [
 
 const SYSTEM_ADMIN_NAV: NavCategory[] = [
   {
-    category: '平台组织管理',
-    items: [
-      { id: 'agents', label: '代理商管理', icon: Users },
-      { id: 'merchantFiles', label: '商户管理与档案', icon: Store },
-    ],
-  },
-  {
     category: '生产与供应链',
     items: [
+      { id: 'overview', label: '生产总览', icon: LayoutDashboard },
       { id: 'fields', label: '数字地块', icon: Map },
       { id: 'records', label: '农事实操记录', icon: FileSpreadsheet },
       { id: 'phenology', label: '标准物候模型', icon: Sprout },
       { id: 'batches', label: '全域批次追踪', icon: Layers },
       { id: 'logistics', label: '农资投入品管理', icon: Truck },
+    ],
+  },
+  {
+    category: '平台组织管理',
+    items: [
+      { id: 'agents', label: '代理商管理', icon: Users },
+      { id: 'merchantFiles', label: '商户管理与档案', icon: Store },
     ],
   },
   {
@@ -86,12 +89,9 @@ const SYSTEM_ADMIN_NAV: NavCategory[] = [
 
 const AGENT_ADMIN_NAV: NavCategory[] = [
   {
-    category: '代理商中心',
-    items: [{ id: 'merchantFiles', label: '旗下商家管理', icon: Store }],
-  },
-  {
     category: '业务与系统',
     items: [
+      { id: 'overview', label: '生产总览', icon: LayoutDashboard },
       { id: 'batches', label: '辖区批次追踪', icon: Layers },
       { id: 'billing', label: '算力与额度', icon: Wallet },
       { id: 'userGroups', label: '用户分组', icon: UserCog },
@@ -99,12 +99,17 @@ const AGENT_ADMIN_NAV: NavCategory[] = [
       { id: 'settings', label: '本地偏好', icon: SettingsIcon },
     ],
   },
+  {
+    category: '代理商中心',
+    items: [{ id: 'merchantFiles', label: '旗下商家管理', icon: Store }],
+  },
 ];
 
 const MERCHANT_ADMIN_NAV: NavCategory[] = [
   {
     category: '生产与档案',
     items: [
+      { id: 'overview', label: '生产总览', icon: LayoutDashboard },
       { id: 'fields', label: '我的地块管理', icon: Map },
       { id: 'merchant', label: '我的芍药档案', icon: QrCode },
       { id: 'records', label: '农事实操', icon: FileSpreadsheet },

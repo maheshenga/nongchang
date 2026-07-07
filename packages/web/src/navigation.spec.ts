@@ -39,10 +39,18 @@ describe('production navigation', () => {
     const appSource = readFileSync(resolve(__dirname, 'App.tsx'), 'utf8');
     const cssSource = readFileSync(resolve(__dirname, 'index.css'), 'utf8');
 
-    expect(appSource).not.toMatch(/Dashboard|MobileView|warehouse/);
+    expect(appSource).not.toMatch(/MobileView|warehouse/);
     expect(cssSource).not.toMatch(/MobileView|themeTheme/);
     expect(cssSource).not.toContain('{bg,text,from,to,shadow}-{emerald,purple}');
     expect(cssSource).not.toContain('text-{emerald,purple}-100/90');
+  });
+
+  it('exposes the real production overview only to tenant business roles', () => {
+    expect(idsFor('system_admin')[0]).toBe('overview');
+    expect(idsFor('agent_admin')[0]).toBe('overview');
+    expect(idsFor('merchant_admin')[0]).toBe('overview');
+    expect(idsFor('platform_admin')).not.toContain('overview');
+    expect(idsFor('member')).not.toContain('overview');
   });
 
   it('limits platform admins to tenant lifecycle navigation', () => {
@@ -59,10 +67,13 @@ describe('production navigation', () => {
   });
 
   it('falls back to the first allowed production tab for legacy or unauthorized tab strings', () => {
-    expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('fields');
+    expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('overview');
+    expect(firstAllowedTab('system_admin', 'dashboard')).toBe('overview');
+    expect(firstAllowedTab('agent_admin', 'dashboard')).toBe('overview');
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
-    expect(firstAllowedTab('agent_admin', 'fields')).toBe('merchantFiles');
+    expect(firstAllowedTab('agent_admin', 'fields')).toBe('overview');
     expect(firstAllowedTab('platform_admin', 'warehouse')).toBe('tenants');
+    expect(firstAllowedTab('member', 'dashboard')).toBe('settings');
   });
 
   it('limits ordinary members to local settings only', () => {

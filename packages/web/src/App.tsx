@@ -8,6 +8,7 @@ import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRol
 import { fluentButton } from './ui/fluent';
 
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
 const FarmRecords = lazy(() => import('./components/FarmRecords'));
 const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));
@@ -78,7 +79,7 @@ function navLabel(id: AppTab, label: string): string {
 export default function App() {
   const { user, profile, isAuthenticated, logout } = useAuth();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
-  const [activeTab, setActiveTab] = useState<AppTab>('fields');
+  const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
@@ -145,7 +146,7 @@ export default function App() {
 
   const handleLogout = () => {
     logout();
-    setActiveTab('fields');
+    setActiveTab('overview');
   };
 
   useEffect(() => {
@@ -315,6 +316,7 @@ export default function App() {
         <section className={`fluent-scrollbar min-h-0 flex-1 overflow-auto ${isPresentationMode ? 'p-0' : 'p-4 md:p-6'}`}>
           <Suspense fallback={<ViewSkeleton />}>
             <div className="h-full relative">
+              {isMounted('overview') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'overview' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Dashboard /></div>}
               {isMounted('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
               {isMounted('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
               {isMounted('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
