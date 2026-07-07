@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Package, Plus, Loader2, Trash2, Pencil, X } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { confirmDialog } from '../hooks/useDialog';
 import { listCreditPlans, createCreditPlan, updateCreditPlan, removeCreditPlan } from '../api/billing';
 import type { CreditPlanView, CreditResource, CreateCreditPlanInput } from '@nongchang/shared';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
@@ -62,7 +63,7 @@ export default function BillingPlans() {
   }
 
   async function remove(p: CreditPlanView) {
-    if (!confirm(`确认删除套餐「${p.name}」?若已有订单引用则会改为下架。`)) return;
+    if (!(await confirmDialog({ title: '删除套餐', message: `确认删除套餐「${p.name}」?若已有订单引用则会改为下架。`, confirmLabel: '删除', tone: 'danger' }))) return;
     try {
       await removeCreditPlan(p.id);
       showToast('已删除');

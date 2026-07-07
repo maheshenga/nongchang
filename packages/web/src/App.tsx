@@ -3,6 +3,7 @@ import { Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import GlobalSearch from './components/GlobalSearch';
 import { useAuth } from './auth/auth-context';
+import { DialogHost } from './hooks/useDialog';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 import { fluentButton } from './ui/fluent';
@@ -345,6 +346,7 @@ export default function App() {
           <ProfileSettings onClose={() => setProfileOpen(false)} />
         </Suspense>
       )}
+      <DialogHost />
       <ToastBanner />
     </div>
   );

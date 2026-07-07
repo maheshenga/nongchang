@@ -3,6 +3,7 @@ import { Building2, CheckCircle2, Pencil, Plus, Power, Search, X, XCircle } from
 import { type AgentListItem, type CreateAgentDto, type UpdateAgentDto } from '@nongchang/shared';
 import { createAgent, listAgents, setAgentStatus, updateAgent } from '../api/agents';
 import { useApi } from '../hooks/useApi';
+import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
@@ -80,7 +81,7 @@ export default function AgentManagement() {
       closeModal();
       void reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '操作失败');
+      await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
   };
 
@@ -89,12 +90,12 @@ export default function AgentManagement() {
     const message = next === 'suspended'
       ? '确认停用该代理商？停用后该代理商账号将无法登录。'
       : '确认启用该代理商？';
-    if (!window.confirm(message)) return;
+    if (!(await confirmDialog({ title: next === 'suspended' ? '停用代理商' : '启用代理商', message, confirmLabel: next === 'suspended' ? '停用' : '启用', tone: next === 'suspended' ? 'danger' : 'default' }))) return;
     try {
       await setAgentStatus(agent.id, next);
       void reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '操作失败');
+      await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
   };
 

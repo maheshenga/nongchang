@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LayoutTemplate, RefreshCw, Plus, Trash2, X } from 'lucide-react';
 import type { QuickTemplateView, QuickTemplateInput } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
+import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { listQuickTemplates, createQuickTemplate, updateQuickTemplate, deleteQuickTemplate } from '../api/quick-template';
 
 interface EditState {
@@ -61,12 +62,12 @@ export default function QuickTemplates() {
   };
 
   const onDelete = async (t: QuickTemplateView) => {
-    if (!window.confirm(`确认删除模板「${t.name}」?`)) return;
+    if (!(await confirmDialog({ title: '删除模板', message: `确认删除模板「${t.name}」?`, confirmLabel: '删除', tone: 'danger' }))) return;
     try {
       await deleteQuickTemplate(t.id);
       await reload();
     } catch (e2) {
-      window.alert(e2 instanceof Error ? e2.message : '删除失败');
+      await alertDialog({ title: '删除失败', message: e2 instanceof Error ? e2.message : '删除失败', tone: 'danger' });
     }
   };
 

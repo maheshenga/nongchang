@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, RefreshCw, UserCheck, X } from 'lucide-react';
 import type { PendingUserView } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
+import { confirmDialog } from '../hooks/useDialog';
 import { listPendingUsers, reviewUser } from '../api/users';
 import { fluentButton, fluentTable } from '../ui/fluent';
 
@@ -14,7 +15,7 @@ export default function PendingUsers() {
 
   const onReview = async (u: PendingUserView, action: 'approve' | 'reject') => {
     const verb = action === 'approve' ? '通过' : '拒绝';
-    if (!window.confirm(`确认${verb}用户「${u.displayName}」的入驻申请？`)) return;
+    if (!(await confirmDialog({ title: `${verb}入驻申请`, message: `确认${verb}用户「${u.displayName}」的入驻申请？`, confirmLabel: verb, tone: action === 'reject' ? 'danger' : 'default' }))) return;
     setBusyId(u.id); setErr(null);
     try {
       await reviewUser(u.id, { action });

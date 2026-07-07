@@ -3,6 +3,7 @@ import { CheckCircle2, Filter, Pencil, Plus, Power, Search, Store, X, XCircle } 
 import { Role, type CreateUserDto, type MerchantListItem, type UpdateUserDto } from '@nongchang/shared';
 import { createUser, listMerchants, setUserStatus, updateUser } from '../api/users';
 import { useApi } from '../hooks/useApi';
+import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
@@ -92,12 +93,12 @@ export default function MerchantManagement() {
           phone: form.phone || undefined,
         };
         const result = await createUser(dto);
-        window.alert(`商户已创建。初始密码: ${result.initialPassword}，请转交商户并提醒尽快修改。`);
+        await alertDialog({ title: '商户已创建', message: `商户已创建。初始密码: ${result.initialPassword}，请转交商户并提醒尽快修改。` });
       }
       closeModal();
       void reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '操作失败');
+      await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
   };
 
@@ -106,12 +107,12 @@ export default function MerchantManagement() {
     const message = next === 'suspended'
       ? '确认停用该商户？停用后该账号将无法登录。'
       : '确认启用该商户？';
-    if (!window.confirm(message)) return;
+    if (!(await confirmDialog({ title: next === 'suspended' ? '停用商户' : '启用商户', message, confirmLabel: next === 'suspended' ? '停用' : '启用', tone: next === 'suspended' ? 'danger' : 'default' }))) return;
     try {
       await setUserStatus(merchant.id, next);
       void reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '操作失败');
+      await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
   };
 

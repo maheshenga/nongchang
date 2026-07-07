@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { AiProviderView } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +26,9 @@ vi.mock('./AiProviderModal', () => ({
 vi.mock('./AiPlayground', () => ({ default: () => <div>ai-playground-real-child</div> }));
 
 import AiProviders from './AiProviders';
+import { DialogHost } from '../hooks/useDialog';
+
+const renderWithDialog = () => render(<><AiProviders /><DialogHost /></>);
 
 const providers: AiProviderView[] = [
   {
@@ -47,13 +50,11 @@ beforeEach(() => {
   updateAiProviderMock.mockResolvedValue({ ...providers[0], enabled: false });
   deleteAiProviderMock.mockResolvedValue({ ok: true });
   testAiProviderMock.mockResolvedValue({ ok: true, latencyMs: 42 });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
-  vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 });
 
 describe('AiProviders Fluent settings', () => {
   it('renders provider table and child playground slot', async () => {
-    render(<AiProviders />);
+    renderWithDialog();
     await screen.findByText('OpenAI');
 
     expect(screen.getByRole('heading', { name: 'AI 服务商管理' })).toBeTruthy();
@@ -66,7 +67,7 @@ describe('AiProviders Fluent settings', () => {
 
   it('shows empty state and opens the create modal', async () => {
     listAiProvidersMock.mockResolvedValue([]);
-    render(<AiProviders />);
+    renderWithDialog();
 
     expect(await screen.findByText('暂无 AI 服务商，点击右上角新增。')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '新增服务商' }));
@@ -74,7 +75,7 @@ describe('AiProviders Fluent settings', () => {
   });
 
   it('toggles provider enabled state through the real update API', async () => {
-    render(<AiProviders />);
+    renderWithDialog();
     await screen.findByText('OpenAI');
 
     const toggleButton = screen.getByRole('button', { name: '停用 OpenAI' });
@@ -87,19 +88,22 @@ describe('AiProviders Fluent settings', () => {
   });
 
   it('confirms delete and calls the real delete API', async () => {
-    render(<AiProviders />);
+    renderWithDialog();
     await screen.findByText('OpenAI');
 
     fireEvent.click(screen.getByRole('button', { name: '删除 OpenAI' }));
 
-    expect(window.confirm).toHaveBeenCalledWith('确定删除该 AI 服务商？此操作不可撤销。');
+    const dialog = await screen.findByRole('dialog', { name: '删除 AI 服务商' });
+    expect(within(dialog).getByText('确定删除该 AI 服务商？此操作不可撤销。')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }));
+
     await waitFor(() => {
       expect(deleteAiProviderMock).toHaveBeenCalledWith('provider-1');
     });
   });
 
   it('shows provider test progress and success result', async () => {
-    render(<AiProviders />);
+    renderWithDialog();
     await screen.findByText('OpenAI');
 
     fireEvent.click(screen.getByRole('button', { name: '测试 OpenAI' }));

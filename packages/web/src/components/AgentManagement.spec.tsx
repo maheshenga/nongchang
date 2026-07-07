@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { AgentListItem } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,9 @@ vi.mock('../api/agents', () => ({
 }));
 
 import AgentManagement from './AgentManagement';
+import { DialogHost } from '../hooks/useDialog';
+
+const renderWithDialog = () => render(<><AgentManagement /><DialogHost /></>);
 
 const agents: AgentListItem[] = [
   {
@@ -41,12 +44,11 @@ beforeEach(() => {
   createAgentMock.mockResolvedValue(agents[0]);
   updateAgentMock.mockResolvedValue(agents[0]);
   setAgentStatusMock.mockResolvedValue({ id: 'agent-1', status: 'suspended' });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 describe('AgentManagement Fluent table', () => {
   it('renders the real agent list and filters by name or region', async () => {
-    render(<AgentManagement />);
+    renderWithDialog();
     await screen.findByText('North Agent');
 
     expect(screen.getByRole('heading', { name: '代理商管理' })).toBeTruthy();
@@ -62,7 +64,7 @@ describe('AgentManagement Fluent table', () => {
   });
 
   it('creates an agent with the real create API payload', async () => {
-    render(<AgentManagement />);
+    renderWithDialog();
     await screen.findByText('North Agent');
 
     fireEvent.click(screen.getByRole('button', { name: '新增代理商' }));
@@ -77,7 +79,7 @@ describe('AgentManagement Fluent table', () => {
   });
 
   it('updates an agent with the real update API payload', async () => {
-    render(<AgentManagement />);
+    renderWithDialog();
     await screen.findByText('North Agent');
 
     fireEvent.click(screen.getByRole('button', { name: '编辑代理商 North Agent' }));
@@ -91,15 +93,17 @@ describe('AgentManagement Fluent table', () => {
   });
 
   it('toggles active and suspended status through the real status API', async () => {
-    render(<AgentManagement />);
+    renderWithDialog();
     await screen.findByText('North Agent');
 
     fireEvent.click(screen.getByRole('button', { name: '停用代理商 North Agent' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '停用代理商' })).getByRole('button', { name: '停用' }));
     await waitFor(() => {
       expect(setAgentStatusMock).toHaveBeenCalledWith('agent-1', 'suspended');
     });
 
     fireEvent.click(screen.getByRole('button', { name: '启用代理商 South Agent' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '启用代理商' })).getByRole('button', { name: '启用' }));
     await waitFor(() => {
       expect(setAgentStatusMock).toHaveBeenCalledWith('agent-2', 'active');
     });
@@ -113,7 +117,7 @@ describe('AgentManagement Fluent table', () => {
       pageSize: query.pageSize,
     }));
 
-    render(<AgentManagement />);
+    renderWithDialog();
     await screen.findByText('Page 1 / 3');
 
     expect(listAgentsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });

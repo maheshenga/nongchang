@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Role, type MerchantListItem } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,9 @@ vi.mock('../api/users', () => ({
 }));
 
 import MerchantManagement from './MerchantManagement';
+import { DialogHost } from '../hooks/useDialog';
+
+const renderWithDialog = () => render(<><MerchantManagement /><DialogHost /></>);
 
 const merchants: MerchantListItem[] = [
   {
@@ -54,13 +57,11 @@ beforeEach(() => {
   });
   updateUserMock.mockResolvedValue(merchants[0]);
   setUserStatusMock.mockResolvedValue({ id: 'merchant-1', status: 'suspended' });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
-  vi.spyOn(window, 'alert').mockImplementation(() => undefined);
 });
 
 describe('MerchantManagement Fluent table', () => {
   it('renders merchants and filters by search text and status', async () => {
-    render(<MerchantManagement />);
+    renderWithDialog();
     await screen.findByText('North Farm');
 
     expect(screen.getByRole('heading', { name: '商户管理与档案' })).toBeTruthy();
@@ -80,7 +81,7 @@ describe('MerchantManagement Fluent table', () => {
   });
 
   it('creates a merchant user and shows the backend generated initial password', async () => {
-    render(<MerchantManagement />);
+    renderWithDialog();
     await screen.findByText('North Farm');
 
     fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
@@ -97,12 +98,15 @@ describe('MerchantManagement Fluent table', () => {
         phone: '13800000003',
       });
     });
-    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('generated-secret'));
-    expect(listMerchantsMock).toHaveBeenCalledTimes(2);
+    const dialog = await screen.findByRole('dialog', { name: '商户已创建' });
+    expect(within(dialog).getByText(/generated-secret/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: '知道了' }));
+
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
   });
 
   it('updates a merchant with username disabled and phone nullable', async () => {
-    render(<MerchantManagement />);
+    renderWithDialog();
     await screen.findByText('North Farm');
 
     fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
@@ -117,15 +121,17 @@ describe('MerchantManagement Fluent table', () => {
   });
 
   it('toggles merchant status through the real status API', async () => {
-    render(<MerchantManagement />);
+    renderWithDialog();
     await screen.findByText('North Farm');
 
     fireEvent.click(screen.getByRole('button', { name: '停用商户 North Farm' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '停用商户' })).getByRole('button', { name: '停用' }));
     await waitFor(() => {
       expect(setUserStatusMock).toHaveBeenCalledWith('merchant-1', 'suspended');
     });
 
     fireEvent.click(screen.getByRole('button', { name: '启用商户 South Farm' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '启用商户' })).getByRole('button', { name: '启用' }));
     await waitFor(() => {
       expect(setUserStatusMock).toHaveBeenCalledWith('merchant-2', 'active');
     });
@@ -139,7 +145,7 @@ describe('MerchantManagement Fluent table', () => {
       pageSize: query.pageSize,
     }));
 
-    render(<MerchantManagement />);
+    renderWithDialog();
     await screen.findByText('Page 1 / 3');
 
     expect(listMerchantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });

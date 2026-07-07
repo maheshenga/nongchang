@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
 import { Permission, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
+import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { createUserGroup, deleteUserGroup, listUserGroups, updateUserGroup } from '../api/user-group';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 
@@ -71,12 +72,12 @@ export default function UserGroups() {
   };
 
   const onDelete = async (g: UserGroupView) => {
-    if (!window.confirm(`确认删除用户组「${g.name}」？如果仍有关联用户，后端可能拒绝删除。`)) return;
+    if (!(await confirmDialog({ title: '删除用户组', message: `确认删除用户组「${g.name}」？如果仍有关联用户，后端可能拒绝删除。`, confirmLabel: '删除', tone: 'danger' }))) return;
     try {
       await deleteUserGroup(g.id);
       await reload();
     } catch (e2) {
-      window.alert(e2 instanceof Error ? e2.message : '删除失败');
+      await alertDialog({ title: '删除失败', message: e2 instanceof Error ? e2.message : '删除失败', tone: 'danger' });
     }
   };
 

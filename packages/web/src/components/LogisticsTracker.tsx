@@ -6,6 +6,7 @@ import { useApi } from '../hooks/useApi';
 import { listSupplies, createSupply, issueSupply, deleteSupply } from '../api/supply';
 import { listBatches } from '../api/batches';
 import { useAuth } from '../auth/auth-context';
+import { confirmDialog } from '../hooks/useDialog';
 
 export default function LogisticsTracker() {
   const { user } = useAuth();
@@ -146,7 +147,7 @@ export default function LogisticsTracker() {
                         {isMerchant && (
                           <button
                             onClick={async () => {
-                              if (window.confirm('确认删除此农资记录吗?')) {
+                              if (await confirmDialog({ title: '删除农资记录', message: '确认删除此农资记录吗?', confirmLabel: '删除', tone: 'danger' })) {
                                 try {
                                   await deleteSupply(item.id);
                                   showToast(`已删除农资档案:${item.name}`);

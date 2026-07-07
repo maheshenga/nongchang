@@ -3,6 +3,7 @@ import { Bot, CheckCircle2, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-
 import type { AiProviderView, AiTestResponse } from '@nongchang/shared';
 import { deleteAiProvider, listAiProviders, testAiProvider, updateAiProvider } from '../api/ai-provider';
 import { useApi } from '../hooks/useApi';
+import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentTable } from '../ui/fluent';
 import AiProviderModal from './AiProviderModal';
 import AiPlayground from './AiPlayground';
@@ -40,12 +41,12 @@ export default function AiProviders() {
   };
 
   const onDelete = async (id: string) => {
-    if (!window.confirm('确定删除该 AI 服务商？此操作不可撤销。')) return;
+    if (!(await confirmDialog({ title: '删除 AI 服务商', message: '确定删除该 AI 服务商？此操作不可撤销。', confirmLabel: '删除', tone: 'danger' }))) return;
     try {
       await deleteAiProvider(id);
       await reload();
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '删除失败');
+      await alertDialog({ title: '删除失败', message: err instanceof Error ? err.message : '删除失败', tone: 'danger' });
     }
   };
 
