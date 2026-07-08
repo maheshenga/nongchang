@@ -2,72 +2,86 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the unauthenticated "login-only" first impression with a public SaaS conversion entry that explains value, shows pricing direction, and routes qualified users into the existing login flow.
+**Goal:** Add a truthful assisted-opening conversion path to the public SaaS landing page.
 
-**Architecture:** Add a Web-only `PublicLanding` component for unauthenticated users. Keep `AppLogin` as the existing authentication form, but let `App` switch between landing and login without changing auth APIs or protected app shell behavior.
+**Architecture:** Keep `PublicLanding` as a static, UI-only React component. Read `import.meta.env.VITE_PUBLIC_SALES_CONTACT` through a tiny helper, and keep that helper pure-testable by accepting an optional env object. The component also accepts an optional `salesContact` prop for deterministic UI tests. Do not add backend lead capture or client-only forms.
 
-**Tech Stack:** React 19, Vite, Vitest, Testing Library, lucide-react, existing Fluent helper classes in `packages/web/src/ui/fluent.ts`.
+**Tech Stack:** Vite, React 19, TypeScript, Vitest, Testing Library, Tailwind CSS utility classes, lucide-react icons.
 
 ## Global Constraints
 
-- Do not change backend auth APIs or token handling.
-- Public trace hash routes (`#/trace/:code`) must continue to render before authentication checks.
-- Do not invent unsupported claims such as live blockchain, guaranteed AI accuracy, or fake customer metrics.
-- Landing copy must clearly distinguish real product capabilities from setup-dependent integrations.
-- Follow TDD: every production code change must be preceded by a failing test.
-- Keep the Microsoft Fluent-inspired style already used by the SaaS console; use real UI blocks rather than decorative marketing clutter.
+- Use approved direction A:真实开通路径 + 可配置联系方式。
+- Do not add self-serve signup, fake trial, fake prices, fake case studies, or automatic tenant creation.
+- Do not change backend APIs, auth flows, billing flows, or role permissions.
+- Contact configuration key is exactly `VITE_PUBLIC_SALES_CONTACT`.
+- Existing `进入控制台` login behavior must remain unchanged.
+- Use TDD: write failing tests before production code changes.
 
 ---
 
-### Task 1: Public Landing Component
+## File Structure
+
+- Modify: `packages/web/src/components/PublicLanding.spec.tsx`
+  - Adds tests for assisted opening copy, env contact, fallback contact, and forbidden fake conversion copy.
+- Modify: `packages/web/src/components/PublicLanding.tsx`
+  - Adds `resolveSalesContact()`, `openingMaterials`, and a new `#opening` section.
+- Modify: `.env.example`
+  - Documents `VITE_PUBLIC_SALES_CONTACT`.
+- Create: `docs/superpowers/specs/2026-07-09-public-conversion-entry-design.md`
+  - Captures approved design direction.
+- Create: `docs/superpowers/plans/2026-07-09-p1-public-conversion-entry.md`
+  - This execution plan.
+
+## Task 1: Landing Tests
 
 **Files:**
-- Create: `packages/web/src/components/PublicLanding.tsx`
-- Create: `packages/web/src/components/PublicLanding.spec.tsx`
+- Modify: `packages/web/src/components/PublicLanding.spec.tsx`
 
 **Interfaces:**
-- Consumes: `fluentButton`, `fluentStatusTag` from `packages/web/src/ui/fluent.ts`
-- Produces: default React component `PublicLanding({ onLogin }: { onLogin: () => void })`
+- Consumes: `PublicLanding` default export and `resolveSalesContact`.
+- Produces: Tests for the public conversion opening section, deterministic contact rendering, and safe env parsing.
 
-- [ ] **Step 1: Write the failing component tests**
+- [ ] **Step 1: Write the failing tests**
 
-Create `packages/web/src/components/PublicLanding.spec.tsx`:
+Add these tests to `packages/web/src/components/PublicLanding.spec.tsx`:
 
 ```tsx
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import PublicLanding from './PublicLanding';
-
-describe('PublicLanding', () => {
-  it('explains the SaaS value before login and exposes pricing direction', () => {
+  it('separates existing-account login from assisted opening', () => {
     render(<PublicLanding onLogin={vi.fn()} />);
 
-    expect(screen.getByRole('heading', { name: '农业溯源 SaaS 平台' })).toBeTruthy();
-    expect(screen.getByText('把租户、代理商、商户、批次、农事记录和公开溯源查询放进一个可审计的控制台。')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '按角色开通' })).toBeTruthy();
-    expect(screen.getByText('适合平台运营、代理商管理和商户生产协作，额度和支付能力按租户配置启用。')).toBeTruthy();
     expect(screen.getByRole('button', { name: '进入控制台' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '申请开通' }).getAttribute('href')).toBe('#opening');
+    expect(screen.getByRole('heading', { name: '申请开通前准备' })).toBeTruthy();
+    expect(screen.getByText('租户由平台运营人员审核资料后创建，开通前需要人工审核与配置。')).toBeTruthy();
   });
 
-  it('routes qualified users into the existing login flow', () => {
-    const onLogin = vi.fn();
-    render(<PublicLanding onLogin={onLogin} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '进入控制台' }));
-
-    expect(onLogin).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps capability copy truthful for setup-dependent integrations', () => {
+  it('shows required opening materials for operator review', () => {
     render(<PublicLanding onLogin={vi.fn()} />);
 
-    expect(screen.getByText('AI、支付、地图、OSS 等集成在租户配置完成后启用。')).toBeTruthy();
-    expect(document.body.textContent).not.toMatch(/区块链|实时全网|自动保证|永久免费/);
+    for (const text of ['机构编码与主体名称', '管理员姓名与联系方式', '角色范围与商户/代理商关系', '计费、AI、地图或 OSS 集成需求']) {
+      expect(screen.getByText(text)).toBeTruthy();
+    }
   });
-});
+
+  it('renders configured sales contact without collecting lead data locally', () => {
+    render(<PublicLanding onLogin={vi.fn()} salesContact="sales@example.com / 400-000-0000" />);
+    expect(screen.getByText('sales@example.com / 400-000-0000')).toBeTruthy();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('shows a safe operator-contact fallback when sales contact is not configured', () => {
+    render(<PublicLanding onLogin={vi.fn()} salesContact={null} />);
+    expect(screen.getByText('请联系平台运营人员获取开通方式。')).toBeTruthy();
+  });
+
+  it('resolves configured sales contact from public environment safely', () => {
+    expect(resolveSalesContact({ VITE_PUBLIC_SALES_CONTACT: ' sales@example.com ' })).toBe('sales@example.com');
+    expect(resolveSalesContact({ VITE_PUBLIC_SALES_CONTACT: 'undefined' })).toBeNull();
+    expect(resolveSalesContact({})).toBeNull();
+  });
 ```
 
-- [ ] **Step 2: Run test to verify RED**
+- [ ] **Step 2: Run focused test to verify it fails**
 
 Run:
 
@@ -75,116 +89,114 @@ Run:
 corepack pnpm@10.33.2 --filter web exec vitest run src/components/PublicLanding.spec.tsx
 ```
 
-Expected: FAIL because `./PublicLanding` does not exist.
+Expected: FAIL because `申请开通`, `申请开通前准备`, materials, and contact behavior do not exist yet.
 
-- [ ] **Step 3: Implement PublicLanding**
+## Task 2: Landing Implementation
 
-Create `packages/web/src/components/PublicLanding.tsx` with:
+**Files:**
+- Modify: `packages/web/src/components/PublicLanding.tsx`
+
+**Interfaces:**
+- Produces: `resolveSalesContact(env?: SalesContactEnv): string | null`, used by `PublicLanding` and tested directly.
+
+- [ ] **Step 1: Update imports and constants**
+
+Modify the import and add constants:
 
 ```tsx
-import { ArrowRight, CheckCircle2, FileText, Layers, ShieldCheck, Sparkles, Users } from 'lucide-react';
-import { fluentButton, fluentStatusTag } from '../ui/fluent';
+import { ArrowRight, CheckCircle2, ClipboardList, FileText, Layers, Mail, ShieldCheck, Sparkles, Users } from 'lucide-react';
+```
 
-interface PublicLandingProps {
-  onLogin: () => void;
-}
-
-const capabilities = [
-  { title: '多角色 SaaS 组织', desc: '平台、租户、代理商、商户和会员使用同一套权限边界。', icon: Users },
-  { title: '生产与批次留档', desc: '地块、批次、农事、物流和资质文件形成可回溯记录。', icon: Layers },
-  { title: '公开溯源查询', desc: '消费者可通过溯源码查看公开批次旅程与凭证。', icon: ShieldCheck },
+```tsx
+const openingMaterials = [
+  '机构编码与主体名称',
+  '管理员姓名与联系方式',
+  '角色范围与商户/代理商关系',
+  '计费、AI、地图或 OSS 集成需求',
 ];
 
-export default function PublicLanding({ onLogin }: PublicLandingProps) {
-  return (
-    <div className="min-h-screen bg-[#F5F5F5] text-[#242424]">
-      <header className="border-b border-[#E1DFDD] bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid h-8 w-8 place-items-center rounded-[4px] bg-[#0078D4] text-white">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-semibold">农场溯源管理</span>
-          </div>
-          <button type="button" onClick={onLogin} className={fluentButton('primary')}>
-            进入控制台
-          </button>
-        </div>
-      </header>
+type PublicLandingImportMeta = ImportMeta & {
+  env?: {
+    VITE_PUBLIC_SALES_CONTACT?: string;
+  };
+};
 
-      <main>
-        <section className="border-b border-[#E1DFDD] bg-white">
-          <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
-            <div>
-              <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-[#242424] sm:text-5xl">农业溯源 SaaS 平台</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-[#605E5C]">
-                把租户、代理商、商户、批次、农事记录和公开溯源查询放进一个可审计的控制台。
-              </p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <button type="button" onClick={onLogin} className={fluentButton('primary')}>
-                  进入控制台
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <a href="#pricing" className={fluentButton('secondary')}>查看开通方式</a>
-              </div>
-            </div>
+type SalesContactEnv = {
+  VITE_PUBLIC_SALES_CONTACT?: string | null;
+};
 
-            <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#242424]">产品工作流</span>
-                <span className={fluentStatusTag('active')}>SaaS 控制台</span>
-              </div>
-              <div className="space-y-3">
-                {['租户开通', '商户建档', '批次与农事留档', '公开溯源查询'].map((item) => (
-                  <div key={item} className="flex items-center gap-3 border border-[#E1DFDD] bg-white px-3 py-3 text-sm font-semibold">
-                    <CheckCircle2 className="h-4 w-4 text-[#107C10]" />
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto grid max-w-6xl gap-4 px-5 py-10 md:grid-cols-3">
-          {capabilities.map(({ title, desc, icon: Icon }) => (
-            <article key={title} className="border border-[#E1DFDD] bg-white p-5">
-              <Icon className="h-5 w-5 text-[#0078D4]" />
-              <h2 className="mt-4 text-lg font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-[#605E5C]">{desc}</p>
-            </article>
-          ))}
-        </section>
-
-        <section id="pricing" className="border-y border-[#E1DFDD] bg-white">
-          <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 lg:grid-cols-[0.85fr_1.15fr]">
-            <div>
-              <h2 className="text-2xl font-semibold">按角色开通</h2>
-              <p className="mt-3 text-sm leading-6 text-[#605E5C]">
-                适合平台运营、代理商管理和商户生产协作，额度和支付能力按租户配置启用。
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-5">
-                <FileText className="h-5 w-5 text-[#0078D4]" />
-                <h3 className="mt-3 text-base font-semibold">基础溯源</h3>
-                <p className="mt-2 text-sm leading-6 text-[#605E5C]">批次、农事记录、公开查询和资质文件管理。</p>
-              </div>
-              <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-5">
-                <Sparkles className="h-5 w-5 text-[#0078D4]" />
-                <h3 className="mt-3 text-base font-semibold">扩展集成</h3>
-                <p className="mt-2 text-sm leading-6 text-[#605E5C]">AI、支付、地图、OSS 等集成在租户配置完成后启用。</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-  );
+export function resolveSalesContact(env: SalesContactEnv | undefined = (import.meta as PublicLandingImportMeta).env): string | null {
+  const raw = env?.VITE_PUBLIC_SALES_CONTACT;
+  const value = raw == null ? '' : String(raw).trim();
+  return value && value !== 'undefined' ? value : null;
 }
 ```
 
-- [ ] **Step 4: Run test to verify GREEN**
+- [ ] **Step 2: Add the hero assisted-opening CTA**
+
+Inside the hero CTA group, keep the `进入控制台` button and add:
+
+```tsx
+<a href="#opening" className={fluentButton('secondary')}>
+  申请开通
+</a>
+```
+
+Keep `查看开通方式` as an anchor to `#pricing`.
+
+- [ ] **Step 3: Add the opening section**
+
+After the capabilities section and before the pricing section, add:
+
+```tsx
+        <section id="opening" className="border-y border-[#E1DFDD] bg-[#FAFAFA]">
+          <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 lg:grid-cols-[0.85fr_1.15fr]">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase text-[#605E5C]">
+                <ClipboardList className="h-4 w-4 text-[#0078D4]" />
+                Assisted opening
+              </div>
+              <h2 className="text-2xl font-semibold">申请开通前准备</h2>
+              <p className="mt-3 text-sm leading-6 text-[#605E5C]">
+                租户由平台运营人员审核资料后创建，开通前需要人工审核与配置。
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[1fr_0.9fr]">
+              <div className="border border-[#E1DFDD] bg-white p-5">
+                <h3 className="text-base font-semibold text-[#242424]">开通材料</h3>
+                <div className="mt-4 grid gap-3">
+                  {openingMaterials.map((item) => (
+                    <div key={item} className="flex items-center gap-3 text-sm text-[#323130]">
+                      <CheckCircle2 className="h-4 w-4 text-[#107C10]" />
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-[#E1DFDD] bg-white p-5">
+                <Mail className="h-5 w-5 text-[#0078D4]" />
+                <h3 className="mt-3 text-base font-semibold text-[#242424]">联系开通</h3>
+                <p className="mt-2 text-sm leading-6 text-[#605E5C]">
+                  {salesContact ? '请通过以下联系方式提交开通资料。' : '请联系平台运营人员获取开通方式。'}
+                </p>
+                {salesContact && (
+                  <div className="mt-3 border border-[#C8C6C4] bg-[#F5F5F5] px-3 py-2 text-sm font-semibold text-[#323130]">
+                    {salesContact}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+```
+
+Keep production behavior as the default prop value:
+
+```tsx
+export default function PublicLanding({ onLogin, salesContact = resolveSalesContact() }: PublicLandingProps) {
+```
+
+- [ ] **Step 4: Run focused test to verify it passes**
 
 Run:
 
@@ -194,131 +206,54 @@ corepack pnpm@10.33.2 --filter web exec vitest run src/components/PublicLanding.
 
 Expected: PASS.
 
----
-
-### Task 2: Wire Landing Before Login Without Breaking Auth
+## Task 3: Environment Documentation
 
 **Files:**
-- Modify: `packages/web/src/App.tsx`
-- Modify: `packages/web/src/App.spec.tsx`
-- Modify: `packages/web/src/components/AppLogin.tsx`
-- Modify: `packages/web/src/components/AppLogin.spec.tsx`
+- Modify: `.env.example`
 
 **Interfaces:**
-- Consumes: `PublicLanding({ onLogin })` from Task 1
-- Produces: unauthenticated App flow: landing first, login after CTA; `AppLogin` optional `onBackToLanding?: () => void`
+- Produces: Documentation for `VITE_PUBLIC_SALES_CONTACT`.
 
-- [ ] **Step 1: Write failing App and login tests**
+- [ ] **Step 1: Add the env documentation**
 
-Update `packages/web/src/App.spec.tsx` mocks:
+Append this to `.env.example`:
 
-```tsx
-vi.mock('./components/PublicLanding', () => ({ default: ({ onLogin }: { onLogin: () => void }) => <button type="button" onClick={onLogin}>Landing CTA</button> }));
-vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</div> }));
+```dotenv
+#
+# 前端公开落地页联系方式(可选):会显示在未登录首页的“申请开通”区域。
+# 示例:
+# VITE_PUBLIC_SALES_CONTACT="sales@example.com / 400-000-0000"
 ```
 
-Add test:
-
-```tsx
-  it('shows public landing before the login form for unauthenticated visitors', async () => {
-    authMock.isAuthenticated = false;
-
-    render(<App />);
-
-    expect(await screen.findByRole('button', { name: 'Landing CTA' })).toBeTruthy();
-    expect(screen.queryByText('Login Form View')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Landing CTA' }));
-
-    expect(await screen.findByText('Login Form View')).toBeTruthy();
-  });
-```
-
-Adjust auth mock to include mutable `isAuthenticated` and reset it in `beforeEach`.
-
-Update `packages/web/src/components/AppLogin.spec.tsx`:
-
-```tsx
-it('offers a return path to the public landing when provided', () => {
-  const onBackToLanding = vi.fn();
-  render(<AppLogin onBackToLanding={onBackToLanding} />);
-
-  fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
-
-  expect(onBackToLanding).toHaveBeenCalledTimes(1);
-});
-```
-
-- [ ] **Step 2: Run tests to verify RED**
+- [ ] **Step 2: Verify docs mention the exact env key**
 
 Run:
 
 ```powershell
-corepack pnpm@10.33.2 --filter web exec vitest run src/App.spec.tsx src/components/AppLogin.spec.tsx
+Select-String -Path .env.example -Pattern 'VITE_PUBLIC_SALES_CONTACT'
 ```
 
-Expected: FAIL because `App` still returns `AppLogin` immediately for unauthenticated users and `AppLogin` has no back prop.
+Expected: output includes `VITE_PUBLIC_SALES_CONTACT`.
 
-- [ ] **Step 3: Implement App unauthenticated switching**
+## Task 4: Full Verification And Commit
 
-Update `packages/web/src/App.tsx`:
+**Files:**
+- Verify all changed files.
 
-```tsx
-const PublicLanding = lazy(() => import('./components/PublicLanding'));
-...
-const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
-...
-if (!isAuthenticated) {
-  return (
-    <Suspense fallback={<ViewSkeleton />}>
-      {authView === 'login'
-        ? <AppLogin onBackToLanding={() => setAuthView('landing')} />
-        : <PublicLanding onLogin={() => setAuthView('login')} />}
-    </Suspense>
-  );
-}
-```
+**Interfaces:**
+- Produces: One committed P1 slice.
 
-Update `handleLogout` to reset `authView` to `'landing'`.
-
-Update `packages/web/src/components/AppLogin.tsx`:
-
-```tsx
-interface AppLoginProps {
-  onBackToLanding?: () => void;
-}
-
-export default function AppLogin({ onBackToLanding }: AppLoginProps) {
-  ...
-  {onBackToLanding && (
-    <button type="button" onClick={onBackToLanding} className={`${fluentButton('secondary')} mb-4`}>
-      返回介绍页
-    </button>
-  )}
-```
-
-- [ ] **Step 4: Run focused tests**
+- [ ] **Step 1: Run focused conversion test**
 
 Run:
 
 ```powershell
-corepack pnpm@10.33.2 --filter web exec vitest run src/components/PublicLanding.spec.tsx src/App.spec.tsx src/components/AppLogin.spec.tsx
+corepack pnpm@10.33.2 --filter web exec vitest run src/components/PublicLanding.spec.tsx
 ```
 
 Expected: PASS.
 
----
-
-### Task 3: Verification, Review, Commit
-
-**Files:**
-- Verify all files changed in Tasks 1-2
-
-**Interfaces:**
-- Consumes: completed Tasks 1-2
-- Produces: committed P1 public conversion slice
-
-- [ ] **Step 1: Run Web lint**
+- [ ] **Step 2: Run web type check**
 
 Run:
 
@@ -328,7 +263,7 @@ corepack pnpm@10.33.2 --filter web lint
 
 Expected: PASS.
 
-- [ ] **Step 2: Run full Web tests**
+- [ ] **Step 3: Run full web tests**
 
 Run:
 
@@ -338,31 +273,51 @@ corepack pnpm@10.33.2 --filter web test
 
 Expected: PASS.
 
-- [ ] **Step 3: Check whitespace and diff**
+- [ ] **Step 4: Run production build**
+
+Run:
+
+```powershell
+corepack pnpm@10.33.2 --filter web build
+```
+
+Expected: PASS. Existing large `DashboardDemo` warning may remain.
+
+- [ ] **Step 5: Check diff hygiene**
 
 Run:
 
 ```powershell
 git -c safe.directory=E:/code/nongchang diff --check
-git -c safe.directory=E:/code/nongchang diff -- docs/superpowers/plans/2026-07-09-p1-public-conversion-entry.md packages/web/src/components/PublicLanding.tsx packages/web/src/components/PublicLanding.spec.tsx packages/web/src/components/AppLogin.tsx packages/web/src/components/AppLogin.spec.tsx packages/web/src/App.tsx packages/web/src/App.spec.tsx
+git -c safe.directory=E:/code/nongchang status --short
 ```
 
-Expected: `diff --check` exits 0; diff only contains this public conversion entry.
+Expected: no whitespace errors; changed files limited to this P1.
 
-- [ ] **Step 4: Stage and commit**
+- [ ] **Step 6: Stage exact files and inspect staged diff**
 
 Run:
 
 ```powershell
-git -c safe.directory=E:/code/nongchang add docs/superpowers/plans/2026-07-09-p1-public-conversion-entry.md packages/web/src/components/PublicLanding.tsx packages/web/src/components/PublicLanding.spec.tsx packages/web/src/components/AppLogin.tsx packages/web/src/components/AppLogin.spec.tsx packages/web/src/App.tsx packages/web/src/App.spec.tsx
+git -c safe.directory=E:/code/nongchang add .env.example docs/superpowers/specs/2026-07-09-public-conversion-entry-design.md docs/superpowers/plans/2026-07-09-p1-public-conversion-entry.md packages/web/src/components/PublicLanding.tsx packages/web/src/components/PublicLanding.spec.tsx
 git -c safe.directory=E:/code/nongchang diff --cached --check
-git -c safe.directory=E:/code/nongchang commit -m "feat(web): add public conversion landing"
+git -c safe.directory=E:/code/nongchang diff --cached --stat
+```
+
+Expected: no whitespace errors; staged diff only includes the intended files.
+
+- [ ] **Step 7: Commit**
+
+Run:
+
+```powershell
+git -c safe.directory=E:/code/nongchang commit -m "feat(web): add truthful public opening path"
 ```
 
 Expected: commit succeeds.
 
 ## Self-Review
 
-- Spec coverage: The plan addresses the P1 gap where unauthenticated visitors saw only a login form and no SaaS value proposition, pricing direction, or conversion CTA.
-- Placeholder scan: No TBD/TODO/fill-in placeholders remain.
-- Type consistency: `PublicLanding` exposes `onLogin`; `App` owns `authView`; `AppLogin` accepts optional `onBackToLanding`.
+- Spec coverage: The plan implements the approved assisted-opening path, contact env, fallback, materials list, and negative truthfulness boundaries.
+- Placeholder scan: No `TBD`, `TODO`, or unresolved placeholder instructions remain.
+- Type consistency: The only new helper is `resolveSalesContact(): string | null`, and it is consumed inside `PublicLanding`.

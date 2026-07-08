@@ -1,9 +1,20 @@
-import { ArrowRight, CheckCircle2, FileText, Layers, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardList, FileText, Layers, Mail, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { fluentButton, fluentStatusTag } from '../ui/fluent';
 
 interface PublicLandingProps {
   onLogin: () => void;
+  salesContact?: string | null;
 }
+
+type PublicLandingImportMeta = ImportMeta & {
+  env?: {
+    VITE_PUBLIC_SALES_CONTACT?: string;
+  };
+};
+
+type SalesContactEnv = {
+  VITE_PUBLIC_SALES_CONTACT?: string | null;
+};
 
 const capabilities = [
   {
@@ -23,7 +34,20 @@ const capabilities = [
   },
 ];
 
-export default function PublicLanding({ onLogin }: PublicLandingProps) {
+const openingMaterials = [
+  '机构编码与主体名称',
+  '管理员姓名与联系方式',
+  '角色范围与商户/代理商关系',
+  '计费、AI、地图或 OSS 集成需求',
+];
+
+export function resolveSalesContact(env: SalesContactEnv | undefined = (import.meta as PublicLandingImportMeta).env): string | null {
+  const raw = env?.VITE_PUBLIC_SALES_CONTACT;
+  const value = raw == null ? '' : String(raw).trim();
+  return value && value !== 'undefined' ? value : null;
+}
+
+export default function PublicLanding({ onLogin, salesContact = resolveSalesContact() }: PublicLandingProps) {
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-[#242424]">
       <header className="border-b border-[#E1DFDD] bg-white">
@@ -55,6 +79,9 @@ export default function PublicLanding({ onLogin }: PublicLandingProps) {
                   进入控制台
                   <ArrowRight className="h-4 w-4" />
                 </button>
+                <a href="#opening" className={fluentButton('secondary')}>
+                  申请开通
+                </a>
                 <a href="#pricing" className={fluentButton('secondary')}>
                   查看开通方式
                 </a>
@@ -86,6 +113,46 @@ export default function PublicLanding({ onLogin }: PublicLandingProps) {
               <p className="mt-2 text-sm leading-6 text-[#605E5C]">{desc}</p>
             </article>
           ))}
+        </section>
+
+        <section id="opening" className="border-y border-[#E1DFDD] bg-[#FAFAFA]">
+          <div className="mx-auto grid max-w-6xl gap-6 px-5 py-10 lg:grid-cols-[0.85fr_1.15fr]">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase text-[#605E5C]">
+                <ClipboardList className="h-4 w-4 text-[#0078D4]" />
+                Assisted opening
+              </div>
+              <h2 className="text-2xl font-semibold">申请开通前准备</h2>
+              <p className="mt-3 text-sm leading-6 text-[#605E5C]">
+                租户由平台运营人员审核资料后创建，开通前需要人工审核与配置。
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[1fr_0.9fr]">
+              <div className="border border-[#E1DFDD] bg-white p-5">
+                <h3 className="text-base font-semibold text-[#242424]">开通材料</h3>
+                <div className="mt-4 grid gap-3">
+                  {openingMaterials.map((item) => (
+                    <div key={item} className="flex items-center gap-3 text-sm text-[#323130]">
+                      <CheckCircle2 className="h-4 w-4 text-[#107C10]" />
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="border border-[#E1DFDD] bg-white p-5">
+                <Mail className="h-5 w-5 text-[#0078D4]" />
+                <h3 className="mt-3 text-base font-semibold text-[#242424]">联系开通</h3>
+                <p className="mt-2 text-sm leading-6 text-[#605E5C]">
+                  {salesContact ? '请通过以下联系方式提交开通资料。' : '请联系平台运营人员获取开通方式。'}
+                </p>
+                {salesContact && (
+                  <div className="mt-3 border border-[#C8C6C4] bg-[#F5F5F5] px-3 py-2 text-sm font-semibold text-[#323130]">
+                    {salesContact}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </section>
 
         <section id="pricing" className="border-y border-[#E1DFDD] bg-white">
