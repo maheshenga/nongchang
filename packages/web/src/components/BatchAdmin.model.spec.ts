@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { BatchStatus } from '@nongchang/shared';
 import {
   PAGE_SIZE,
+  buildBatchComplianceReport,
+  buildBatchTraceReportRows,
   calculateMargin,
   filterBatches,
   marginText,
@@ -125,6 +127,58 @@ describe('BatchAdmin model helpers', () => {
       5000,
       '60.0%',
     ]]);
+  });
+
+  it('builds lifecycle compliance checks with the existing 25-point scoring', () => {
+    expect(buildBatchComplianceReport({
+      farmRecords: [{ id: 'record-1' }],
+      codeCount: 12,
+      traceEvents: [{ id: 'event-1' }],
+      scanTotal: 3,
+    })).toEqual({
+      score: 100,
+      checks: [
+        { label: '农事记录已归档(种植/施肥/检测留痕)', ok: true },
+        { label: '防伪溯源码已签发并可供扫验', ok: true },
+        { label: '溯源链路事件节点完整可追', ok: true },
+        { label: '终端消费者已产生有效扫码核验', ok: true },
+      ],
+    });
+
+    expect(buildBatchComplianceReport({
+      farmRecords: [],
+      codeCount: 0,
+      traceEvents: [{ id: 'event-1' }],
+      scanTotal: 0,
+    }).score).toBe(25);
+  });
+
+  it('builds trace report CSV rows with current labels and lifecycle sections', () => {
+    expect(buildBatchTraceReportRows(viewBatch(), 'batch-1', {
+      codeCount: 2,
+      scanTotal: 5,
+      farmRecords: [
+        { recordedAt: '2026-07-09T08:00:00.000Z', action: '施肥', note: '有机肥 20kg' },
+      ],
+      traceEvents: [
+        { occurredAt: '2026-07-10T09:30:00.000Z', eventType: 'PACKED', description: '包装完成' },
+      ],
+    })).toEqual([
+      ['溯源报告', 'B20240520001'],
+      ['品种', '阳光玫瑰'],
+      ['种植日期', '2024-05-20'],
+      ['当前阶段', BatchStatus.GROWING],
+      ['已签发码数', 2],
+      ['累计扫码', 5],
+      [],
+      ['农事记录明细'],
+      ['时间', '动作', '备注'],
+      ['2026-07-09', '施肥', '有机肥 20kg'],
+      [],
+      ['溯源链路事件'],
+      ['时间', '事件', '描述'],
+      ['2026-07-10', 'PACKED', '包装完成'],
+    ]);
   });
 });
 it('keeps BatchAdmin pure batch helpers outside the rendered component file', () => {
