@@ -100,4 +100,48 @@ describe('BatchAdmin Fluent console', () => {
     await waitFor(() => expect(screen.queryByText('B20240520001')).toBeNull());
     expect(screen.getByText('B20240518003')).toBeTruthy();
   });
+
+  it('locks create batch form and ignores duplicate submits while creation is pending', async () => {
+    fieldApiMock.listFields.mockResolvedValue([
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        tenantId: 'tenant-1',
+        ownerId: '22222222-2222-4222-8222-222222222222',
+        ownerName: '张三农场',
+        name: 'A区葡萄园',
+        area: 12,
+        lng: 120.1,
+        lat: 30.2,
+        iotDeviceId: null,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+    ]);
+    let resolveCreate: (() => void) | undefined;
+    batchApiMock.createBatch.mockImplementation(() => new Promise<void>((resolve) => { resolveCreate = resolve; }));
+
+    render(<BatchAdmin />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /新建批次/ }));
+    fireEvent.change(screen.getByLabelText('批次号'), { target: { value: 'B20260709001' } });
+    fireEvent.change(screen.getByLabelText('品种'), { target: { value: '阳光玫瑰' } });
+    fireEvent.change(screen.getByLabelText('种植日期'), { target: { value: '2026-07-01' } });
+    fireEvent.change(screen.getByLabelText('预计收获'), { target: { value: '2026-09-01' } });
+
+    const submit = screen.getByRole('button', { name: '创建' });
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest('form')!);
+
+    expect(batchApiMock.createBatch).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', { name: '提交中…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('所属地块') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByLabelText('批次号') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('品种') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('种植日期') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('预计收获') as HTMLInputElement).disabled).toBe(true);
+
+    resolveCreate?.();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '新建批次' })).toBeNull();
+    });
+  });
 });
