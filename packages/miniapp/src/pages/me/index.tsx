@@ -237,7 +237,7 @@ export default function Me() {
           <Text className="me__item-arrow">›</Text>
         </View>
         <View className="me__item me__item--reserved" onClick={comingSoon}>
-          <Text className="me__item-text">区块链存证</Text>
+          <Text className="me__item-text">溯源记录</Text>
           <Text className="me__item-badge">即将开放</Text>
         </View>
         <View className="me__item" onClick={showHelp}>

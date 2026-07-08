@@ -8,7 +8,7 @@ const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8');
 
 describe('public metadata', () => {
   it('uses readable production SaaS title and description instead of scaffold or mojibake placeholders', () => {
-    expect(html).toContain('<title>农业溯源 SaaS 平台 | 农场生产、资质存证与一物一码管理</title>');
+    expect(html).toContain('<title>农业溯源 SaaS 平台 | 农场生产、资质文件管理与一物一码管理</title>');
     expect(html).toContain('name="description"');
     expect(html).toContain('农业溯源 SaaS 平台提供农场生产管理');
     expect(html).not.toContain('My Google AI Studio App');

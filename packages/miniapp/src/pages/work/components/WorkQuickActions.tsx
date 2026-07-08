@@ -47,9 +47,9 @@ function WorkQuickActions({ templates, aiBalance, onOpenAi, onOpenForm }: Props)
         <Icon name="plus" color="#0ea5e9" size={28} />
         <Text className="work__quick-text">手写农事</Text>
       </View>
-      <View className="work__quick-item work__quick-item--reserved" onClick={() => Taro.showToast({ title: '区块链定位即将开放', icon: 'none' })}>
+      <View className="work__quick-item work__quick-item--reserved" onClick={() => Taro.showToast({ title: '位置记录请在农事表单中保存', icon: 'none' })}>
         <Icon name="trace" color="#94a3b8" size={28} />
-        <Text className="work__quick-text">区块链定位</Text>
+        <Text className="work__quick-text">地块定位</Text>
       </View>
       {templates.map((t) => (
         <View className="work__quick-item" key={t.id} onClick={() => onOpenForm(t)}>

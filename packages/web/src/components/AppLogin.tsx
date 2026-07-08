@@ -35,7 +35,7 @@ export default function AppLogin() {
             </div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#605E5C]">Traceability SaaS</p>
             <h1 className="max-w-sm text-3xl font-semibold leading-tight text-[#242424]">农业溯源 SaaS 平台</h1>
-            <p className="mt-4 max-w-md text-sm leading-6 text-[#605E5C]">全链路数据存证与数字农业协作，面向租户、代理商与商户的统一管理入口。</p>
+            <p className="mt-4 max-w-md text-sm leading-6 text-[#605E5C]">全链路资料留档与数字农业协作，面向租户、代理商与商户的统一管理入口。</p>
           </div>
           <div className="text-xs leading-5 text-[#605E5C]">
             <div className="font-semibold text-[#323130]">农场溯源管理</div>
@@ -49,7 +49,7 @@ export default function AppLogin() {
               <QrCode className="h-5 w-5" />
             </div>
             <h1 className="text-2xl font-semibold text-[#242424]">农业溯源 SaaS 平台</h1>
-            <p className="mt-2 text-sm text-[#605E5C]">全链路数据存证与数字农业协作</p>
+            <p className="mt-2 text-sm text-[#605E5C]">全链路资料留档与数字农业协作</p>
           </div>
 
           <div className="mb-6 border-b border-[#E1DFDD] pb-4">
