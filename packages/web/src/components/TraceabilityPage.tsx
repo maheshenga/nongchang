@@ -1,13 +1,33 @@
-import { useState, useEffect } from 'react';
-import { ShieldCheck, MapPin, Calendar, Sprout, Truck, Store, Leaf, ArrowLeft, Hexagon, Sun, CheckCircle, FileText, FlaskConical } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Calendar,
+  FileText,
+  FlaskConical,
+  Hexagon,
+  Leaf,
+  MapPin,
+  ShieldCheck,
+  Sprout,
+  Store,
+  Sun,
+  Truck,
+} from 'lucide-react';
 import { fetchPublicTrace, TraceNotFoundError } from '../api/trace';
 import type { PublicTraceResult, TraceEventType } from '@nongchang/shared';
 import TiandituMap from './TiandituMap';
 import type { Field } from '../api/fields';
+import { fluentButton, fluentStatusTag } from '../ui/fluent';
+import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 const ICON_BY_TYPE: Record<TraceEventType, typeof Sprout> = {
-  origin: Sprout, farm: Leaf, harvest: Sun, warehouse: Hexagon, logistics: Truck, retail: Store,
+  origin: Sprout,
+  farm: Leaf,
+  harvest: Sun,
+  warehouse: Hexagon,
+  logistics: Truck,
+  retail: Store,
 };
 
 function fmtTime(iso: string) {
@@ -15,7 +35,7 @@ function fmtTime(iso: string) {
   return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function TraceabilityPage({ code, onBack }: { code: string, onBack?: () => void }) {
+export default function TraceabilityPage({ code, onBack }: { code: string; onBack?: () => void }) {
   const [activeTab, setActiveTab] = useState<'journey' | 'cert'>('journey');
   const [data, setData] = useState<PublicTraceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +43,9 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
+    setData(null);
     fetchPublicTrace(code)
       .then((res) => { if (alive) setData(res); })
       .catch((e) => { if (alive) setError(e instanceof TraceNotFoundError ? e.message : '溯源查询失败,请稍后重试'); })
@@ -33,40 +55,46 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600">
-        <div className="relative w-12 h-12 mb-4">
-          <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
-          <Hexagon className="absolute inset-0 m-auto text-emerald-500 w-5 h-5 opacity-50" />
+      <div className="min-h-screen bg-[#F5F5F5] px-5 py-10 text-[#242424]">
+        <div className="mx-auto flex min-h-[70vh] max-w-xl items-center justify-center border border-[#E1DFDD] bg-white">
+          <LoadingState label="正在查询溯源记录" />
         </div>
-        <p className="text-sm tracking-widest font-bold text-slate-700">正在验证溯源档案…</p>
-        <p className="text-xs text-slate-400 mt-1 font-mono">Verifying block integrity & signatures</p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 px-6 text-center">
-        <ShieldCheck className="w-12 h-12 text-slate-300 mb-4" />
-        <h2 className="text-lg font-bold text-slate-800 mb-1">溯源码无效或不存在</h2>
-        <p className="text-sm text-slate-500 mb-6 break-all">{error ?? `未找到溯源码 ${code}`}</p>
-        {onBack && (
-          <button onClick={onBack} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors">返回</button>
-        )}
+      <div className="min-h-screen bg-[#F5F5F5] px-5 py-10 text-[#242424]">
+        <div className="mx-auto max-w-xl border border-[#E1DFDD] bg-white">
+          <ErrorState title="溯源码无效或暂不可查" message={error ?? `未找到溯源码 ${code}`} className="m-5" />
+          {onBack && (
+            <div className="border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+              <button type="button" onClick={onBack} className={fluentButton('secondary')}>返回</button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   if (data.frozen) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 px-6 text-center">
-        <ShieldCheck className="w-12 h-12 text-red-300 mb-4" />
-        <h2 className="text-lg font-bold text-slate-800 mb-1">该溯源码已被冻结</h2>
-        <p className="text-sm text-slate-500 mb-6 break-all">此溯源码 {code} 因疑似异常已被冻结，请谨慎辨别商品真伪。</p>
-        {onBack && (
-          <button onClick={onBack} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full text-sm font-medium transition-colors">返回</button>
-        )}
+      <div className="min-h-screen bg-[#F5F5F5] px-5 py-10 text-[#242424]">
+        <div role="alert" className="mx-auto max-w-xl overflow-hidden border border-[#F1B8BD] bg-white">
+          <div className="flex items-start gap-3 bg-[#FDE7E9] px-5 py-5 text-[#A4262C]">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <h1 className="text-lg font-semibold">该溯源码已被冻结</h1>
+              <p className="mt-2 break-all text-sm leading-6">溯源码 {data.code} 已被风控标记并暂停公开展示，请联系商家核实商品来源。</p>
+            </div>
+          </div>
+          {onBack && (
+            <div className="border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+              <button type="button" onClick={onBack} className={fluentButton('secondary')}>返回</button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -74,221 +102,198 @@ export default function TraceabilityPage({ code, onBack }: { code: string, onBac
   const { batch, events, scanCount } = data;
   const credentials = data.credentials ?? [];
   const origin = batch.region ?? batch.fieldName;
-  // 地块有经纬度且租户启用天地图时,构造一个合成 Field 供底图打点
   const originField: Field | null =
     batch.fieldLng != null && batch.fieldLat != null
       ? {
-          id: 'origin', tenantId: '', ownerId: '', ownerName: null,
-          name: batch.fieldName || '产地', area: 0,
-          lng: batch.fieldLng, lat: batch.fieldLat,
-          iotDeviceId: null, createdAt: '',
+          id: 'origin',
+          tenantId: '',
+          ownerId: '',
+          ownerName: null,
+          name: batch.fieldName || '产地',
+          area: 0,
+          lng: batch.fieldLng,
+          lat: batch.fieldLat,
+          iotDeviceId: null,
+          createdAt: '',
         }
       : null;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 selection:bg-emerald-100 selection:text-emerald-900 pb-12">
-      <div className="relative bg-emerald-900 text-white overflow-hidden pb-12 rounded-b-[2.5rem]">
-        {/* 纯 CSS 装饰背景:径向高光 + 内联 SVG 叶脉纹理,零外部网络依赖(消费者扫码首屏,弱网/无外网也能正常渲染) */}
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 20% 0%, rgba(16,185,129,0.55), transparent 60%), radial-gradient(circle at 85% 30%, rgba(5,150,105,0.45), transparent 55%)',
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M30 0C30 16 16 30 0 30c16 0 30 14 30 30 0-16 14-30 30-30-16 0-30-14-30-30z' fill='none' stroke='%23ffffff' stroke-width='0.6'/%3E%3C/svg%3E\")",
-            backgroundSize: '60px 60px',
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-emerald-900 via-emerald-900/80 to-transparent"></div>
-
-        <div className="relative px-5 pt-8 z-10 max-w-lg mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            {onBack ? (
-              <button onClick={onBack} className="p-2 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur transition-colors">
-                <ArrowLeft className="w-5 h-5 text-white" />
-              </button>
-            ) : (<div className="w-9 h-9"></div>)}
-            <div className="font-bold tracking-widest text-emerald-100 text-sm flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> 官方溯源档案</div>
-            <div className="w-9 h-9"></div>
+    <div className="min-h-screen bg-[#F5F5F5] pb-10 text-[#242424]">
+      <header className="border-b border-[#E1DFDD] bg-white">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-5 py-4">
+          {onBack && (
+            <button type="button" onClick={onBack} aria-label="返回" className={fluentButton('icon')}>
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+          )}
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[4px] bg-[#E5F1FB] text-[#0078D4]">
+            <ShieldCheck className="h-5 w-5" />
           </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[#605E5C]">官方溯源记录</span>
+              <span className={fluentStatusTag('success')}>溯源记录已匹配</span>
+            </div>
+            <h1 className="mt-1 truncate text-2xl font-semibold text-[#242424]">{batch.cropName}</h1>
+          </div>
+        </div>
+      </header>
 
-          <div className="text-center mb-6">
-            <span className="inline-block px-3 py-1 bg-emerald-400/20 border border-emerald-400/30 rounded-full text-emerald-200 text-xs font-bold font-mono mb-4 backdrop-blur-sm shadow-inner">
-              {code}
-            </span>
-            <h1 className="text-3xl font-black mb-2 tracking-tight">{batch.cropName}</h1>
-            <div className="flex items-center justify-center gap-4 text-emerald-100/80 text-sm font-medium">
-              <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/> {origin}</span>
-              <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
-              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/> 批次 {batch.batchNo}</span>
+      <main className="mx-auto max-w-3xl px-5 py-5">
+        <section className="border border-[#E1DFDD] bg-white">
+          <div className="grid gap-4 border-b border-[#E1DFDD] bg-[#FAFAFA] p-5 sm:grid-cols-[1fr_auto]">
+            <div className="min-w-0">
+              <div className="font-mono text-sm font-semibold text-[#005A9E]">{code}</div>
+              <div className="mt-3 grid gap-3 text-sm text-[#605E5C] sm:grid-cols-3">
+                <div>
+                  <div className="text-xs font-semibold">批次</div>
+                  <div className="mt-1 font-mono font-semibold text-[#242424]">{batch.batchNo}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold">产地</div>
+                  <div className="mt-1 truncate font-semibold text-[#242424]">{origin}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold">累计扫码</div>
+                  <div className="mt-1 font-mono font-semibold text-[#242424]">{scanCount} 次</div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-start justify-start sm:justify-end">
+              <span className={fluentStatusTag('active')}>公开查询</span>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 shadow-2xl relative overflow-hidden text-center mt-8 -mb-20 transform translate-y-12 ring-4 ring-white/10">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-4">
-              <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mb-3">
-                <CheckCircle className="w-8 h-8 text-emerald-600" />
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-1">正品认证通过</h2>
-              <p className="text-sm text-slate-500 mb-4 px-4 line-clamp-2">此溯源码信息真实有效,记录全程可追溯。感谢您选择高品质原产地鲜花。</p>
-              <div className="w-full bg-slate-50 rounded-xl p-3 grid grid-cols-2 gap-2 text-left">
-                <div>
-                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">累计扫码</div>
-                  <div className="text-xs font-mono font-medium text-slate-700">{scanCount} 次</div>
-                </div>
-                <div className="pl-2 border-l border-slate-200">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-0.5">溯源码</div>
-                  <div className="text-xs font-mono font-medium text-emerald-600 truncate">{code}</div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-lg mx-auto pt-28 px-5">
-        <div className="flex bg-white rounded-full p-1 shadow-sm mb-8 sticky top-4 z-20 border border-slate-200">
-          {[{id: 'journey', label: '生命旅程'}, {id: 'cert', label: '防伪验证'}].map(t => (
+          <div className="flex gap-2 border-b border-[#E1DFDD] bg-white p-3">
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as 'journey' | 'cert')}
-              className={`flex-1 py-2.5 text-sm font-bold rounded-full transition-all ${activeTab === t.id ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+              type="button"
+              onClick={() => setActiveTab('journey')}
+              aria-pressed={activeTab === 'journey'}
+              className={activeTab === 'journey' ? fluentButton('primary') : fluentButton('secondary')}
             >
-              {t.label}
+              旅程
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('cert')}
+              aria-pressed={activeTab === 'cert'}
+              className={activeTab === 'cert' ? fluentButton('primary') : fluentButton('secondary')}
+            >
+              凭证
+            </button>
+          </div>
 
-        <AnimatePresence mode="wait">
           {activeTab === 'journey' && (
-            <motion.div key="journey" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+            <div className="space-y-5 p-5">
               {originField && data.tiandituKey && (
-                <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
-                  <div className="flex items-center gap-1.5 text-sm font-bold text-slate-700 mb-2 px-1">
-                    <MapPin className="w-4 h-4 text-emerald-600" /> 产地位置
+                <section className="border border-[#E1DFDD] bg-white">
+                  <div className="flex h-10 items-center gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 text-sm font-semibold">
+                    <MapPin className="h-4 w-4 text-[#0078D4]" /> 产地位置
                   </div>
-                  <div className="relative h-56 rounded-xl overflow-hidden bg-slate-100">
-                    <TiandituMap
-                      fields={[originField]}
-                      activeFieldId="origin"
-                      onSelect={() => {}}
-                      apiKey={data.tiandituKey}
-                    />
+                  <div className="h-56 overflow-hidden">
+                    <TiandituMap fields={[originField]} activeFieldId="origin" onSelect={() => {}} apiKey={data.tiandituKey} />
                   </div>
+                </section>
+              )}
+
+              {events.length === 0 ? (
+                <EmptyState title="暂无公开生产记录" description="该批次还没有可展示的公开溯源事件。" />
+              ) : (
+                <div className="space-y-3">
+                  {events.map((ev, idx) => {
+                    const Icon = ICON_BY_TYPE[ev.type];
+                    const payload = (ev.payload ?? {}) as Record<string, unknown>;
+                    const desc = typeof payload.desc === 'string' ? payload.desc : undefined;
+                    const image = typeof payload.image === 'string' ? payload.image : undefined;
+                    const tag = typeof payload.tag === 'string' ? payload.tag : undefined;
+                    const env = [payload.weather, payload.data, payload.temp].find((v) => typeof v === 'string') as string | undefined;
+                    return (
+                      <article key={`${ev.title}-${ev.occurredAt}-${idx}`} className="border border-[#E1DFDD] bg-white p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] bg-[#E5F1FB] text-[#0078D4]">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h2 className="text-base font-semibold text-[#242424]">{ev.title}</h2>
+                              {tag && <span className={fluentStatusTag('neutral')}>{tag}</span>}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#605E5C]">
+                              <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{fmtTime(ev.occurredAt)}</span>
+                              <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{ev.location}</span>
+                              <span>{ev.actor}</span>
+                            </div>
+                            {desc && <p className="mt-3 text-sm leading-6 text-[#605E5C]">{desc}</p>}
+                            {image && <img src={image} alt={ev.title} className="mt-3 h-36 w-full object-cover" />}
+                            {env && <div className="mt-3 border border-[#C7E0F4] bg-[#EFF6FC] px-3 py-2 text-xs text-[#005A9E]">环境记录: {env}</div>}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               )}
-              <div className="relative pl-8 before:absolute before:inset-0 before:ml-[1.18rem] before:h-full before:w-0.5 before:bg-gradient-to-b before:from-emerald-200 before:via-emerald-400/50 before:to-emerald-200/20">
-                {events.map((ev, idx) => {
-                  const Icon = ICON_BY_TYPE[ev.type];
-                  const p = (ev.payload ?? {}) as Record<string, unknown>;
-                  const desc = typeof p.desc === 'string' ? p.desc : undefined;
-                  const image = typeof p.image === 'string' ? p.image : undefined;
-                  const tag = typeof p.tag === 'string' ? p.tag : undefined;
-                  const env = [p.weather, p.data, p.temp].find((v) => typeof v === 'string') as string | undefined;
-                  const isLast = idx === events.length - 1;
-                  return (
-                    <div key={idx} className="relative mb-10 last:mb-0 group">
-                      <div className={`absolute left-[-2.05rem] w-8 h-8 rounded-full border-4 border-slate-50 flex items-center justify-center shrink-0 z-10 shadow-sm transition-transform duration-300 group-hover:scale-110 ${isLast ? 'bg-emerald-500' : 'bg-white'}`}>
-                        <Icon className={`w-3.5 h-3.5 ${isLast ? 'text-white' : 'text-emerald-500'}`} />
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-bold text-slate-800 text-lg">{ev.title}</h3>
-                          {tag && <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] px-2 py-0.5 rounded-full font-bold">{tag}</span>}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mb-3 bg-slate-50 inline-flex px-2 py-1 rounded-md">
-                          <Calendar className="w-3.5 h-3.5"/>
-                          {fmtTime(ev.occurredAt)}
-                        </div>
-                        {desc && <p className="text-slate-600 text-sm leading-relaxed mb-4">{desc}</p>}
-                        {image && (
-                          <div className="mb-4 rounded-xl overflow-hidden shadow-sm h-32 relative group-hover:shadow-md transition-shadow">
-                            <img src={image} alt={ev.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-100 text-xs">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-slate-400 font-medium">地点</span>
-                            <span className="text-slate-700 font-bold truncate flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400"/> {ev.location}</span>
-                          </div>
-                          <div className="flex flex-col gap-1 pl-3 border-l border-slate-100">
-                            <span className="text-slate-400 font-medium">执行人/机构</span>
-                            <span className="text-slate-700 font-bold truncate">{ev.actor}</span>
-                          </div>
-                        </div>
-                        {env && (
-                          <div className="mt-3 bg-blue-50/50 rounded-lg p-3 border border-blue-100/50 text-xs text-slate-600 flex items-start gap-2">
-                            <div className="mt-0.5"><ShieldCheck className="w-3.5 h-3.5 text-blue-400" /></div>
-                            <div className="font-medium text-blue-800/80">环境数据抓取: {env}</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
+            </div>
           )}
 
           {activeTab === 'cert' && (
-            <motion.div key="cert" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-0"></div>
-              <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2 relative z-10"><ShieldCheck className="w-5 h-5 text-emerald-500" /> 防伪验证</h2>
-              <div className="space-y-4 relative z-10">
-                <div className="flex justify-between py-3 border-b border-slate-100">
-                  <span className="text-slate-500 text-sm">溯源码</span>
-                  <span className="text-slate-800 font-bold text-sm font-mono">{code}</span>
+            <div className="space-y-5 p-5">
+              <section className="border border-[#E1DFDD] bg-white">
+                <div className="flex h-10 items-center gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 text-sm font-semibold">
+                  <ShieldCheck className="h-4 w-4 text-[#0078D4]" /> 防伪查询信息
                 </div>
-                <div className="flex justify-between py-3 border-b border-slate-100">
-                  <span className="text-slate-500 text-sm">累计扫码次数</span>
-                  <span className="text-slate-800 font-bold text-sm font-mono">{scanCount}</span>
+                <div className="divide-y divide-[#EDEBE9] text-sm">
+                  <div className="flex justify-between gap-4 px-4 py-3">
+                    <span className="text-[#605E5C]">溯源码</span>
+                    <span className="font-mono font-semibold">{code}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 px-4 py-3">
+                    <span className="text-[#605E5C]">累计扫码次数</span>
+                    <span className="font-mono font-semibold">{scanCount}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 px-4 py-3">
+                    <span className="text-[#605E5C]">记录状态</span>
+                    <span className={fluentStatusTag('success')}>记录可查询</span>
+                  </div>
                 </div>
-                <div className="flex justify-between py-3 border-b border-slate-100">
-                  <span className="text-slate-500 text-sm">产地</span>
-                  <span className="text-slate-800 font-bold text-sm">{origin}</span>
-                </div>
-                <div className="flex justify-between py-3">
-                  <span className="text-slate-500 text-sm">验证状态</span>
-                  <span className="text-emerald-600 font-bold text-sm flex items-center gap-1">真实有效 <CheckCircle className="w-4 h-4"/></span>
-                </div>
-              </div>
+              </section>
 
-              {credentials.length > 0 && (
-                <div className="mt-6 relative z-10">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 权威背书 · 资质与检测</h3>
-                  <div className="space-y-3">
+              {credentials.length === 0 ? (
+                <EmptyState title="暂无公开资质或检测文件" description="商家上传认证证书或检测报告后会在这里展示。" />
+              ) : (
+                <section className="border border-[#E1DFDD] bg-white">
+                  <div className="flex h-10 items-center gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 text-sm font-semibold">
+                    <FileText className="h-4 w-4 text-[#0078D4]" /> 资质与检测文件
+                  </div>
+                  <div className="divide-y divide-[#EDEBE9]">
                     {credentials.map((c, idx) => (
-                      <a key={idx} href={c.fileUrl} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors">
-                        <div className={`p-2 rounded-lg shrink-0 ${c.type === 'certificate' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
-                          {c.type === 'certificate' ? <ShieldCheck className="w-5 h-5" /> : <FlaskConical className="w-5 h-5" />}
+                      <a
+                        key={`${c.title}-${idx}`}
+                        href={c.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-[#F5F9FF]"
+                      >
+                        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] bg-[#E5F1FB] text-[#0078D4]">
+                          {c.type === 'certificate' ? <ShieldCheck className="h-4 w-4" /> : <FlaskConical className="h-4 w-4" />}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-slate-800 text-sm truncate">{c.title}</div>
-                          <div className="text-xs text-slate-500 truncate">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-[#242424]">{c.title}</div>
+                          <div className="truncate text-xs text-[#605E5C]">
                             {c.issuer}{c.issuedAt ? ` · ${c.issuedAt.slice(0, 10)}` : ''}
                           </div>
                         </div>
-                        <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                        <FileText className="h-4 w-4 shrink-0 text-[#605E5C]" />
                       </a>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
-
-        <footer className="mt-12 text-center text-[10px] text-slate-400 uppercase tracking-widest font-bold pb-8">
-          <p>Powered by AgriTrace</p>
-          <p className="mt-1 font-mono">Verified. Secure. Transparent.</p>
-        </footer>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

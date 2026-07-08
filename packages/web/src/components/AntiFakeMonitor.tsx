@@ -1,112 +1,147 @@
-import { useEffect, useCallback } from 'react';
-import { AlertOctagon, MapPin, ShieldAlert, Activity, CheckCircle, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect } from 'react';
+import { Activity, AlertOctagon, MapPin, RefreshCw, ShieldAlert } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { showToast } from '../hooks/useToast';
-import { listScans, listAlerts, freezeCode, unfreezeCode } from '../api/anti-fake';
+import { freezeCode, listAlerts, listScans, unfreezeCode } from '../api/anti-fake';
+import { fluentButton, fluentStatusTag, fluentTable } from '../ui/fluent';
+import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 export default function AntiFakeMonitor() {
   const { data: scans, loading: scansLoading, error: scansError, reload: reloadScans } = useApi(listScans);
-  const { data: alerts, error: alertsError, reload: reloadAlerts } = useApi(listAlerts);
+  const { data: alerts, loading: alertsLoading, error: alertsError, reload: reloadAlerts } = useApi(listAlerts);
 
-  const reloadAll = useCallback(() => { void reloadScans(); void reloadAlerts(); }, [reloadScans, reloadAlerts]);
+  const reloadAll = useCallback(() => {
+    void reloadScans();
+    void reloadAlerts();
+  }, [reloadScans, reloadAlerts]);
 
   useEffect(() => {
-    const t = setInterval(reloadAll, 10_000);
-    return () => clearInterval(t);
+    const timer = setInterval(reloadAll, 10_000);
+    return () => clearInterval(timer);
   }, [reloadAll]);
 
   const handleFreeze = async (code: string) => {
-    try { await freezeCode(code); showToast(`已冻结溯源码 [${code}]，公开溯源将被拦截`); reloadAll(); }
-    catch (e) { showToast(e instanceof Error ? e.message : '冻结失败'); }
+    try {
+      await freezeCode(code);
+      showToast(`已冻结溯源码 [${code}]，公开溯源将被拦截`);
+      reloadAll();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '冻结失败');
+    }
   };
+
   const handleUnfreeze = async (code: string) => {
-    try { await unfreezeCode(code); showToast(`已解冻溯源码 [${code}]`); reloadAll(); }
-    catch (e) { showToast(e instanceof Error ? e.message : '解冻失败'); }
+    try {
+      await unfreezeCode(code);
+      showToast(`已解冻溯源码 [${code}]`);
+      reloadAll();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '解冻失败');
+    }
   };
 
   return (
-    <div className="h-full flex flex-col md:flex-row gap-4 p-5 bg-white border border-slate-200 rounded-xl shadow-sm">
-      <div className="w-full md:w-1/3 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-red-500" />
-            溯源防伪监控看板
+    <section className="flex h-full min-h-0 flex-col overflow-hidden border border-[#E1DFDD] bg-white">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-[#242424]">
+            <ShieldAlert className="h-5 w-5 text-[#A4262C]" />
+            防伪风险监控
           </h3>
-          <button onClick={reloadAll} aria-label="刷新监控数据"
-            className="text-[10px] px-2 py-1 rounded border font-bold flex items-center gap-1 bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100">
-            <RefreshCw className="w-3 h-3" /> 刷新
-          </button>
+          <p className="mt-1 text-sm text-[#605E5C]">基于当前账号可见范围内的真实扫码日志识别高频复用风险。</p>
         </div>
-        <div className="bg-red-50 border border-red-100 rounded-lg p-4 flex-1 overflow-y-auto">
-          <h4 className="text-xs font-bold text-red-800 mb-3 flex items-center gap-1"><AlertOctagon className="w-4 h-4" /> 异常高频/异地扫码预警</h4>
-          {alertsError ? (
-            <div className="text-sm text-red-500 p-2">加载告警失败：{alertsError}</div>
-          ) : (alerts ?? []).length === 0 ? (
-            <div className="text-sm text-red-400 flex flex-col items-center justify-center p-4">
-              <CheckCircle className="w-8 h-8 mb-2 opacity-50" />
-              暂未监测到异常复用
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {(alerts ?? []).map((alert) => (
-                <div key={alert.code} className="bg-white p-3 rounded shadow-sm border border-red-200">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-mono text-red-700 font-bold text-xs">{alert.code}</span>
-                    <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[10px] font-bold">{alert.frozen ? '已冻结' : '疑防造假'}</span>
-                  </div>
-                  <p className="text-[10px] text-slate-600">时间窗内被扫描 <span className="font-bold text-red-600">{alert.scanCount}</span> 次 · <span className="font-bold text-red-600">{alert.distinctIps}</span> 个不同 IP</p>
-                  <div className="mt-2 text-[10px] text-slate-500 flex gap-1 items-start">
-                    <MapPin className="w-3 h-3 text-red-400 shrink-0 mt-0.5" />
-                    <div className="flex flex-wrap gap-1">
-                      {alert.locations.map((l, idx) => <span key={idx} className="bg-slate-100 px-1 rounded font-mono">{l}</span>)}
+        <button type="button" onClick={reloadAll} aria-label="刷新监控数据" className={fluentButton('secondary')}>
+          <RefreshCw className="h-4 w-4" /> 刷新
+        </button>
+      </header>
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="min-h-0 border-b border-[#E1DFDD] lg:border-b-0 lg:border-r">
+          <div className="flex h-11 items-center gap-2 border-b border-[#E1DFDD] bg-white px-4 text-sm font-semibold text-[#242424]">
+            <AlertOctagon className="h-4 w-4 text-[#A4262C]" /> 异常扫码预警
+          </div>
+          <div className="fluent-scrollbar h-full max-h-[420px] overflow-y-auto p-4 lg:max-h-none">
+            {alertsLoading && !alerts && <LoadingState label="加载异常扫码预警" />}
+            {alertsError && <ErrorState message={alertsError} onRetry={() => void reloadAlerts()} />}
+            {!alertsLoading && !alertsError && (alerts ?? []).length === 0 && (
+              <EmptyState title="暂无异常扫码预警" description="当前阈值下未发现高频复用风险。" />
+            )}
+            {!alertsError && (alerts ?? []).length > 0 && (
+              <div className="space-y-3">
+                {(alerts ?? []).map((alert) => (
+                  <article key={alert.code} className="border border-[#E1DFDD] bg-white p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-mono text-sm font-semibold text-[#A4262C]">{alert.code}</div>
+                        <div className="mt-1 text-xs text-[#605E5C]">
+                          时间窗内扫描 <span className="font-semibold text-[#A4262C]">{alert.scanCount}</span> 次，
+                          <span className="font-semibold text-[#A4262C]">{alert.distinctIps}</span> 个不同 IP
+                        </div>
+                      </div>
+                      <span className={fluentStatusTag(alert.frozen ? 'danger' : 'warning')}>{alert.frozen ? '已冻结' : '待处置'}</span>
                     </div>
-                  </div>
-                  {alert.frozen ? (
-                    <button onClick={() => handleUnfreeze(alert.code)} className="mt-2 w-full text-[10px] bg-slate-600 hover:bg-slate-700 text-white py-1 rounded font-medium transition-colors">解冻该溯源码</button>
-                  ) : (
-                    <button onClick={() => handleFreeze(alert.code)} className="mt-2 w-full text-[10px] bg-red-600 hover:bg-red-700 text-white py-1 rounded font-medium transition-colors">冻结该溯源码</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="w-full md:w-2/3 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h4 className="font-bold text-slate-700 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-blue-500" /> 全网一物一码实时扫码日志</h4>
-        </div>
-        <div className="flex-1 overflow-y-auto pr-2">
-          {scansError ? (
-            <div className="text-sm text-red-500 p-2">加载扫码日志失败：{scansError}</div>
-          ) : scansLoading && !scans ? (
-            <div className="text-sm text-slate-400 p-4">加载中…</div>
-          ) : (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 sticky top-0 border-b border-slate-200">
-                <tr>
-                  <th className="py-2 px-3 font-medium">标签流水号</th>
-                  <th className="py-2 px-3 font-medium">发生时间</th>
-                  <th className="py-2 px-3 font-medium">终端IP</th>
-                  <th className="py-2 px-3 font-medium">终端标识</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {(scans ?? []).map((scan) => (
-                  <tr key={scan.id} className="hover:bg-slate-50">
-                    <td className="py-2 px-3 font-mono font-medium">{scan.code}</td>
-                    <td className="py-2 px-3">{new Date(scan.scannedAt).toLocaleString()}</td>
-                    <td className="py-2 px-3 font-mono text-slate-400">{scan.ip}</td>
-                    <td className="py-2 px-3 text-slate-400 truncate max-w-[200px]">{scan.userAgent ?? '—'}</td>
-                  </tr>
+                    <div className="mt-3 flex items-start gap-2 text-xs text-[#605E5C]">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#A4262C]" />
+                      <div className="flex flex-wrap gap-1">
+                        {alert.locations.map((location, idx) => (
+                          <span key={`${location}-${idx}`} className="border border-[#E1DFDD] bg-[#FAFAFA] px-1.5 py-0.5 font-mono">{location}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => alert.frozen ? handleUnfreeze(alert.code) : handleFreeze(alert.code)}
+                      aria-label={`${alert.frozen ? '解冻' : '冻结'} ${alert.code}`}
+                      className={`${fluentButton(alert.frozen ? 'secondary' : 'danger')} mt-3 w-full`}
+                    >
+                      {alert.frozen ? '解冻该溯源码' : '冻结该溯源码'}
+                    </button>
+                  </article>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+              </div>
+            )}
+          </div>
+        </aside>
 
-    </div>
+        <main className="min-h-0">
+          <div className="flex h-11 items-center gap-2 border-b border-[#E1DFDD] bg-white px-4 text-sm font-semibold text-[#242424]">
+            <Activity className="h-4 w-4 text-[#0078D4]" /> 可见范围扫码日志
+          </div>
+          <div className="fluent-scrollbar min-h-0 overflow-auto p-4">
+            {scansLoading && !scans && <LoadingState label="加载扫码日志" />}
+            {scansError && <ErrorState message={scansError} onRetry={() => void reloadScans()} />}
+            {!scansLoading && !scansError && (scans ?? []).length === 0 && (
+              <EmptyState title="暂无扫码日志" description="消费者扫码后会显示在这里。" />
+            )}
+            {!scansError && (scans ?? []).length > 0 && (
+              <div className="overflow-x-auto border border-[#E1DFDD]">
+                <table className={`${fluentTable.table} min-w-[680px]`}>
+                  <thead className={fluentTable.thead}>
+                    <tr>
+                      <th className={fluentTable.th}>溯源码</th>
+                      <th className={fluentTable.th}>发生时间</th>
+                      <th className={fluentTable.th}>终端 IP</th>
+                      <th className={fluentTable.th}>终端标识</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(scans ?? []).map((scan) => (
+                      <tr key={scan.id} className={fluentTable.row}>
+                        <td className={`${fluentTable.td} font-mono font-semibold`}>{scan.code}</td>
+                        <td className={fluentTable.td}>{new Date(scan.scannedAt).toLocaleString('zh-CN')}</td>
+                        <td className={`${fluentTable.td} font-mono text-[#605E5C]`}>{scan.ip}</td>
+                        <td className={`${fluentTable.td} max-w-[240px] truncate text-[#605E5C]`}>{scan.userAgent ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </section>
   );
 }
