@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { MessageSquareText, Loader2, Sparkles } from 'lucide-react';
 import { aiAsk } from '../api/ai';
+import { fluentButton, fluentInput } from '../ui/fluent';
+import { ErrorState } from '../ui/state';
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -31,30 +33,33 @@ export default function AiDataQa() {
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center gap-2 text-gray-900">
-        <MessageSquareText className="h-5 w-5 text-blue-600" />
+    <section className="border border-[#E1DFDD] bg-white p-5">
+      <div className="mb-4 flex items-center gap-2 text-[#242424]">
+        <MessageSquareText className="h-5 w-5 text-[#0078D4]" />
         <h2 className="font-semibold">AI 数据问答</h2>
       </div>
-      <p className="mb-3 text-sm text-gray-500">用自然语言询问你的批次数据,AI 结合可见批次为你解答。</p>
+      <p className="mb-3 text-sm text-[#605E5C]">用自然语言询问你的批次数据，AI 结合可见批次为你解答。</p>
       <textarea
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         rows={3}
-        placeholder="例如:我有哪些批次还在生长期?"
-        className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        placeholder="例如：我有哪些批次还在生长期？"
+        className={`${fluentInput} h-auto min-h-24 w-full resize-none py-2`}
       />
       <button
+        type="button"
         onClick={handleAsk}
         disabled={loading || !question.trim()}
-        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className={`${fluentButton('primary')} mt-3`}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-        {loading ? '分析中…' : '提问'}
+        {loading ? '查询中...' : '查询数据'}
       </button>
-      {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
+      {err && <ErrorState message={err} retryLabel="关闭" onRetry={() => setErr('')} className="mt-3" />}
       {answer && (
-        <div className="mt-4 whitespace-pre-wrap rounded-lg bg-blue-50 p-4 text-sm text-gray-800">{answer}</div>
+        <div className="mt-4 whitespace-pre-wrap border border-[#E1DFDD] bg-[#F5F9FF] p-4 text-sm leading-6 text-[#242424]">
+          {answer}
+        </div>
       )}
     </section>
   );
