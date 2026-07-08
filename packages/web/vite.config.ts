@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { dashboardDemoManualChunk } from './src/config/manual-chunks';
 
 export default defineConfig(() => {
   return {
@@ -18,6 +19,11 @@ export default defineConfig(() => {
       // Explicitly include it so named exports (e.g. BatchStatus) are detected.
       commonjsOptions: {
         include: [/shared[\\/]dist/, /node_modules/],
+      },
+      rollupOptions: {
+        output: {
+          manualChunks: dashboardDemoManualChunk,
+        },
       },
     },
     optimizeDeps: {
