@@ -1,6 +1,7 @@
 import {
   Building2,
   FileSpreadsheet,
+  Home,
   Layers,
   LayoutDashboard,
   LayoutTemplate,
@@ -23,6 +24,7 @@ export type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin' | 'pl
 
 export type AppTab =
   | 'overview'
+  | 'memberHome'
   | 'tenants'
   | 'fields'
   | 'merchant'
@@ -129,7 +131,10 @@ const MERCHANT_ADMIN_NAV: NavCategory[] = [
 const MEMBER_NAV: NavCategory[] = [
   {
     category: '个人中心',
-    items: [{ id: 'settings', label: '本地偏好', icon: SettingsIcon }],
+    items: [
+      { id: 'memberHome', label: '会员中心', icon: Home },
+      { id: 'settings', label: '本地偏好', icon: SettingsIcon },
+    ],
   },
 ];
 

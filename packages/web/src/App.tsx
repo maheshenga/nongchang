@@ -15,6 +15,7 @@ const FarmRecords = lazy(() => import('./components/FarmRecords'));
 const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));
 const FarmFields = lazy(() => import('./components/FarmFields'));
 const Settings = lazy(() => import('./components/Settings'));
+const MemberCenter = lazy(() => import('./components/MemberCenter'));
 const AgentManagement = lazy(() => import('./components/AgentManagement'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
 const MerchantManagement = lazy(() => import('./components/MerchantManagement'));
@@ -325,6 +326,7 @@ export default function App() {
               {isMounted('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
               {isMounted('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
               {isMounted('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
+              {isMounted('memberHome') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'memberHome' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MemberCenter /></div>}
               {isMounted('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
               {isMounted('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
               {isMounted('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}

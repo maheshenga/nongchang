@@ -73,12 +73,12 @@ describe('production navigation', () => {
     expect(firstAllowedTab('merchant_admin', 'logistics')).toBe('logistics');
     expect(firstAllowedTab('agent_admin', 'fields')).toBe('overview');
     expect(firstAllowedTab('platform_admin', 'warehouse')).toBe('tenants');
-    expect(firstAllowedTab('member', 'dashboard')).toBe('settings');
+    expect(firstAllowedTab('member', 'dashboard')).toBe('memberHome');
   });
 
-  it('limits ordinary members to local settings only', () => {
-    expect(idsFor('member')).toEqual(['settings']);
-    expect(firstAllowedTab('member', 'fields')).toBe('settings');
+  it('gives ordinary members a safe trace-query home plus local settings', () => {
+    expect(idsFor('member')).toEqual(['memberHome', 'settings']);
+    expect(firstAllowedTab('member', 'fields')).toBe('memberHome');
     expect(firstAllowedTab('member', 'settings')).toBe('settings');
   });
 });

@@ -15,6 +15,7 @@ vi.mock('./auth/auth-context', () => ({
 vi.mock('./components/FarmFields', () => ({ default: () => <div>Farm Fields View</div> }));
 vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant Management View</div> }));
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
+vi.mock('./components/MemberCenter', () => ({ default: () => <div>Member Center View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
 vi.mock('./components/Dashboard', () => ({ default: () => <div>Production Overview View</div> }));
@@ -35,12 +36,13 @@ describe('App role wiring', () => {
     expect(screen.queryByText('Merchant Management View')).toBeNull();
   });
 
-  it('renders only the safe settings surface for ordinary members', async () => {
+  it('starts ordinary members on the safe member center and keeps admin surfaces hidden', async () => {
     authMock.role = 'member';
 
     render(<App />);
 
-    expect(await screen.findByText('Settings View')).toBeTruthy();
+    expect(await screen.findByText('Member Center View')).toBeTruthy();
+    expect(screen.queryByText('Settings View')).toBeNull();
     expect(screen.queryByText('Merchant Management View')).toBeNull();
     expect(screen.queryByText('Farm Fields View')).toBeNull();
     expect(screen.queryByText('12K')).toBeNull();
@@ -79,7 +81,7 @@ describe('App role wiring', () => {
     authMock.role = 'member';
     render(<App />);
 
-    expect(await screen.findByText('Settings View')).toBeTruthy();
+    expect(await screen.findByText('Member Center View')).toBeTruthy();
     expect(screen.queryByText('Production Overview View')).toBeNull();
     expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
   });
@@ -107,7 +109,7 @@ describe('App role wiring', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Settings View')).toBeTruthy();
+    expect(await screen.findByText('Member Center View')).toBeTruthy();
     expect(screen.queryByText('Tenant Management View')).toBeNull();
     expect(screen.queryByText('Merchant Management View')).toBeNull();
     expect(screen.queryByText('Farm Fields View')).toBeNull();
@@ -122,7 +124,7 @@ describe('App role wiring', () => {
     authMock.role = 'member';
     rerender(<App />);
 
-    expect(await screen.findByText('Settings View')).toBeTruthy();
+    expect(await screen.findByText('Member Center View')).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('Production Overview View')).toBeNull());
     await waitFor(() => expect(screen.queryByText('Farm Fields View')).toBeNull());
     expect(screen.queryByText('Merchant Management View')).toBeNull();
