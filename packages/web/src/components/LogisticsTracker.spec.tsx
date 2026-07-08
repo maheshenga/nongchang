@@ -74,22 +74,34 @@ beforeEach(() => {
 
 describe('LogisticsTracker', () => {
   it('issues supply with the selected batch id instead of a typed batch number', async () => {
-    const { container } = render(<LogisticsTracker />);
+    render(<LogisticsTracker />);
     await screen.findByText('Organic fertilizer');
 
-    fireEvent.click(screen.getByRole('button', { name: /领用下达/ }));
+    fireEvent.click(screen.getByRole('button', { name: '领用下达' }));
 
-    const selects = container.querySelectorAll('select');
-    fireEvent.change(selects[0], { target: { value: 'supply-1' } });
-    fireEvent.change(selects[1], { target: { value: batchId } });
+    fireEvent.change(screen.getByLabelText('选择库存物资'), { target: { value: 'supply-1' } });
+    fireEvent.change(screen.getByLabelText('关联生产批次'), { target: { value: batchId } });
+    fireEvent.change(screen.getByLabelText('本次下达/领用数量'), { target: { value: '12' } });
 
-    const amountInput = container.querySelector('input[type="number"]') as HTMLInputElement;
-    fireEvent.change(amountInput, { target: { value: '12' } });
-
-    fireEvent.click(screen.getByRole('button', { name: /确认下发/ }));
+    fireEvent.click(screen.getByRole('button', { name: '确认下发' }));
 
     await waitFor(() => {
       expect(issueSupplyMock).toHaveBeenCalledWith('supply-1', { batchId, amount: 12 });
+    });
+  });
+
+  it('creates an inbound supply record with the entered unit and amount', async () => {
+    render(<LogisticsTracker />);
+    await screen.findByText('Organic fertilizer');
+
+    fireEvent.click(screen.getByRole('button', { name: '入库登记' }));
+    fireEvent.change(screen.getByLabelText('投入品名称'), { target: { value: '复合肥' } });
+    fireEvent.change(screen.getByLabelText('入库数量'), { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText('单位'), { target: { value: '包(50kg)' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认入库' }));
+
+    await waitFor(() => {
+      expect(createSupplyMock).toHaveBeenCalledWith({ name: '复合肥', unit: '包(50kg)', amount: 50 });
     });
   });
 
@@ -99,9 +111,9 @@ describe('LogisticsTracker', () => {
     render(<LogisticsTracker />);
     await screen.findByText('Organic fertilizer');
 
-    expect(screen.queryByRole('button', { name: /入库登记/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /领用下达/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '入库登记' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '领用下达' })).toBeNull();
     expect(screen.queryByRole('button', { name: /删除/ })).toBeNull();
-    expect(screen.getByText(/只读/)).toBeTruthy();
+    expect(screen.getByText('只读视图')).toBeTruthy();
   });
 });
