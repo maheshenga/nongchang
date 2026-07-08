@@ -1,18 +1,101 @@
-import { useState, useEffect } from 'react';
-import { Plug, RefreshCw } from 'lucide-react';
-import type { WechatConfigInput, XfyunConfigInput, TiandituConfigInput } from '@nongchang/shared';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  CheckCircle2,
+  KeyRound,
+  Map,
+  MessageCircle,
+  Mic,
+  Plug,
+  Save,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react';
+import type { TiandituConfigInput, WechatConfigInput, XfyunConfigInput } from '@nongchang/shared';
+import { getIntegrationConfig, upsertTiandituConfig, upsertWechatConfig, upsertXfyunConfig } from '../api/integration';
 import { useApi } from '../hooks/useApi';
-import { getIntegrationConfig, upsertWechatConfig, upsertXfyunConfig, upsertTiandituConfig } from '../api/integration';
+import { fluentButton, fluentFocus, fluentInput, fluentStatusTag } from '../ui/fluent';
+import { ErrorState, LoadingState } from '../ui/state';
 
 const fetchWechat = () => getIntegrationConfig('wechat');
 const fetchXfyun = () => getIntegrationConfig('xfyun');
 const fetchTianditu = () => getIntegrationConfig('tianditu');
 
-const inputCls =
-  'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-400 transition';
-const labelCls = 'block text-xs font-bold text-slate-600 mb-1.5';
-const btnPrimary =
-  'bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm';
+const cardClass = 'border border-[#E1DFDD] bg-white';
+const cardHeaderClass = 'flex flex-col gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4';
+const labelCls = 'mb-1.5 block text-sm font-semibold text-[#323130]';
+const helpCls = 'mt-1 text-xs leading-5 text-[#605E5C]';
+const checkboxCls = `h-4 w-4 rounded-[4px] border-[#C8C6C4] text-[#0078D4] accent-[#0078D4] ${fluentFocus}`;
+
+function statusTone(enabled: boolean) {
+  return enabled ? fluentStatusTag('active') : fluentStatusTag('neutral');
+}
+
+function InlineError({ message }: { message: string }) {
+  return (
+    <div role="alert" className="flex items-start gap-2 border border-[#F1B8BD] bg-[#FDE7E9] px-3 py-2 text-sm text-[#A4262C]">
+      <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function SavedTag({ message }: { message: string }) {
+  return (
+    <span className={`${fluentStatusTag('success')} gap-1.5`}>
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      {message}
+    </span>
+  );
+}
+
+function CardHeader({
+  icon,
+  title,
+  description,
+  enabled,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  enabled: boolean;
+}) {
+  return (
+    <div className={cardHeaderClass}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-base font-semibold text-[#242424]">
+            {icon}
+            {title}
+          </h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#605E5C]">{description}</p>
+        </div>
+        <span className={`${statusTone(enabled)} shrink-0`}>
+          {enabled ? '已启用' : '未启用'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  help,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  help?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} className={labelCls}>{label}</label>
+      {children}
+      {help && <p className={helpCls}>{help}</p>}
+    </div>
+  );
+}
 
 function WechatCard() {
   const { data, loading, error, reload } = useApi(fetchWechat);
@@ -33,58 +116,89 @@ function WechatCard() {
     }
   }, [data]);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitting(true); setErr(null); setMsg(null);
+    setSubmitting(true);
+    setErr(null);
+    setMsg(null);
     const dto: WechatConfigInput = { appId: appId.trim(), enabled };
     if (secret.trim()) dto.secret = secret.trim();
     try {
       await upsertWechatConfig(dto);
-      setMsg('已保存'); await reload();
+      setMsg('已保存');
+      await reload();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : '保存失败');
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-slate-200 bg-slate-50/50">
-        <h3 className="font-bold text-slate-800 text-base">微信小程序登录</h3>
-        <p className="text-xs text-slate-500 mt-1">配置 AppID/AppSecret 后,小程序方可使用「微信一键登录」。AppID 全局唯一,用于反查租户。</p>
-      </div>
-      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+    <section role="region" aria-label="微信小程序登录" className={cardClass}>
+      <CardHeader
+        icon={<MessageCircle className="h-4 w-4 text-[#0078D4]" />}
+        title="微信小程序登录"
+        description="配置 AppID/AppSecret 后，小程序可使用微信一键登录。AppID 全局唯一，用于反查租户。"
+        enabled={enabled}
+      />
+      {loading && <LoadingState label="加载微信配置" />}
       {error && (
-        <div className="p-8 text-center text-rose-500 text-sm">
-          加载失败:{error}
-          <button onClick={() => void reload()} className="underline font-bold ml-2 inline-flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" /> 重试
-          </button>
+        <div className="p-5">
+          <ErrorState title="微信配置加载失败" message={error} onRetry={() => void reload()} retryLabel="重试" />
         </div>
       )}
       {!loading && !error && (
-        <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
-          <div>
-            <label className={labelCls}>AppID</label>
-            <input className={inputCls} value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="wx..." required />
-          </div>
-          <div>
-            <label className={labelCls}>{secretMasked ? `AppSecret(当前 ${secretMasked},留空不改)` : 'AppSecret'}</label>
-            <input className={inputCls} type="password" value={secret} onChange={(e) => setSecret(e.target.value)}
-              placeholder={secretMasked ? '留空则保持现有密钥' : '请输入 AppSecret'} autoComplete="new-password" />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
-            <span className="text-sm text-slate-700 font-bold">启用微信登录</span>
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-4 p-5">
+          <Field label="AppID" htmlFor="wechat-app-id">
+            <input
+              id="wechat-app-id"
+              className={`${fluentInput} w-full`}
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              placeholder="wx..."
+              required
+            />
+          </Field>
+          <Field
+            label="AppSecret"
+            htmlFor="wechat-secret"
+            help={secretMasked ? `当前 ${secretMasked}，留空不改` : '首次配置时请输入完整 AppSecret。'}
+          >
+            <input
+              id="wechat-secret"
+              className={`${fluentInput} w-full`}
+              type="password"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              placeholder={secretMasked ? '留空则保持现有密钥' : '请输入 AppSecret'}
+              autoComplete="new-password"
+            />
+          </Field>
+          <label className="flex cursor-pointer select-none items-start gap-3">
+            <input
+              type="checkbox"
+              aria-label="启用微信登录"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className={`${checkboxCls} mt-0.5 shrink-0`}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-[#242424]">启用微信登录</span>
+              <span className="mt-1 block text-xs leading-5 text-[#605E5C]">关闭后不会删除配置，只停止小程序微信登录入口。</span>
+            </span>
           </label>
-          {err && <div className="text-sm text-rose-500 font-bold">{err}</div>}
-          <div className="flex items-center gap-3 pt-2">
-            <button type="submit" disabled={submitting} className={btnPrimary}>{submitting ? '保存中…' : '保存'}</button>
-            {msg && <span className="text-sm text-emerald-600 font-bold">{msg}</span>}
+          {err && <InlineError message={err} />}
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#E1DFDD] pt-4">
+            <button type="submit" disabled={submitting} className={fluentButton('primary')}>
+              <Save className="h-4 w-4" />
+              {submitting ? '保存中...' : '保存微信配置'}
+            </button>
+            {msg && <SavedTag message={msg} />}
           </div>
         </form>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -106,68 +220,102 @@ function XfyunCard() {
       setEnabled(data.enabled);
       setApiKeyMasked(data.apiKeyMasked);
       setApiSecretMasked(data.apiSecretMasked);
-      setApiKey(''); setApiSecret('');
+      setApiKey('');
+      setApiSecret('');
     }
   }, [data]);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitting(true); setErr(null); setMsg(null);
+    setSubmitting(true);
+    setErr(null);
+    setMsg(null);
     const dto: XfyunConfigInput = { appId: appId.trim(), enabled };
     if (apiKey.trim()) dto.apiKey = apiKey.trim();
     if (apiSecret.trim()) dto.apiSecret = apiSecret.trim();
     try {
       await upsertXfyunConfig(dto);
-      setMsg('已保存'); await reload();
+      setMsg('已保存');
+      await reload();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : '保存失败');
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-slate-200 bg-slate-50/50">
-        <h3 className="font-bold text-slate-800 text-base">讯飞语音(语音录入)</h3>
-        <p className="text-xs text-slate-500 mt-1">配置讯飞 APPID/APIKey/APISecret 后,小程序录音将由后端调用讯飞转写,密钥不出后端。</p>
-      </div>
-      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+    <section role="region" aria-label="讯飞语音转写" className={cardClass}>
+      <CardHeader
+        icon={<Mic className="h-4 w-4 text-[#0078D4]" />}
+        title="讯飞语音转写"
+        description="配置讯飞 APPID/APIKey/APISecret 后，小程序录音将由后端调用讯飞转写，密钥不出后端。"
+        enabled={enabled}
+      />
+      {loading && <LoadingState label="加载讯飞配置" />}
       {error && (
-        <div className="p-8 text-center text-rose-500 text-sm">
-          加载失败:{error}
-          <button onClick={() => void reload()} className="underline font-bold ml-2 inline-flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" /> 重试
-          </button>
+        <div className="p-5">
+          <ErrorState title="讯飞配置加载失败" message={error} onRetry={() => void reload()} retryLabel="重试" />
         </div>
       )}
       {!loading && !error && (
-        <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
-          <div>
-            <label className={labelCls}>APPID</label>
-            <input className={inputCls} value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="讯飞应用 APPID" required />
-          </div>
-          <div>
-            <label className={labelCls}>{apiKeyMasked ? `APIKey(当前 ${apiKeyMasked},留空不改)` : 'APIKey'}</label>
-            <input className={inputCls} type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder={apiKeyMasked ? '留空则保持现有' : '请输入 APIKey'} autoComplete="new-password" />
-          </div>
-          <div>
-            <label className={labelCls}>{apiSecretMasked ? `APISecret(当前 ${apiSecretMasked},留空不改)` : 'APISecret'}</label>
-            <input className={inputCls} type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)}
-              placeholder={apiSecretMasked ? '留空则保持现有' : '请输入 APISecret'} autoComplete="new-password" />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
-            <span className="text-sm text-slate-700 font-bold">启用讯飞语音转写</span>
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-4 p-5">
+          <Field label="APPID" htmlFor="xfyun-app-id">
+            <input
+              id="xfyun-app-id"
+              className={`${fluentInput} w-full`}
+              value={appId}
+              onChange={(e) => setAppId(e.target.value)}
+              placeholder="讯飞应用 APPID"
+              required
+            />
+          </Field>
+          <Field label="APIKey" htmlFor="xfyun-api-key" help={apiKeyMasked ? `当前 ${apiKeyMasked}，留空不改` : '首次配置时请输入完整 APIKey。'}>
+            <input
+              id="xfyun-api-key"
+              className={`${fluentInput} w-full`}
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={apiKeyMasked ? '留空则保持现有 APIKey' : '请输入 APIKey'}
+              autoComplete="new-password"
+            />
+          </Field>
+          <Field label="APISecret" htmlFor="xfyun-api-secret" help={apiSecretMasked ? `当前 ${apiSecretMasked}，留空不改` : '首次配置时请输入完整 APISecret。'}>
+            <input
+              id="xfyun-api-secret"
+              className={`${fluentInput} w-full`}
+              type="password"
+              value={apiSecret}
+              onChange={(e) => setApiSecret(e.target.value)}
+              placeholder={apiSecretMasked ? '留空则保持现有 APISecret' : '请输入 APISecret'}
+              autoComplete="new-password"
+            />
+          </Field>
+          <label className="flex cursor-pointer select-none items-start gap-3">
+            <input
+              type="checkbox"
+              aria-label="启用讯飞语音转写"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className={`${checkboxCls} mt-0.5 shrink-0`}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-[#242424]">启用讯飞语音转写</span>
+              <span className="mt-1 block text-xs leading-5 text-[#605E5C]">关闭后小程序录音不会走讯飞转写服务。</span>
+            </span>
           </label>
-          {err && <div className="text-sm text-rose-500 font-bold">{err}</div>}
-          <div className="flex items-center gap-3 pt-2">
-            <button type="submit" disabled={submitting} className={btnPrimary}>{submitting ? '保存中…' : '保存'}</button>
-            {msg && <span className="text-sm text-emerald-600 font-bold">{msg}</span>}
+          {err && <InlineError message={err} />}
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#E1DFDD] pt-4">
+            <button type="submit" disabled={submitting} className={fluentButton('primary')}>
+              <Save className="h-4 w-4" />
+              {submitting ? '保存中...' : '保存讯飞配置'}
+            </button>
+            {msg && <SavedTag message={msg} />}
           </div>
         </form>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -181,74 +329,112 @@ function TiandituCard() {
 
   useEffect(() => {
     if (data) {
-      // 天地图 key 存明文 appId 字段,直接回显
       setKey(data.appId ?? '');
       setEnabled(data.enabled);
     }
   }, [data]);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitting(true); setErr(null); setMsg(null);
+    setSubmitting(true);
+    setErr(null);
+    setMsg(null);
     const dto: TiandituConfigInput = { key: key.trim(), enabled };
     try {
       await upsertTiandituConfig(dto);
-      setMsg('已保存'); await reload();
+      setMsg('已保存');
+      await reload();
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : '保存失败');
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="p-5 border-b border-slate-200 bg-slate-50/50">
-        <h3 className="font-bold text-slate-800 text-base">天地图(地块底图)</h3>
-        <p className="text-xs text-slate-500 mt-1">
-          配置天地图浏览器端 key 后,地块管理将以真实底图按经纬度展示地块。key 为前端 JS API 密钥,
-          请在天地图控制台(lbs.tianditu.gov.cn)按域名白名单防盗用。
-        </p>
-      </div>
-      {loading && <div className="p-8 text-center text-slate-400 text-sm">加载中…</div>}
+    <section role="region" aria-label="天地图底图" className={cardClass}>
+      <CardHeader
+        icon={<Map className="h-4 w-4 text-[#0078D4]" />}
+        title="天地图底图"
+        description="配置浏览器端 key 后，地块管理将以真实底图按经纬度展示地块。"
+        enabled={enabled}
+      />
+      {loading && <LoadingState label="加载天地图配置" />}
       {error && (
-        <div className="p-8 text-center text-rose-500 text-sm">
-          加载失败:{error}
-          <button onClick={() => void reload()} className="underline font-bold ml-2 inline-flex items-center gap-1">
-            <RefreshCw className="w-3 h-3" /> 重试
-          </button>
+        <div className="p-5">
+          <ErrorState title="天地图配置加载失败" message={error} onRetry={() => void reload()} retryLabel="重试" />
         </div>
       )}
       {!loading && !error && (
-        <form onSubmit={(e) => void onSubmit(e)} className="p-5 space-y-4">
-          <div>
-            <label className={labelCls}>浏览器端 key</label>
-            <input className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} placeholder="天地图 tk 密钥" required />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40" />
-            <span className="text-sm text-slate-700 font-bold">启用天地图底图</span>
+        <form onSubmit={(e) => void onSubmit(e)} className="space-y-4 p-5">
+          <Field
+            label="浏览器端 key"
+            htmlFor="tianditu-key"
+            help="该 key 会暴露给浏览器端 JS API，请在天地图控制台按域名白名单防盗用。"
+          >
+            <input
+              id="tianditu-key"
+              className={`${fluentInput} w-full`}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="天地图 tk 密钥"
+              required
+            />
+          </Field>
+          <label className="flex cursor-pointer select-none items-start gap-3">
+            <input
+              type="checkbox"
+              aria-label="启用天地图底图"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className={`${checkboxCls} mt-0.5 shrink-0`}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-[#242424]">启用天地图底图</span>
+              <span className="mt-1 block text-xs leading-5 text-[#605E5C]">关闭后不会删除 key，地图组件按现有兜底策略工作。</span>
+            </span>
           </label>
-          {err && <div className="text-sm text-rose-500 font-bold">{err}</div>}
-          <div className="flex items-center gap-3 pt-2">
-            <button type="submit" disabled={submitting} className={btnPrimary}>{submitting ? '保存中…' : '保存'}</button>
-            {msg && <span className="text-sm text-emerald-600 font-bold">{msg}</span>}
+          {err && <InlineError message={err} />}
+          <div className="flex flex-wrap items-center gap-3 border-t border-[#E1DFDD] pt-4">
+            <button type="submit" disabled={submitting} className={fluentButton('primary')}>
+              <Save className="h-4 w-4" />
+              {submitting ? '保存中...' : '保存天地图配置'}
+            </button>
+            {msg && <SavedTag message={msg} />}
           </div>
         </form>
       )}
-    </div>
+    </section>
   );
 }
 
 export default function IntegrationSettings() {
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-2 text-slate-800">
-        <div className="p-1.5 bg-sky-100 text-sky-600 rounded-lg"><Plug className="w-4 h-4" /></div>
-        <h2 className="font-bold text-base">第三方集成配置</h2>
+    <div className="flex h-full max-w-4xl flex-col overflow-hidden border border-[#E1DFDD] bg-white">
+      <div className="flex flex-col gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+        <div className="flex items-center gap-2 text-xl font-semibold text-[#242424]">
+          <Plug className="h-5 w-5 text-[#0078D4]" />
+          第三方集成配置
+        </div>
+        <p className="max-w-3xl text-sm leading-6 text-[#605E5C]">
+          管理微信登录、讯飞语音转写与天地图底图凭据。敏感密钥仅在保存时提交，已配置的密钥只显示脱敏状态。
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <span className={`${fluentStatusTag('neutral')} gap-1.5`}>
+            <KeyRound className="h-3.5 w-3.5" />
+            密钥留空不覆盖
+          </span>
+          <span className={`${fluentStatusTag('neutral')} gap-1.5`}>
+            <ShieldCheck className="h-3.5 w-3.5" />
+            租户内系统管理员配置
+          </span>
+        </div>
       </div>
-      <WechatCard />
-      <XfyunCard />
-      <TiandituCard />
+      <div className="fluent-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#F5F5F5] p-5">
+        <WechatCard />
+        <XfyunCard />
+        <TiandituCard />
+      </div>
     </div>
   );
 }
