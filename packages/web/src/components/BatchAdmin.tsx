@@ -173,8 +173,8 @@ export default function BatchAdmin() {
     const batch = batches.find(b => b.id === id);
     setPendingAction({
       type: 'report',
-      title: `一键生成溯源报告 -> ${batch?.code ?? id}`,
-      description: `系统将拉取该批次的农事记录与溯源链路明细,汇总导出为可用 Excel 打开的 CSV 溯源报告。`,
+      title: `导出溯源报告: ${batch?.code ?? id}`,
+      description: `数据来源于批次、农事记录、溯源事件与扫码统计接口,将导出为可用 Excel 打开的 CSV 文件。`,
       affectedCount: 1,
       batchId: id,
       onConfirm: async () => {
@@ -248,7 +248,7 @@ export default function BatchAdmin() {
       clearGenerationRequestKey('batch-label-preview', showQrModal, qrAmount);
       return true;
     } catch (e) {
-      showToast(e instanceof Error ? `生成溯源码失败:${e.message}` : '生成溯源码失败');
+      showToast(e instanceof Error ? `生成真实溯源码失败:${e.message}` : '生成真实溯源码失败');
       return false;
     } finally {
       setGenerating(false);
@@ -514,7 +514,7 @@ export default function BatchAdmin() {
       <div hidden aria-hidden="true" className="p-6 border-b border-slate-100 flex flex-col xl:flex-row xl:items-center justify-between bg-slate-50/50 shrink-0 gap-4">
         <div>
           <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
-            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg shadow-sm">
+            <div className="p-2 bg-[#DFF6DD] text-[#107C10] rounded-lg shadow-sm">
               <Layers className="w-5 h-5" />
             </div>
             芍药繁育批次与全生命周期管理
@@ -526,18 +526,18 @@ export default function BatchAdmin() {
             <button 
               onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
               disabled={isExporting !== null}
-              className={`flex items-center gap-2 border bg-white hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${isExporting ? 'opacity-50 cursor-not-allowed border-slate-200' : 'border-slate-200'} focus:ring-4 focus:ring-slate-100`}
+              className={`flex items-center gap-2 border bg-white hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-[6px] text-sm font-bold transition-all shadow-sm ${isExporting ? 'opacity-50 cursor-not-allowed border-slate-200' : 'border-slate-200'} focus:ring-4 focus:ring-slate-100`}
             >
-              {isExporting ? <Loader2 className="w-4 h-4 text-emerald-500 animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
+              {isExporting ? <Loader2 className="w-4 h-4 text-[#107C10] animate-spin" /> : <Download className="w-4 h-4 text-slate-500" />}
               {isExporting ? `正在安全生成 ${isExporting.toUpperCase()}...` : selectedIds.size > 0 ? `数据报表下发 (已选 ${selectedIds.size})` : '数据报表下发'}
             </button>
             {exportDropdownOpen && (
-              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden z-20 animate-in fade-in slide-in-from-top-2">
+              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-[6px] shadow-lg overflow-hidden z-20 animate-in fade-in slide-in-from-top-2">
                 <button onClick={() => handleExport('pdf')} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-red-50 hover:text-red-700 flex items-center gap-3 transition-colors border-b border-slate-100">
                   <div className="bg-red-100 text-red-600 p-1.5 rounded-md"><FileText className="w-4 h-4" /></div> 标准 PDF 溯源版
                 </button>
-                <button onClick={() => handleExport('excel')} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-3 transition-colors">
-                  <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-md"><FileSpreadsheet className="w-4 h-4" /></div> 原始 Excel 数据表
+                <button onClick={() => handleExport('excel')} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-[#F3F2F1] hover:text-[#107C10] flex items-center gap-3 transition-colors">
+                  <div className="bg-[#DFF6DD] text-[#107C10] p-1.5 rounded-md"><FileSpreadsheet className="w-4 h-4" /></div> 原始 Excel 数据表
                 </button>
               </div>
             )}
@@ -549,19 +549,19 @@ export default function BatchAdmin() {
               placeholder="检索专属批次号序列..."
               value={searchCode}
               onChange={(e) => setSearchCode(e.target.value)}
-              className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700 shadow-sm w-full transition-all" 
+              className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-[6px] text-sm focus:outline-none focus:ring-2 focus:ring-[#0078D4]/20 focus:border-[#107C10] text-slate-700 shadow-sm w-full transition-all"
             />
           </div>
           <button 
             onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-            className={`flex items-center gap-2 border px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm ${showAdvancedFilter ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'}`}
+            className={`flex items-center gap-2 border px-4 py-2.5 rounded-[6px] text-sm font-bold transition-all shadow-sm ${showAdvancedFilter ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'}`}
           >
             <Filter className={`w-4 h-4 ${showAdvancedFilter ? 'text-slate-300' : 'text-slate-500'}`} />
             高级筛选过滤
             <ChevronDown className={`w-3.5 h-3.5 ml-1 transition-transform ${showAdvancedFilter ? 'rotate-180 text-slate-400' : 'text-slate-400'}`} />
           </button>
           <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block"></div>
-          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm shadow-emerald-600/20 focus:ring-4 focus:ring-emerald-500/30">
+          <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 bg-[#0078D4] hover:bg-[#106EBE] text-white px-6 py-2.5 rounded-[6px] text-sm font-bold transition-all shadow-sm shadow-none focus:ring-4 focus:ring-[#0078D4]/30">
             <Plus className="w-4 h-4" />
             新建管理批次
           </button>
@@ -627,7 +627,7 @@ export default function BatchAdmin() {
               <th className="px-6 py-4 font-bold border-l-2 border-transparent w-12">
                  <input
                    type="checkbox"
-                   className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                   className="rounded text-[#107C10] border-slate-300 focus:ring-[#0078D4]"
                    checked={filteredData.length > 0 && filteredData.every(b => selectedIds.has(b.id))}
                    ref={el => { if (el) el.indeterminate = filteredData.some(b => selectedIds.has(b.id)) && !filteredData.every(b => selectedIds.has(b.id)); }}
                    onChange={(e) => {
@@ -654,12 +654,12 @@ export default function BatchAdmin() {
             {pagedData.map((b) => (
               <tr
                  key={b.id}
-                 className="hover:bg-emerald-50/20 transition-colors group"
+                 className="hover:bg-[#F3F2F1]/20 transition-colors group"
               >
-                <td className="px-6 py-4 border-l-2 border-transparent group-hover:border-emerald-500">
+                <td className="px-6 py-4 border-l-2 border-transparent group-hover:border-[#0078D4]">
                     <input
                       type="checkbox"
-                      className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500"
+                      className="rounded text-[#107C10] border-slate-300 focus:ring-[#0078D4]"
                       checked={selectedIds.has(b.id)}
                       onChange={(e) => {
                         setSelectedIds(prev => {
@@ -674,14 +674,14 @@ export default function BatchAdmin() {
                 <td className="px-6 py-4 font-mono font-bold text-slate-700 text-sm tracking-wide" title={b.code}>{b.code.slice(0, 5)}</td>
                 <td className="px-6 py-4">
                   <div className="font-bold text-slate-800 flex items-center gap-2">
-                     <div className="w-2 h-2 rounded-full hidden sm:block bg-slate-300 group-hover:bg-emerald-500 transition-colors"></div>
+                     <div className="w-2 h-2 rounded-full hidden sm:block bg-slate-300 group-hover:bg-[#0078D4] transition-colors"></div>
                      {b.type}
                   </div>
                 </td>
                 <td className="px-6 py-4 text-slate-500 text-xs font-mono">{b.date}</td>
                 <td className="px-6 py-4 text-slate-600 font-medium text-sm">{b.house}</td>
                 <td className="px-6 py-4 text-slate-700 font-bold text-sm">{b.owner}</td>
-                <td className="px-6 py-4 font-mono font-black text-emerald-600 text-right text-base">{b.generated} <span className="text-xs text-slate-400 font-normal">张</span></td>
+                <td className="px-6 py-4 font-mono font-black text-[#107C10] text-right text-base">{b.generated} <span className="text-xs text-slate-400 font-normal">张</span></td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 bg-${b.color}-50 text-${b.color}-700 border border-${b.color}-200/60 rounded-md text-xs font-bold inline-flex items-center gap-1.5 shadow-sm`}>
                     <span className={`w-1.5 h-1.5 rounded-full bg-${b.color}-500 flex-shrink-0 animate-pulse`}></span>
@@ -713,7 +713,7 @@ export default function BatchAdmin() {
                   </button>
                   <button
                     onClick={() => handleScanCompliance(b.id)}
-                    className="flex items-center justify-center gap-1.5 text-emerald-600 hover:text-white hover:bg-emerald-600 font-bold text-[10px] uppercase tracking-wider bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                    className="flex items-center justify-center gap-1.5 text-[#107C10] hover:text-white hover:bg-[#106EBE] font-bold text-[10px] uppercase tracking-wider bg-[#DFF6DD] border border-[#E1DFDD] px-3 py-1.5 rounded-lg transition-all shadow-sm"
                   >
                     {isScanningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
                     合规性探针
@@ -795,11 +795,11 @@ export default function BatchAdmin() {
       {/* QR Generation Modal */}
       {showQrModal && activeBatch && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col md:flex-row transform transition-all h-[90vh] md:h-auto max-h-[800px]">
+           <div className="bg-white rounded-[6px] shadow-lg w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col md:flex-row transform transition-all h-[90vh] md:h-auto max-h-[800px]">
               <div className="w-full md:w-[55%] p-8 border-r border-slate-100 bg-slate-50/80 flex flex-col overflow-y-auto">
                  <div className="flex justify-between items-center mb-8">
                     <h3 className="font-bold text-slate-800 text-xl flex items-center gap-3">
-                       <div className="p-2.5 bg-blue-100 text-blue-600 rounded-xl shadow-sm">
+                       <div className="p-2.5 bg-blue-100 text-blue-600 rounded-[6px] shadow-sm">
                          <QrCode className="w-6 h-6" /> 
                        </div>
                        专属溯源标签批量引擎
@@ -807,7 +807,7 @@ export default function BatchAdmin() {
                  </div>
                  
                  <div className="space-y-6 flex-1">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div className="bg-white p-4 rounded-[6px] border border-slate-200 shadow-sm flex items-center gap-4">
                        <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">
                          <Layers className="w-6 h-6" />
                        </div>
@@ -826,7 +826,7 @@ export default function BatchAdmin() {
                          <select 
                            value={paperSize} 
                            onChange={(e) => setPaperSize(e.target.value)}
-                           className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                           className="w-full px-4 py-3 bg-white border border-slate-200 rounded-[6px] text-sm font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
                          >
                             <option value="4x6">标准物流特大外箱贴 (4"x6")</option>
                             <option value="2x1">盆栽单株植物迷你标 (2"x1")</option>
@@ -843,7 +843,7 @@ export default function BatchAdmin() {
                               max={MAX_CODES}
                               value={qrAmount}
                               onChange={(e) => setQrAmount(Math.floor(Number(e.target.value)))}
-                              className={`w-full pl-4 pr-12 py-3 bg-white border rounded-xl text-lg font-black text-slate-800 shadow-sm focus:outline-none focus:ring-2 font-mono transition-all ${qrAmountValid ? 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500' : 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'}`}
+                              className={`w-full pl-4 pr-12 py-3 bg-white border rounded-[6px] text-lg font-black text-slate-800 shadow-sm focus:outline-none focus:ring-2 font-mono transition-all ${qrAmountValid ? 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500' : 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'}`}
                            />
                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">张</span>
                          </div>
@@ -855,10 +855,10 @@ export default function BatchAdmin() {
                       </div>
                     </div>
                     
-                    <div className="border border-slate-200 rounded-xl p-5 bg-white space-y-4 shadow-sm group hover:border-slate-300 transition-colors">
+                    <div className="border border-slate-200 rounded-[6px] p-5 bg-white space-y-4 shadow-sm group hover:border-slate-300 transition-colors">
                        <div className="flex items-center gap-2 mb-2">
                          <Calculator className="w-4 h-4 text-slate-400" />
-                         <span className="text-xs font-bold text-slate-800 uppercase tracking-widest">高级矢量排版控制器</span>
+                         <span className="text-xs font-bold text-slate-800 uppercase tracking-widest">标签排版参数</span>
                        </div>
                        <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -875,15 +875,15 @@ export default function BatchAdmin() {
                              <CheckCircle className="w-3.5 h-3.5" />
                           </div>
                           <input type="checkbox" checked={showAntiFakeLogo} onChange={(e) => setShowAntiFakeLogo(e.target.checked)} className="hidden" />
-                          <span className="text-xs font-bold text-slate-700 tracking-wide">强制印制官方政府防伪溯源防撕 Logo 栏</span>
+                          <span className="text-xs font-bold text-slate-700 tracking-wide">显示平台标识栏</span>
                        </label>
                     </div>
                     
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100/50 text-xs text-blue-800 flex items-start gap-3 shadow-sm">
+                    <div className="bg-[#EFF6FC] p-4 rounded-[6px] border border-blue-100/50 text-xs text-blue-800 flex items-start gap-3 shadow-sm">
                        <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-sm shrink-0">
                          <Printer className="w-4 h-4 text-blue-600" />
                        </div>
-                       <p className="leading-relaxed font-medium">生态级跨端支持：您可以将生成的防伪溯源码阵列无损导出为高清晰度 PDF 印刷文件，或通过驱动级直接投递至本地局域网任意 ZPL/TSPL 协议工业热敏条码打印机。</p>
+                       <p className="leading-relaxed font-medium">生成后可在浏览器打印预览中输出或另存为 PDF。实际打印设备、纸张规格和清晰度以本地打印环境为准。</p>
                     </div>
                  </div>
                  
@@ -891,12 +891,12 @@ export default function BatchAdmin() {
                  <div className="flex-1 min-h-[40px]"></div>
 
                  <div className="mt-8 flex justify-between gap-4 shrink-0">
-                    <button onClick={() => setShowQrModal(null)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 hover:text-slate-800 rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 font-bold text-sm transition-all focus:ring-4 focus:ring-slate-100 min-w-[120px]">暂缓生成</button>
+                    <button onClick={() => setShowQrModal(null)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 hover:text-slate-800 rounded-[6px] shadow-sm hover:bg-slate-50 hover:border-slate-300 font-bold text-sm transition-all focus:ring-4 focus:ring-slate-100 min-w-[120px]">暂缓生成</button>
                     <button onClick={() => {
                         setPendingAction({
                           type: 'generate',
                           title: '批量生成并导出溯源标签矩阵',
-                          description: `将针对高优批次 [${activeBatch?.id}] 同步派生出 ${qrAmount} 枚具有唯一标识防伪哈希值的溯源码 (物理输出尺寸: ${paperSize})。当前系统操作不可逆，是否授权推进？`,
+                          description: `将通过真实溯源码接口为批次 [${activeBatch?.id}] 生成 ${qrAmount} 枚唯一溯源码 (标签规格: ${paperSize})。生成后会消耗可用二维码额度,请确认数量。`,
                           affectedCount: qrAmount,
                           batchId: activeBatch?.id,
                           onConfirm: async () => {
@@ -905,8 +905,8 @@ export default function BatchAdmin() {
                              if (ok) setShowPdfPreview(true);
                           }
                         });
-                    }} disabled={!qrAmountValid} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed">
-                       进入排版沙盒与输出
+                    }} disabled={!qrAmountValid} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-[6px] shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed">
+                       生成真实溯源码
                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                     </button>
                  </div>
@@ -917,7 +917,7 @@ export default function BatchAdmin() {
                     <X className="w-6 h-6" />
                  </button>
                  <div className="absolute top-6 left-6 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-widest shadow-sm border border-slate-200 z-20 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="w-2 h-2 rounded-full bg-[#107C10] animate-pulse"></span>
                     实时物理标尺预览沙盒
                  </div>
                  
@@ -925,7 +925,7 @@ export default function BatchAdmin() {
                  <div className="w-full h-full flex flex-col items-center justify-center z-10 p-6 min-h-[400px]">
                    <div 
                      style={{ padding: `${labelPaddingX}px`, gap: `${labelSpacing}px` }}
-                     className={`bg-white shadow-2xl relative transition-all duration-300 transform md:scale-100 scale-90 origin-center select-none ring-1 ring-slate-200/50
+                     className={`bg-white shadow-lg relative transition-all duration-300 transform md:scale-100 scale-90 origin-center select-none ring-1 ring-slate-200/50
                      ${paperSize === '4x6' ? 'w-[280px] min-h-[420px] flex flex-col rounded-md' : 
                        paperSize === '2x1' ? 'w-[200px] h-28 flex items-center justify-between rounded-sm px-2' : 
                        'w-[350px] h-[480px] grid grid-cols-2 grid-rows-4 rounded bg-slate-50'}`}
@@ -934,15 +934,15 @@ export default function BatchAdmin() {
                          <div className="flex-1 flex flex-col h-full border-[3px] border-slate-200 border-dashed rounded overflow-hidden relative">
                            {showAntiFakeLogo && (
                              <div className="text-center bg-slate-900 flex items-center justify-center gap-2 text-white font-black py-3 tracking-widest text-xs shrink-0">
-                               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                               官方溯源认证引擎
+                               <ShieldCheck className="w-4 h-4 text-[#107C10]" />
+                               溯源标签预览
                              </div>
                            )}
                            <div className="flex-1 flex flex-col items-center justify-center p-6 bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
-                             <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                             <div className="bg-white p-3 rounded-[6px] shadow-sm border border-slate-100">
                                 <QRCodeSVG value={traceUrl(codeForIndex(0))} size={140} level="H" />
                              </div>
-                             <div className="mt-5 flex flex-col items-center gap-2 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-200 w-full text-center">
+                             <div className="mt-5 flex flex-col items-center gap-2 bg-slate-50 px-4 py-2.5 rounded-[6px] border border-slate-200 w-full text-center">
                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">唯一数字映射标识</span>
                                <span className="font-mono font-black text-xl text-slate-900 tracking-widest bg-white px-2 rounded shadow-sm border border-slate-100 w-full overflow-hidden text-ellipsis">
                                  {codeForIndex(0)}
@@ -961,7 +961,7 @@ export default function BatchAdmin() {
                              <QRCodeSVG value={traceUrl(codeForIndex(0))} size={showAntiFakeLogo ? 60 : 76} level="H" />
                            </div>
                            <div className="flex-1 ml-3 text-right flex flex-col justify-center h-full">
-                             {showAntiFakeLogo && <div className="text-[8px] font-black text-emerald-600 mb-1 tracking-widest flex justify-end items-center gap-1 uppercase"><ShieldCheck className="w-2.5 h-2.5" /> 核准溯源</div>}
+                             {showAntiFakeLogo && <div className="text-[8px] font-black text-[#107C10] mb-1 tracking-widest flex justify-end items-center gap-1 uppercase"><ShieldCheck className="w-2.5 h-2.5" /> 核准溯源</div>}
                              <div className="font-black text-xs text-slate-800 leading-tight tracking-wide bg-slate-50 px-1 py-0.5 rounded ml-auto border border-slate-100 mb-1 w-max max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{activeBatch.type}</div>
                              <div className="font-mono font-bold text-[9px] text-slate-500 mt-auto truncate tracking-widest px-1">{codeForIndex(0)}</div>
                            </div>
@@ -969,7 +969,7 @@ export default function BatchAdmin() {
                       ) : (
                        Array.from({length: 8}).map((_, i) => (
                           <div key={i} className="border border-slate-300 border-dashed rounded flex flex-col items-center justify-center p-1 bg-white relative">
-                             {showAntiFakeLogo && <ShieldCheck className="absolute top-1 left-1 w-2.5 h-2.5 text-emerald-500 opacity-50" />}
+                             {showAntiFakeLogo && <ShieldCheck className="absolute top-1 left-1 w-2.5 h-2.5 text-[#107C10] opacity-50" />}
                              <QRCodeSVG value={traceUrl(codeForIndex(i))} size={38} level="L" />
                              <div className="text-[6px] font-mono mt-1 text-slate-600 bg-slate-100 px-1 rounded">{codeForIndex(i).substring(0,8)}</div>
                           </div>
@@ -984,8 +984,8 @@ export default function BatchAdmin() {
 
       {/* PDF Generation Print Preview (Full Screen) */}
       {showPdfPreview && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm shadow-2xl p-4">
-            <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-300">
+         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm shadow-lg p-4">
+            <div className="bg-slate-50 rounded-[6px] shadow-lg w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-300">
                <div className="p-6 bg-white/80 backdrop-blur-md border-b border-slate-200/60 flex justify-between items-center shrink-0">
                   <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
                      <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg shadow-sm">
@@ -1043,7 +1043,7 @@ export default function BatchAdmin() {
                         <div className="space-y-3">
                            <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
                               <input type="checkbox" checked={showShield} onChange={(e) => setShowShield(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
-                              渲染机构防伪盾牌标志
+                              显示平台标识
                            </label>
                            <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
                               <input type="checkbox" checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
@@ -1057,7 +1057,7 @@ export default function BatchAdmin() {
                      </div>
 
                      <div className="mt-auto pt-6">
-                        <div className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100/50 rounded-xl text-xs text-indigo-800 leading-relaxed font-medium shadow-sm flex items-start gap-3">
+                        <div className="p-4 bg-[#EFF6FC] border border-indigo-100/50 rounded-[6px] text-xs text-indigo-800 leading-relaxed font-medium shadow-sm flex items-start gap-3">
                            <div className="bg-white p-1.5 rounded-lg shrink-0 shadow-sm border border-indigo-100">
                              <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
                            </div>
@@ -1069,7 +1069,7 @@ export default function BatchAdmin() {
                   {/* Right Side: Visual Canvas */}
                   <div className="flex-1 overflow-y-auto bg-[#e2e8f0] p-8 flex flex-col items-center relative pattern-boxes pattern-slate-300 pattern-bg-transparent pattern-size-4">
                      {/* Export Header Control */}
-                     <div className="bg-white/90 backdrop-blur-md sticky top-0 z-20 mb-6 px-6 py-3 rounded-2xl shadow-sm border border-slate-200 w-full max-w-4xl flex justify-between items-center bg-slate-50">
+                     <div className="bg-white/90 backdrop-blur-md sticky top-0 z-20 mb-6 px-6 py-3 rounded-[6px] shadow-sm border border-slate-200 w-full max-w-4xl flex justify-between items-center bg-slate-50">
                         <div className="flex items-center gap-3">
                           <span className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded shadow-sm border border-slate-100">A4 标准预切不干胶 (21贴/页)</span>
                           <span className="text-xs font-mono font-bold text-slate-400">总计 {Math.ceil(qrAmount / 21)} 页</span>
@@ -1077,7 +1077,7 @@ export default function BatchAdmin() {
                         <div className="flex gap-3">
                           <button onClick={() => {
                              window.print();
-                          }} className="flex items-center justify-center gap-2 text-indigo-600 font-bold text-sm bg-white border border-indigo-100 px-5 py-2 rounded-xl transition-all shadow-sm hover:border-indigo-300 hover:shadow-md focus:ring-4 focus:ring-indigo-500/20 active:scale-95">
+                          }} className="flex items-center justify-center gap-2 text-indigo-600 font-bold text-sm bg-white border border-indigo-100 px-5 py-2 rounded-[6px] transition-all shadow-sm hover:border-indigo-300 hover:shadow-md focus:ring-4 focus:ring-indigo-500/20 active:scale-95">
                             <Printer className="w-4 h-4" /> 对接本机打印驱动
                           </button>
                           <button onClick={() => {
@@ -1085,17 +1085,17 @@ export default function BatchAdmin() {
                              setShowQrModal(null);
                              showToast(`已为批次生成 ${generatedCodes.length} 个唯一溯源码并导出标签。`);
                              setGeneratedCodes([]);
-                          }} className="flex items-center justify-center gap-2 text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-xl transition-all shadow border border-indigo-700/50 focus:ring-4 focus:ring-indigo-500/30 active:scale-95">
+                          }} className="flex items-center justify-center gap-2 text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-[6px] transition-all shadow border border-indigo-700/50 focus:ring-4 focus:ring-indigo-500/30 active:scale-95">
                             <Download className="w-4 h-4" /> 导出印刷级 PDF
                           </button>
                         </div>
                      </div>
                      
-                     <div style={{ padding: `${sheetMargin}px`, gap: `${sheetGap}px` }} className="print-sheet bg-white shadow-2xl ring-1 ring-slate-900/5 min-h-[842px] w-[595px] grid grid-cols-3 pb-20 transform transition-transform hover:scale-[1.02] duration-500 ease-out origin-top border-t-8 border-indigo-600">
+                     <div style={{ padding: `${sheetMargin}px`, gap: `${sheetGap}px` }} className="print-sheet bg-white shadow-lg ring-1 ring-slate-900/5 min-h-[842px] w-[595px] grid grid-cols-3 pb-20 transform transition-transform hover:scale-[1.02] duration-500 ease-out origin-top border-t-8 border-indigo-600">
                         {Array.from({length: Math.min(21, qrAmount)}).map((_, i) => (
                            <div key={i} className="border-2 border-dashed border-slate-300 rounded p-2 flex flex-col items-center justify-center relative hover:bg-slate-50 transition-colors cursor-pointer group">
                               <div className="absolute top-1 left-1 flex items-center gap-1">
-                                 {showShield && <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                                 {showShield && <CheckCircle className="w-3 h-3 text-[#107C10]" />}
                               </div>
                               {showSerial && <div className="absolute top-1 right-1 text-[8px] text-slate-400 font-mono font-bold">{i+1}/{qrAmount}</div>}
                               <QRCodeSVG value={traceUrl(codeForIndex(i))} size={sheetQrSize} level="M" />
@@ -1119,7 +1119,7 @@ export default function BatchAdmin() {
                      window.print();
                      setShowPdfPreview(false);
                      setShowQrModal(null);
-                     showToast(`已成功为批次生成 ${qrAmount} 张溯源防伪码`);
+                     showToast(`已成功为批次生成 ${qrAmount} 个真实溯源码`);
                   }} className="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow flex items-center gap-2">
                      <Printer className="w-5 h-5" /> 确认排版并打印 PDF
                   </button>
@@ -1132,21 +1132,21 @@ export default function BatchAdmin() {
       {/* Compliance Scan Report Modal */}
       {showComplianceReport && (
          <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="合规探针">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-               <div className="flex justify-between items-center bg-gradient-to-r from-emerald-50 to-teal-50 p-6 border-b border-emerald-100/50 relative overflow-hidden">
-                  <ShieldCheck className="absolute -left-4 -bottom-4 w-24 h-24 text-emerald-500/10 -rotate-12" />
-                  <h3 className="font-bold text-emerald-800 text-lg flex items-center gap-3 relative z-10">
-                     <div className="p-2 bg-emerald-100/80 rounded-lg shadow-sm">
-                       <ShieldCheck className="w-5 h-5 text-emerald-700" />
+            <div className="bg-white rounded-[6px] shadow-lg w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
+               <div className="flex justify-between items-center bg-[#EFF6FC] p-6 border-b border-[#E1DFDD] relative overflow-hidden">
+                  <ShieldCheck className="absolute -left-4 -bottom-4 w-24 h-24 text-[#107C10]/10 -rotate-12" />
+                  <h3 className="font-bold text-[#107C10] text-lg flex items-center gap-3 relative z-10">
+                     <div className="p-2 bg-[#DFF6DD] rounded-lg shadow-sm">
+                       <ShieldCheck className="w-5 h-5 text-[#107C10]" />
                      </div>
                      溯源法定合规性自动化探针
                   </h3>
-                  <button onClick={() => setShowComplianceReport(null)} className="text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 p-2 rounded-lg transition-colors relative z-10"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setShowComplianceReport(null)} className="text-[#107C10] hover:text-[#107C10] hover:bg-[#F3F2F1] p-2 rounded-lg transition-colors relative z-10"><X className="w-5 h-5" /></button>
                </div>
                <div className="p-8">
-                  <div className="flex items-center gap-6 mb-8 bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-inner">
-                     <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 border-white shadow-md relative shrink-0 ${(complianceData?.score ?? 0) >= 75 ? 'bg-emerald-100 text-emerald-600' : (complianceData?.score ?? 0) >= 50 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
-                        <div className={`absolute inset-0 border-4 rounded-full opacity-20 animate-ping ${(complianceData?.score ?? 0) >= 75 ? 'border-emerald-500' : (complianceData?.score ?? 0) >= 50 ? 'border-amber-500' : 'border-rose-500'}`}></div>
+                  <div className="flex items-center gap-6 mb-8 bg-slate-50 p-5 rounded-[6px] border border-slate-100 shadow-inner">
+                     <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 border-white shadow-md relative shrink-0 ${(complianceData?.score ?? 0) >= 75 ? 'bg-[#DFF6DD] text-[#107C10]' : (complianceData?.score ?? 0) >= 50 ? 'bg-amber-100 text-amber-600' : 'bg-rose-100 text-rose-600'}`}>
+                        <div className={`absolute inset-0 border-4 rounded-full opacity-20 animate-ping ${(complianceData?.score ?? 0) >= 75 ? 'border-[#107C10]' : (complianceData?.score ?? 0) >= 50 ? 'border-amber-500' : 'border-rose-500'}`}></div>
                         <span className="text-2xl font-black">{complianceData?.score ?? 0}<span className="text-sm">%</span></span>
                      </div>
                      <div>
@@ -1156,7 +1156,7 @@ export default function BatchAdmin() {
                             : (complianceData?.score ?? 0) >= 50
                             ? '基本符合,仍有关键溯源要素待补齐'
                             : '溯源配置严重不足,需尽快补全'}
-                          {(complianceData?.score ?? 0) >= 75 && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                          {(complianceData?.score ?? 0) >= 75 && <CheckCircle className="w-4 h-4 text-[#107C10]" />}
                         </div>
                         <div className="text-xs text-slate-500 font-medium">当前挂载抽检批次号流水: <span className="font-mono font-bold bg-white text-slate-700 px-2 py-0.5 rounded shadow-sm border border-slate-200 ml-1">{showComplianceReport}</span></div>
                      </div>
@@ -1165,17 +1165,17 @@ export default function BatchAdmin() {
                   <div className="space-y-3 relative before:absolute before:inset-y-4 before:left-[1.375rem] before:w-0.5 before:bg-slate-100">
                      {(complianceData?.checks ?? []).map((c, i) => (
                        c.ok ? (
-                         <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl relative z-10 shadow-sm hover:border-emerald-200 transition-colors">
+                         <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[6px] relative z-10 shadow-sm hover:border-[#C8C6C4] transition-colors">
                             <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
-                               <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-emerald-200">
-                                 <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                               <div className="w-6 h-6 rounded-full bg-[#DFF6DD] flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-[#C8C6C4]">
+                                 <CheckCircle className="w-3.5 h-3.5 text-[#107C10]" />
                                </div>
                                {c.label}
                             </div>
-                            <span className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold bg-emerald-50 px-2 py-1 rounded">已挂载</span>
+                            <span className="text-[10px] uppercase tracking-widest text-[#107C10] font-bold bg-[#DFF6DD] px-2 py-1 rounded">已挂载</span>
                          </div>
                        ) : (
-                         <div key={i} className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl relative z-10 shadow-sm shadow-amber-100/50 overflow-hidden group">
+                         <div key={i} className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-[6px] relative z-10 shadow-sm shadow-amber-100/50 overflow-hidden group">
                             <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
                             <div className="flex items-center gap-3 text-sm text-amber-900 font-black">
                                <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-amber-200">
@@ -1190,7 +1190,7 @@ export default function BatchAdmin() {
                   </div>
                   
                   <div className="mt-8 flex justify-end">
-                     <button onClick={() => setShowComplianceReport(null)} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-slate-900/20 active:scale-95">关联合规探针工作台</button>
+                     <button onClick={() => setShowComplianceReport(null)} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-[6px] font-bold text-sm transition-all shadow-lg shadow-slate-900/20 active:scale-95">关联合规探针工作台</button>
                   </div>
                </div>
             </div>
@@ -1199,8 +1199,8 @@ export default function BatchAdmin() {
 
       {showProfitModal && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="删除确认">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-purple-100/50">
-              <div className="p-6 border-b border-purple-100/50 bg-gradient-to-r from-purple-50 to-fuchsia-50 flex items-center justify-between relative overflow-hidden">
+           <div className="bg-white rounded-[6px] shadow-lg w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-purple-100/50">
+              <div className="p-6 border-b border-purple-100/50 bg-[#EFF6FC] flex items-center justify-between relative overflow-hidden">
                  <TrendingUp className="absolute -right-4 -top-4 w-32 h-32 text-purple-500/5 rotate-12" />
                  {(() => {
                     const batch = batches.find(b => b.id === showProfitModal);
@@ -1228,32 +1228,32 @@ export default function BatchAdmin() {
                     return (
                       <>
                         <div className="grid grid-cols-2 gap-4">
-                           <div className="bg-slate-50 border border-slate-100 p-5 rounded-xl shadow-inner relative overflow-hidden border-t-[3px] border-t-amber-400">
+                           <div className="bg-slate-50 border border-slate-100 p-5 rounded-[6px] shadow-inner relative overflow-hidden border-t-[3px] border-t-amber-400">
                              <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">公允投入品总计结转成本 (沉没)</div>
                              <div className="text-xl font-black text-slate-800 font-mono tracking-tight"><span className="text-slate-400 font-sans mr-1">¥</span>{batch.inputCost.toLocaleString()}</div>
                            </div>
-                           <div className="bg-slate-50 border border-slate-100 p-5 rounded-xl shadow-inner relative overflow-hidden border-t-[3px] border-t-amber-500">
+                           <div className="bg-slate-50 border border-slate-100 p-5 rounded-[6px] shadow-inner relative overflow-hidden border-t-[3px] border-t-amber-500">
                              <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1">全时段人工及地租分摊成本比率</div>
                              <div className="text-xl font-black text-slate-800 font-mono tracking-tight"><span className="text-slate-400 font-sans mr-1">¥</span>{batch.laborCost.toLocaleString()}</div>
                            </div>
                         </div>
-                        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200/60 p-6 rounded-2xl flex items-center justify-between shadow-sm relative overflow-hidden">
+                        <div className="bg-[#EFF6FC] border border-purple-200/60 p-6 rounded-[6px] flex items-center justify-between shadow-sm relative overflow-hidden">
                            <div className="relative z-10">
                              <div className="text-[10px] uppercase tracking-widest font-bold text-indigo-900 mb-1 flex items-center gap-1.5">
                                {batch.sellPrice > 0 ? (
-                                 <><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> 已锁定分销合同总出圃成交额</>
+                                 <><CheckCircle className="w-3.5 h-3.5 text-[#107C10]" /> 已锁定分销合同总出圃成交额</>
                                ) : (
                                  <><AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> 沙盘预估市场终端公允成交规模</>
                                )}
                              </div>
-                             <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-indigo-700 font-mono tracking-tighter"><span className="text-purple-400 text-2xl font-sans mr-1">¥</span>{res.expectedSell.toLocaleString()}</div>
+                             <div className="text-4xl font-black text-[#5B2E91] font-mono tracking-tighter"><span className="text-purple-400 text-2xl font-sans mr-1">¥</span>{res.expectedSell.toLocaleString()}</div>
                            </div>
                            <div className="text-right relative z-10 pl-6 border-l border-purple-200/50">
                              <div className="text-[10px] uppercase tracking-widest font-bold text-slate-500 mb-2">模型重估毛利率动态指标</div>
-                             <div className="text-4xl font-black text-emerald-500 tracking-tighter drop-shadow-sm">{res.text}</div>
+                             <div className="text-4xl font-black text-[#107C10] tracking-tighter drop-shadow-sm">{res.text}</div>
                            </div>
                         </div>
-                        <div className="text-[11px] text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-start gap-3 leading-relaxed shadow-sm">
+                        <div className="text-[11px] text-slate-500 bg-slate-50 p-4 rounded-[6px] border border-slate-100 flex items-start gap-3 leading-relaxed shadow-sm">
                            <div className="bg-white p-1.5 rounded-lg border border-slate-200 mt-0.5 shrink-0">
                              <Calculator className="w-3.5 h-3.5 text-slate-400" />
                            </div>
@@ -1270,7 +1270,7 @@ export default function BatchAdmin() {
       {/* Confirmation Modal */}
       {pendingAction && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+           <div className="bg-white rounded-[6px] shadow-lg w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
               <div className="p-6 bg-slate-50 border-b border-slate-100 flex items-start gap-4">
                  <div className={`p-3 rounded-full shrink-0 ${pendingAction.type === 'export' ? 'bg-indigo-100 text-indigo-600' : pendingAction.type === 'report' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
                     <AlertTriangle className="w-6 h-6" />
@@ -1341,7 +1341,7 @@ export default function BatchAdmin() {
         const scans = (detailData?.recentScans ?? []) as Array<Record<string, unknown>>;
         return (
           <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-[6px] shadow-lg w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
               <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
                   <div className="p-2 bg-slate-200 text-slate-700 rounded-lg shadow-sm"><Eye className="w-5 h-5" /></div>
@@ -1355,10 +1355,10 @@ export default function BatchAdmin() {
                 {!detailLoading && detailData && (
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">品种</div><div className="text-sm font-black text-slate-800">{b?.type}</div></div>
-                      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">种植日期</div><div className="text-sm font-black text-slate-800 font-mono">{b?.date}</div></div>
-                      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4"><div className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mb-1">已签发码数</div><div className="text-sm font-black text-emerald-700 font-mono">{detailData.codeCount ?? 0}</div></div>
-                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4"><div className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1">累计扫码</div><div className="text-sm font-black text-blue-700 font-mono">{detailData.scanTotal ?? 0}</div></div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-[6px] p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">品种</div><div className="text-sm font-black text-slate-800">{b?.type}</div></div>
+                      <div className="bg-slate-50 border border-slate-100 rounded-[6px] p-4"><div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">种植日期</div><div className="text-sm font-black text-slate-800 font-mono">{b?.date}</div></div>
+                      <div className="bg-[#DFF6DD] border border-[#E1DFDD] rounded-[6px] p-4"><div className="text-[10px] text-[#107C10] font-bold uppercase tracking-widest mb-1">已签发码数</div><div className="text-sm font-black text-[#107C10] font-mono">{detailData.codeCount ?? 0}</div></div>
+                      <div className="bg-blue-50 border border-blue-100 rounded-[6px] p-4"><div className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mb-1">累计扫码</div><div className="text-sm font-black text-blue-700 font-mono">{detailData.scanTotal ?? 0}</div></div>
                     </div>
                     <div>
                       <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">农事记录 ({recs.length})</h4>
@@ -1411,7 +1411,7 @@ export default function BatchAdmin() {
         const b = batches.find(x => x.id === codesBatchId);
         return (
           <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-[6px] shadow-lg w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
               <div className="p-6 border-b border-slate-100 bg-violet-50 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-violet-900 text-lg flex items-center gap-3">
                   <div className="p-2 bg-violet-200 text-violet-700 rounded-lg shadow-sm"><ScanLine className="w-5 h-5" /></div>
@@ -1426,7 +1426,7 @@ export default function BatchAdmin() {
                 {!codesLoading && codesList.length > 0 && (
                   <div className="space-y-2">
                     {codesList.map(c => (
-                      <div key={c.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm hover:border-violet-200 transition-colors">
+                      <div key={c.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-[6px] px-4 py-3 shadow-sm hover:border-violet-200 transition-colors">
                         <span className="font-mono font-bold text-slate-800 text-sm flex-1 truncate">{c.code}</span>
                         <span className="text-xs text-slate-400 shrink-0">扫码 <span className="font-bold text-blue-600 font-mono">{c.scanCount}</span> 次</span>
                         <button onClick={() => copyLink(c.code)} title="复制溯源链接" className="flex items-center gap-1 text-violet-600 hover:text-white hover:bg-violet-600 text-xs font-bold border border-violet-100 bg-violet-50 px-2.5 py-1.5 rounded-lg transition-all">
@@ -1448,7 +1448,7 @@ export default function BatchAdmin() {
       {/* 删除批次确认弹窗 */}
       {deleteTarget && (
         <div className="absolute inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-[6px] shadow-lg w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-6 bg-rose-50 border-b border-rose-100 flex items-start gap-4">
               <div className="p-3 rounded-full shrink-0 bg-rose-100 text-rose-600"><Trash2 className="w-6 h-6" /></div>
               <div>
@@ -1461,7 +1461,7 @@ export default function BatchAdmin() {
             <div className="px-6 py-5">
               {deleteTarget.generated > 0 ? (
                 <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-900">
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-[6px] text-sm text-amber-900">
                     <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                     <div>
                       该批次已签发 <span className="font-black">{deleteTarget.generated}</span> 个溯源码。删除将
@@ -1495,7 +1495,6 @@ export default function BatchAdmin() {
     </div>
   );
 }
-
 function CreateBatchModal({
   fields, onClose, onCreated,
 }: {
@@ -1540,7 +1539,7 @@ function CreateBatchModal({
     <div className="absolute inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"
          role="dialog" aria-modal="true" aria-labelledby="createBatchTitle"
          onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
-      <form onSubmit={submit} className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+      <form onSubmit={submit} className="bg-white rounded-[6px] shadow-lg w-full max-w-md p-6 space-y-4">
         <h3 id="createBatchTitle" className="font-bold text-slate-800 text-lg">新建批次</h3>
         {fields.length === 0 && <p className="text-amber-600 text-sm">请先创建地块后再建批次。</p>}
         <label htmlFor="create-batch-field" className="block text-xs font-bold text-slate-500">所属地块
@@ -1569,7 +1568,7 @@ function CreateBatchModal({
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600">取消</button>
           <button type="submit" disabled={submitting || fields.length === 0}
-            className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold disabled:opacity-50">
+            className="px-5 py-2 bg-[#0078D4] text-white rounded-lg text-sm font-bold disabled:opacity-50">
             {submitting ? '提交中…' : '创建'}
           </button>
         </div>
