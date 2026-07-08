@@ -1,13 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const authMock = vi.hoisted(() => ({ role: 'platform_admin' }));
+const authMock = vi.hoisted(() => ({ role: 'platform_admin', isAuthenticated: true }));
 
 vi.mock('./auth/auth-context', () => ({
   useAuth: () => ({
     user: { userId: 'mock-user', tenantId: 'mock-tenant', role: authMock.role, agentId: null, ownerId: null },
     profile: { displayName: 'Mock User' },
-    isAuthenticated: true,
+    isAuthenticated: authMock.isAuthenticated,
     logout: vi.fn(),
   }),
 }));
@@ -16,6 +16,8 @@ vi.mock('./components/FarmFields', () => ({ default: () => <div>Farm Fields View
 vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant Management View</div> }));
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
 vi.mock('./components/MemberCenter', () => ({ default: () => <div>Member Center View</div> }));
+vi.mock('./components/PublicLanding', () => ({ default: ({ onLogin }: { onLogin: () => void }) => <button type="button" onClick={onLogin}>Landing CTA</button> }));
+vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
 vi.mock('./components/Dashboard', () => ({ default: () => <div>Production Overview View</div> }));
@@ -25,9 +27,23 @@ import App from './App';
 beforeEach(() => {
   window.location.hash = '';
   authMock.role = 'platform_admin';
+  authMock.isAuthenticated = true;
 });
 
 describe('App role wiring', () => {
+  it('shows public landing before the login form for unauthenticated visitors', async () => {
+    authMock.isAuthenticated = false;
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Landing CTA' })).toBeTruthy();
+    expect(screen.queryByText('Login Form View')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Landing CTA' }));
+
+    expect(await screen.findByText('Login Form View')).toBeTruthy();
+  });
+
   it('renders the platform tenant management surface for platform admins', async () => {
     render(<App />);
 

@@ -38,4 +38,12 @@ describe('AppLogin Fluent login', () => {
 
     expect(await screen.findByText('登录失败')).toBeTruthy();
   });
+  it('offers a return path to the public landing when provided', () => {
+    const onBackToLanding = vi.fn();
+    render(<AppLogin onBackToLanding={onBackToLanding} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '返回介绍页' }));
+
+    expect(onBackToLanding).toHaveBeenCalledTimes(1);
+  });
 });

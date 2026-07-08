@@ -8,6 +8,7 @@ import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 import { fluentButton } from './ui/fluent';
 
+const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
@@ -88,6 +89,7 @@ export default function App() {
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
@@ -149,6 +151,7 @@ export default function App() {
   const handleLogout = () => {
     logout();
     setActiveTab('overview');
+    setAuthView('landing');
   };
 
   useEffect(() => {
@@ -163,7 +166,13 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return <AppLogin />;
+    return (
+      <Suspense fallback={<ViewSkeleton />}>
+        {authView === 'login'
+          ? <AppLogin onBackToLanding={() => setAuthView('landing')} />
+          : <PublicLanding onLogin={() => setAuthView('login')} />}
+      </Suspense>
+    );
   }
 
   if (payResultOrderId) {

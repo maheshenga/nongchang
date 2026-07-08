@@ -3,7 +3,11 @@ import { Building2, Lock, QrCode, User } from 'lucide-react';
 import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput } from '../ui/fluent';
 
-export default function AppLogin() {
+interface AppLoginProps {
+  onBackToLanding?: () => void;
+}
+
+export default function AppLogin({ onBackToLanding }: AppLoginProps) {
   const { login } = useAuth();
   const [tenantCode, setTenantCode] = useState('');
   const [username, setUsername] = useState('');
@@ -44,6 +48,12 @@ export default function AppLogin() {
         </section>
 
         <section className="p-6 sm:p-8">
+          {onBackToLanding && (
+            <button type="button" onClick={onBackToLanding} className={`${fluentButton('secondary')} mb-4`}>
+              返回介绍页
+            </button>
+          )}
+
           <div className="mb-8 md:hidden">
             <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-[4px] bg-[#0078D4] text-white">
               <QrCode className="h-5 w-5" />
