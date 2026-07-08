@@ -84,11 +84,11 @@ const cycleComparisonData = [
 ];
 
 const yieldTrendData = Array.from({ length: 30 }, (_, i) => {
-  const d = new Date();
+  const d = new Date('2026-07-09T00:00:00.000Z');
   d.setDate(d.getDate() - (29 - i));
   return {
     date: `${d.getMonth() + 1}/${d.getDate()}`,
-    采收产量: Math.floor(Math.random() * 50) + 100 + i * 5,
+    采收产量: 112 + i * 5 + ((i % 5) * 7),
   };
 });
 
@@ -135,17 +135,6 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [globalAlerts, setGlobalAlerts] = useState<{id: string, message: string}[]>([]);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (autoRefresh) {
-       interval = setInterval(() => {
-          // Trigger a fake re-render to simulate auto-refresh
-          // No-op for now unless we need real refresh
-       }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [autoRefresh]);
-
   const togglePresentationMode = (active: boolean) => {
     setIsPresentationMode(active);
     const event = new CustomEvent('toggle-presentation', { detail: { mode: active } });
@@ -182,7 +171,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
        const { batchId } = e.detail;
        if (batchId) {
          setFarmTasks(prev => [{
-           id: Math.random().toString(),
+           id: `record-${batchId}-${Date.now()}`,
            title: `同步批次 ${batchId}`,
            desc: '系统检测到新农事记录录入，同步更新作业提醒',
            priority: 'normal',
@@ -200,7 +189,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
     setIsAiAnswering(true);
     setAiChatResponse(null);
     setTimeout(() => {
-      setAiChatResponse(`系统已根据您的描述关联当前种植批次 [OB-2023-11 极品春白芍]。\n\n【肥料推荐方案】\n推荐配方：高磷高钾复合肥 (15-15-15)\n施用建议：结合当下休眠促花阶段，建议每亩追施15kg，并配合叶面喷施0.2%的磷酸二氢钾，以提高花苞饱满度。`);
+      setAiChatResponse(`【演示样例】系统展示如何把描述关联到示例种植批次 [OB-2023-11 极品春白芍]。\n\n【AI 示例肥料推荐方案】\n推荐配方：高磷高钾复合肥 (15-15-15)\n施用建议：结合示例休眠促花阶段，建议每亩追施15kg，并配合叶面喷施0.2%的磷酸二氢钾，以展示推荐方案格式。`);
       setIsAiAnswering(false);
     }, 1500);
   };
@@ -255,19 +244,17 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
 
   const handleAiPredict = async () => {
     setIsPredicting(true);
-    // Simulate AI prediction locally since no backend is set up
     setTimeout(() => {
       setIsPredicting(false);
-      setScheduleReport(`基于当前温湿度及农事记录分析，大棚 A 区的春白芍预计将于下周三达到最佳采收期。B、C 区生长状况正常，未见明显滞后。`);
+      setScheduleReport(`【演示样例】以下为排期预测展示文本：基于示例温湿度及农事记录，大棚 A 区的春白芍预计将于下周三达到最佳采收期。B、C 区生长状况正常，未见明显滞后。`);
     }, 1500);
   };
 
   const handleAiAnalysis = async () => {
     setIsAnalyzing(true);
-    // Simulate AI analysis locally since no backend is set up
     setTimeout(() => {
       setIsAnalyzing(false);
-      setAiReport(`整体长势评估：优良。近期昼夜温差适宜（差值>12℃），有利于花青素与干物质积累。建议在未来三天调整 B 区滴灌系统，增加 10% 补水量以预防末端缺水。`);
+      setAiReport(`【演示样例】以下为长势评估展示文本：整体长势评估为优良。近期昼夜温差适宜（差值>12℃），示例建议在未来三天调整 B 区滴灌系统，增加 10% 补水量以预防末端缺水。`);
     }, 1500);
   };
 
@@ -339,13 +326,13 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
              onClick={() => setIsPdfModalOpen(true)}
              className="flex items-center gap-1.5 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded transition-colors hover:bg-indigo-100 font-medium shadow-sm"
           >
-             <FileSpreadsheet className="w-3 h-3" /> 年度溯源决策报告 (PDF)
+             <FileSpreadsheet className="w-3 h-3" /> 演示经营简报 (PDF 示例)
           </button>
           <button
              onClick={() => setShowAiSidebar(true)}
              className="flex items-center gap-1.5 text-xs text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded transition-colors hover:bg-purple-100 font-medium shadow-sm"
           >
-             <Sparkles className="w-3 h-3" /> 智能种植顾问 (AI)
+             <Sparkles className="w-3 h-3" /> 演示种植顾问 (AI 示例)
           </button>
           <button
              onClick={() => togglePresentationMode(true)}
@@ -359,7 +346,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                ${autoRefresh ? 'text-teal-700 bg-teal-50 border-teal-200 hover:bg-teal-100' : 'text-slate-600 bg-white border-slate-200 hover:bg-slate-50'}`}
           >
              <Loader2 className={`w-3 h-3 ${autoRefresh ? 'animate-spin' : ''}`} />
-             {autoRefresh ? '自动刷新: 开启' : '自动刷新: 关闭'}
+             {autoRefresh ? '演示刷新标记: 开启' : '演示刷新标记: 关闭'}
           </button>
           <button
              onClick={() => setIsEmailModalOpen(true)}
@@ -410,7 +397,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-amber-900">病虫害疑似警报 (1区)</h4>
-                  <p className="text-[10px] text-amber-700 mt-1">AI检测到近期上传叶片异常。</p>
+                  <p className="text-[10px] text-amber-700 mt-1">AI 示例检测到近期上传叶片异常。</p>
                 </div>
               </div>
             </div>
@@ -422,7 +409,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                     <Sparkles className="w-5 h-5 text-purple-600" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-purple-900">Gemini AI 植保风险自动预警</h4>
+                    <h4 className="text-sm font-bold text-purple-900">Gemini AI 示例植保风险提示</h4>
                     <p className="text-[10px] text-purple-700 leading-tight mt-1">分析发现近期【白绢病】高发，已向大理基地负责人推送预防性杀菌任务清单。</p>
                   </div>
                 </div>
@@ -1094,7 +1081,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                      if (!isAnnotating) {
                        setTimeout(() => {
                          setAnnotationAlarm('已圈选 C区-病害高发地块，相关工单已分发');
-                         setFarmTasks(prev => [{ id: Date.now().toString(), title: 'C区-病害高发地块-灰霉病防治', desc: 'AI视觉诊断报告：疑似灰霉病初期。请立即前往C区进行人工复检，并执行对应的植保处方卷操作。', priority: 'urgency', assignee: '植保班组', status: 'todo' }, ...prev]);
+                         setFarmTasks(prev => [{ id: Date.now().toString(), title: 'C区-病害高发地块-灰霉病防治', desc: 'AI 示例视觉诊断报告：疑似灰霉病初期。请立即前往C区进行人工复检，并执行对应的植保处方卷操作。', priority: 'urgency', assignee: '植保班组', status: 'todo' }, ...prev]);
                        }, 2500);
                      } else {
                          setAnnotationAlarm(null);
@@ -1340,7 +1327,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
            <div className="p-4 border-b border-purple-100 bg-purple-50 flex justify-between items-center shrink-0">
              <h3 className="font-bold text-purple-900 flex items-center gap-2">
                <Sparkles className="w-5 h-5 text-purple-600" />
-               Gemini 种植顾问 & 肥料推荐
+                Gemini 演示种植顾问 & 肥料推荐
              </h3>
              <button onClick={() => setShowAiSidebar(false)} className="text-purple-400 hover:text-purple-600">
                <X className="w-5 h-5" />
@@ -1350,7 +1337,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-4">
               <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-sm text-slate-700 leading-relaxed">
                  <p className="font-bold text-slate-800 mb-2">欢迎使用自然语言检索！</p>
-                 <p>您可以输入病态描述、气候变化或直接询问养护问题。系统将自动关联当前培育大棚进度，并为您生成 <span className="text-purple-600 font-bold">肥料与农药的推荐方案</span>。</p>
+                  <p>您可以输入病态描述、气候变化或直接询问养护问题。这里展示演示对话如何关联示例培育进度，并生成 <span className="text-purple-600 font-bold">AI 示例肥料与农药推荐方案</span>。</p>
               </div>
 
               {aiChatQuery && aiChatResponse && (
@@ -1363,7 +1350,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                    <div className="flex justify-start">
                       <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[95%] text-sm shadow-sm whitespace-pre-wrap">
                         <div className="flex items-center gap-1.5 text-purple-600 font-bold mb-2 pb-2 border-b border-slate-100">
-                           <Sparkles className="w-4 h-4" /> 匹配到的专业方案
+                            <Sparkles className="w-4 h-4" /> 匹配到的 AI 示例方案
                         </div>
                         {aiChatResponse}
                         <button className="mt-3 w-full border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 font-medium py-1.5 rounded transition-colors text-xs flex justify-center gap-1 items-center">
@@ -1440,7 +1427,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                 </label>
                 <label className="flex items-center gap-2 text-slate-700">
                   <input type="checkbox" className="rounded text-blue-500 focus:ring-blue-500" />
-                  附带 PDF 格式附件
+                  附带 PDF 示例附件
                 </label>
               </div>
             </div>
@@ -1457,7 +1444,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-indigo-600" />
-                导出年度溯源决策报告 (经营简报 PDF)
+                导出演示经营简报 (PDF 示例)
               </h3>
               <button
                 onClick={() => setIsPdfModalOpen(false)}
@@ -1503,15 +1490,15 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                      <input type="checkbox" defaultChecked className="rounded text-indigo-600 border-slate-300 focus:ring-indigo-500" />
                      投入产出比雷达图洞察
                    </label>
-                   <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                     <input type="checkbox" defaultChecked className="rounded text-indigo-600 border-slate-300 focus:ring-indigo-500" />
-                     异常病虫害AI预警日历
-                   </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                      <input type="checkbox" defaultChecked className="rounded text-indigo-600 border-slate-300 focus:ring-indigo-500" />
+                      异常病虫害 AI 示例预警日历
+                    </label>
                  </div>
               </div>
 
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                 <p className="text-sm text-slate-800 mb-4 font-bold">PDF版式自定义选项：</p>
+                 <p className="text-sm text-slate-800 mb-4 font-bold">PDF 示例版式自定义选项：</p>
                  <div className="flex gap-4">
                    <button
                      onClick={() => setPdfLayout('standard')}
@@ -1540,7 +1527,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
                 disabled={isExportingPdf}
                 className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
               >
-                {isExportingPdf ? <><Loader2 className="w-4 h-4 animate-spin"/> 生成合并 PDF 中...</> : '确认导出报告'}
+                 {isExportingPdf ? <><Loader2 className="w-4 h-4 animate-spin"/> 生成 PDF 示例中...</> : '确认导出演示报告'}
               </button>
             </div>
           </div>
