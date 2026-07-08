@@ -23,4 +23,11 @@ describe('DashboardDemo truthfulness boundary', () => {
     expect(source).toContain('AI 示例');
     expect(source).toContain('PDF 示例');
   });
+
+  it('loads html2canvas only when the demo Gantt export is requested', () => {
+    const source = readFileSync(sourcePath, 'utf8');
+
+    expect(source).not.toMatch(/import\s+html2canvas\s+from\s+['"]html2canvas['"]/);
+    expect(source).toContain("import('html2canvas')");
+  });
 });

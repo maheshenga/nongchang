@@ -3,7 +3,6 @@ import { Sprout, ScanLine, Smartphone, Layers, ArrowLeft, AlertTriangle, Thermom
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Responsive, WidthProvider } from 'react-grid-layout/legacy';
-import html2canvas from 'html2canvas';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 
@@ -229,6 +228,7 @@ export default function DashboardDemo({ onExitDemo }: DashboardDemoProps) {
     if (!ganttRef.current) return;
     setIsExportingGantt(true);
     try {
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(ganttRef.current, { backgroundColor: '#ffffff', scale: 2 } as any);
       const url = canvas.toDataURL('image/png');
       const a = document.createElement('a');
