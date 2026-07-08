@@ -60,7 +60,7 @@ export default function Trace() {
     ctx.fillRect(0, 0, 300, 200);
     ctx.setFillStyle('#ffffff');
     ctx.setFontSize(18);
-    ctx.fillText('芍药溯源证书', 20, 40);
+    ctx.fillText('芍药溯源记录', 20, 40);
     ctx.setFontSize(14);
     ctx.fillText(`批次：${selected.batchNo}`, 20, 80);
     ctx.fillText(`品种：${selected.cropName}`, 20, 110);
@@ -121,13 +121,13 @@ export default function Trace() {
 
         <View className="trace__chain">
           <View className="trace__chain-head">
-            <Text className="trace__chain-title">区块链存证数据</Text>
-            <Text className="trace__chain-badge">区块链接入中</Text>
+            <Text className="trace__chain-title">当前公开记录</Text>
+            <Text className="trace__chain-badge">来自真实接口</Text>
           </View>
           <View className="trace__chain-grid">
-            <Text className="trace__chain-row">上链哈希 0x····（接入中）</Text>
-            <Text className="trace__chain-row">质检存证 待接入</Text>
-            <Text className="trace__chain-row">封箱时间 待接入</Text>
+            <Text className="trace__chain-row">批次记录 {selected ? selected.batchNo : '未选择批次'}</Text>
+            <Text className="trace__chain-row">溯源节点 {events.length} 个</Text>
+            <Text className="trace__chain-row">记录状态 {events.length > 0 ? '已有公开节点' : '暂无公开节点'}</Text>
           </View>
         </View>
 
