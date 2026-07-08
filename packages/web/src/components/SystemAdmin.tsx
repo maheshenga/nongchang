@@ -1,4 +1,4 @@
-import { ShieldCheck, Download, MoreHorizontal, AlertTriangle, X, Thermometer, Search, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
+import { ShieldCheck, Download, MoreHorizontal, X, Thermometer, Search, Server, DatabaseBackup, Settings, Activity, Lock, CheckCircle2, Store } from 'lucide-react';
 import { Agent } from '../types';
 import { useState, useMemo, type FormEvent } from 'react';
 import { motion } from 'motion/react';
@@ -22,9 +22,6 @@ function toUiAgent(a: ApiAgent): Agent {
 
 
 export default function SystemAdmin() {
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [actionPending, setActionPending] = useState('');
-
   const { data: rawAgents, loading: agentsLoading, error: agentsError, reload: reloadAgents } = useApi(listAgents);
   const agents: Agent[] = useMemo(() => (rawAgents ?? []).map(toUiAgent), [rawAgents]);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
@@ -67,18 +64,6 @@ export default function SystemAdmin() {
     showToast(`批量[${action}]操作待后端接入`);
   };
 
-  const handleSensitiveAction = (action: string) => {
-    setActionPending(action);
-    setShowConfirmModal(true);
-  };
-
-  const confirmAction = () => {
-    // No backend endpoint exists for these sensitive system actions yet, so we
-    // surface a "待后端接入" notice rather than faking a successful mutation.
-    setShowConfirmModal(false);
-    showToast(`该操作待后端接入：${actionPending}`);
-  };
-
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -97,7 +82,7 @@ export default function SystemAdmin() {
                 运营监控待接入
               </h2>
               <p className="text-sm text-slate-500 mt-1 max-w-3xl">
-                暂无实时运营监控数据。当前版本没有真实服务器监控、区块链节点、API 延迟、今日存证或活跃商户实时接口，请接入真实监控 API 后再展示生产指标。
+                暂无实时运营监控数据。当前版本没有真实服务器监控、链路节点、API 延迟或活跃商户实时接口，请接入真实监控 API 后再展示生产指标。
               </p>
               <div className="mt-2">
                 <DemoBadge note="监控能力未接入" />
@@ -108,7 +93,7 @@ export default function SystemAdmin() {
           <div className="grid gap-3 sm:grid-cols-2 relative z-10">
             {[
               { label: '服务器监控', description: '待接入真实 APM / 基础设施监控 API' },
-              { label: '链路节点', description: '待接入真实存证节点状态接口' },
+              { label: '链路节点', description: '待接入真实链路节点状态接口' },
               { label: '接口性能', description: '待接入真实网关延迟与错误率指标' },
               { label: '商户在线', description: '待接入真实商户会话或设备心跳数据' },
             ].map((item) => (
@@ -166,28 +151,24 @@ export default function SystemAdmin() {
 
             <div className="space-y-3">
               {[
-                { name: '系统级 AI 农业助理', note: '需接入真实 AI 调用统计与额度接口', action: '系统级 AI 农业助理' },
-                { name: 'IoT 物联网数据总线', note: '需接入真实设备运行接口', action: 'IoT 物联网实时数据流' },
-                { name: '消费者端防伪溯源 H5', note: '需接入真实扫码统计与访问分析接口', action: '消费者端防伪溯源 H5' },
-                { name: '跨国节点多语言支持', note: '模块尚未激活，需部署海外边缘节点', action: '跨国节点多语言支持' },
+                { name: '系统级 AI 农业助理', note: '需接入真实 AI 调用统计与额度接口' },
+                { name: 'IoT 物联网数据总线', note: '需接入真实设备运行接口' },
+                { name: '消费者端防伪溯源 H5', note: '需接入真实扫码统计与访问分析接口' },
+                { name: '跨国节点多语言支持', note: '模块尚未激活，需部署海外边缘节点' },
               ].map((feature) => (
-                <div key={feature.name} className="group flex flex-col p-4 rounded-[4px] border border-slate-200 bg-[#FAFAFA] gap-3 transition-colors hover:bg-slate-50">
-                  <div className="flex justify-between items-center">
+                <div
+                  key={feature.name}
+                  aria-label={`${feature.name} 状态`}
+                  className="flex flex-col gap-3 rounded-[4px] border border-[#E1DFDD] bg-[#FAFAFA] p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-2 h-2 rounded-full bg-slate-300"></div>
-                      <div className="text-sm font-bold text-slate-700">{feature.name}</div>
+                      <div className="h-2 w-2 rounded-full bg-[#C8C6C4]"></div>
+                      <div className="text-sm font-semibold text-[#242424]">{feature.name}</div>
                     </div>
-                    <button onClick={() => handleSensitiveAction(feature.action)} className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
-                      <span className="sr-only">Use setting</span>
-                      <span aria-hidden="true" className="pointer-events-none absolute h-full w-full rounded-md bg-white"></span>
-                      <span aria-hidden="true" className="pointer-events-none absolute mx-auto h-4 w-9 rounded-full bg-slate-200 transition-colors duration-200 ease-in-out"></span>
-                      <span aria-hidden="true" className="pointer-events-none absolute left-0 inline-block h-5 w-5 translate-x-0 transform rounded-full border border-slate-200 bg-white shadow ring-0 transition-transform duration-200 ease-in-out"></span>
-                    </button>
+                    <span className={fluentStatusTag('neutral')}>待接入</span>
                   </div>
-                  <div className="text-xs text-slate-600 ml-4 pl-0.5 leading-relaxed">{feature.note}</div>
-                  <div className="flex items-center gap-2 ml-4 pl-0.5 bg-white p-2.5 rounded-lg border border-slate-200 text-[10px] text-slate-600 font-bold">
-                    状态：待后端接入
-                  </div>
+                  <div className="text-xs leading-5 text-[#605E5C]">{feature.note}</div>
                 </div>
               ))}
             </div>
@@ -210,37 +191,34 @@ export default function SystemAdmin() {
               {[
                 { role: '溯源码生成审批', assignees: '平台超管, 财务主管', required: true },
                 { role: '核心分销商入驻', assignees: '渠道总监', required: true },
-                { role: '养护/质检数据上链', assignees: '基地质检员, 芍药圃主管', required: false },
-              ].map((flow, i) => (
-                <div 
-                  key={i} 
-                  className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-slate-50/50 gap-2.5 hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer transition-all hover:shadow-sm"
-                  onClick={() => handleSensitiveAction(`修改 [${flow.role}] 审批流`)}
+                { role: '养护/质检数据归档', assignees: '基地质检员, 芍药圃主管', required: false },
+              ].map((flow) => (
+                <div
+                  key={flow.role}
+                  className="flex flex-col gap-2.5 rounded-[4px] border border-[#E1DFDD] bg-[#FAFAFA] p-4"
                 >
-                  <div className="flex justify-between items-center mb-0.5">
-                    <span className="font-bold text-slate-800 text-sm">{flow.role}</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-[#242424]">{flow.role}</span>
                     {flow.required ? (
-                      <span className="bg-orange-50 text-orange-600 text-[10px] px-2 py-0.5 rounded border border-orange-100 font-bold flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> 需双重验证
+                      <span className={fluentStatusTag('warning')}>
+                        <Lock className="h-3 w-3" /> 需双重验证
                       </span>
                     ) : (
-                      <span className="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-0.5 rounded border border-emerald-100 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> 自动放行
+                      <span className={fluentStatusTag('neutral')}>
+                        <CheckCircle2 className="h-3 w-3" /> 策略待接入
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                    <span className="text-slate-400">流转节点:</span> <span className="font-medium text-slate-700">{flow.assignees}</span>
+                  <div className="flex items-center gap-1.5 text-xs text-[#605E5C]">
+                    <span>流转节点:</span>
+                    <span className="font-semibold text-[#242424]">{flow.assignees}</span>
                   </div>
                 </div>
               ))}
               
-              <button 
-                onClick={() => handleSensitiveAction('添加新审批流')}
-                className="w-full py-2.5 mt-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-[4px] text-xs font-bold hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
-              >
-                + 添加新业务审批流
-              </button>
+              <div className="rounded-[4px] border border-dashed border-[#C8C6C4] bg-white px-3 py-2 text-xs font-semibold text-[#605E5C]">
+                新审批流配置接口待接入
+              </div>
             </div>
           </div>
 
@@ -253,42 +231,33 @@ export default function SystemAdmin() {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 text-base">平台全局安全与策略</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">主网与系统底层级参数管控</p>
+                  <p className="text-xs text-slate-500 mt-0.5">平台安全策略配置入口</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
-              <div className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
-                 <div className="flex justify-between items-center">
-                   <div className="text-sm font-bold text-slate-800">强制全员双重认证 (2FA)</div>
-                   <button onClick={() => handleSensitiveAction('强制全员双重认证 (2FA)')} className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
-                     <span aria-hidden="true" className="pointer-events-none absolute mx-auto h-4 w-9 rounded-full bg-emerald-500 transition-colors duration-200 ease-in-out"></span>
-                     <span aria-hidden="true" className="pointer-events-none absolute left-0 inline-block h-5 w-5 translate-x-4 transform rounded-full border border-slate-200 bg-white shadow ring-0 transition-transform duration-200 ease-in-out"></span>
-                   </button>
+              <div className="rounded-[4px] border border-[#E1DFDD] bg-white p-4">
+                 <div className="flex items-center justify-between gap-3">
+                   <div className="text-sm font-semibold text-[#242424]">强制全员双重认证 (2FA)</div>
+                   <span className={fluentStatusTag('neutral')}>接口待接入</span>
                  </div>
-                 <div className="text-[10px] text-slate-500">强制要求所有商家/代理商账单登录时启用二次面容或短信验证，防范撞库攻击。</div>
+                 <div className="mt-2 text-xs text-[#605E5C]">需要真实认证服务和租户策略接口后再允许启停。</div>
               </div>
-              <div className="group flex flex-col p-4 rounded-[4px] border border-slate-100 bg-white gap-2 transition-colors hover:bg-slate-50">
-                 <div className="flex justify-between items-center">
-                   <div className="text-sm font-bold text-slate-800">严格防伪溯源流转模式</div>
-                   <button onClick={() => handleSensitiveAction('严格防伪溯源流转模式')} className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2">
-                     <span aria-hidden="true" className="pointer-events-none absolute mx-auto h-4 w-9 rounded-full bg-slate-200 transition-colors duration-200 ease-in-out"></span>
-                     <span aria-hidden="true" className="pointer-events-none absolute left-0 inline-block h-5 w-5 translate-x-0 transform rounded-full border border-slate-200 bg-white shadow ring-0 transition-transform duration-200 ease-in-out"></span>
-                   </button>
+              <div className="rounded-[4px] border border-[#E1DFDD] bg-white p-4">
+                 <div className="flex items-center justify-between gap-3">
+                   <div className="text-sm font-semibold text-[#242424]">严格防伪溯源流转模式</div>
+                   <span className={fluentStatusTag('neutral')}>接口待接入</span>
                  </div>
-                 <div className="text-[10px] text-slate-500">开启后：下游扫码入库时，若上游未产生对应出库记录，将强制冻结该批次流转。</div>
+                 <div className="mt-2 text-xs text-[#605E5C]">需要真实出入库流转校验接口后再允许启停。</div>
               </div>
 
-              <div className="h-px w-full bg-slate-100 my-2"></div>
+              <div className="h-px w-full bg-[#EDEBE9] my-2"></div>
               
-              <button 
-                 className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-[4px] text-xs font-bold transition-colors flex items-center justify-center gap-2 shadow-sm"
-                 onClick={() => handleSensitiveAction('立即触发全量区块链快照备份')}
-              >
-                 <DatabaseBackup className="w-4 h-4 text-emerald-600" />
-                 智能合约执行状态打点与全量快照备份
-              </button>
+              <div className="flex items-center justify-center gap-2 rounded-[4px] border border-[#E1DFDD] bg-[#FAFAFA] px-3 py-3 text-xs font-semibold text-[#605E5C]">
+                 <DatabaseBackup className="h-4 w-4 text-[#605E5C]" />
+                 备份任务接口待接入
+              </div>
             </div>
           </div>
         </div>
@@ -303,7 +272,7 @@ export default function SystemAdmin() {
                 </div>
                 芍药分销代理商网络管理
               </h3>
-              <p className="text-xs text-slate-500 mt-1">系统支持无限级树形结构代理与商品终端流通全链路追踪</p>
+              <p className="text-xs text-slate-500 mt-1">代理商列表来自真实接口；层级与流通追踪按后端接口接入情况展示。</p>
             </div>
             <div className="flex gap-3">
               <div className="flex gap-2">
@@ -429,8 +398,8 @@ export default function SystemAdmin() {
                     </td>
                     <td className={`${fluentTable.td} text-right`}>
                       <div className="flex items-center justify-end gap-2">
-                        <button className="text-[10px] text-slate-600 bg-white hover:bg-slate-50 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm transition-colors font-bold uppercase tracking-wider" onClick={() => handleSensitiveAction(`查看 [${agent.name}] 流水日记`)}>下级数据穿透</button>
-                        <button className="text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-100 px-3 py-1.5 rounded-lg shadow-sm transition-colors font-bold uppercase tracking-wider" onClick={() => handleSensitiveAction(`配置 [${agent.name}] 额度权限`)}>调整权属</button>
+                        <span className="rounded-[4px] border border-[#E1DFDD] bg-white px-3 py-1.5 text-xs font-semibold text-[#605E5C]">数据穿透待接入</span>
+                        <span className="rounded-[4px] border border-[#E1DFDD] bg-[#FAFAFA] px-3 py-1.5 text-xs font-semibold text-[#605E5C]">权属调整待接入</span>
                         <button className="text-slate-400 hover:text-slate-800 hover:bg-slate-100 p-1.5 rounded-lg transition-colors border border-transparent hover:border-slate-200">
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
@@ -498,9 +467,7 @@ export default function SystemAdmin() {
              </h3>
              <p className="text-xs text-slate-500 mt-1">暂无真实库存、核销、预警或请购自动化接口；接入 WMS/ERP 后再展示库存水位和处置状态。</p>
            </div>
-          <button onClick={() => handleSensitiveAction('手工盘点录入入口')} className={fluentButton('secondary')}>
-            手工盘点录入入口
-          </button>
+          <span className={fluentStatusTag('neutral')}>录入接口待接入</span>
         </div>
         <div className="p-5 bg-slate-50">
           <div className="rounded-[4px] border border-slate-200 bg-white p-5 text-sm text-slate-600">
@@ -521,61 +488,14 @@ export default function SystemAdmin() {
              </h3>
              <p className="text-xs text-slate-500 mt-1">暂无真实审计日志接口。接入后端审计服务前，不展示模拟账号、IP、交易哈希或成功状态。</p>
            </div>
-           <button onClick={() => handleSensitiveAction('导出审计报告')} className={fluentButton('secondary')}>
-             <Download className="w-3.5 h-3.5 text-slate-400" />
-             导出报告待接入
-           </button>
+           <span className={fluentStatusTag('neutral')}>导出报告待接入</span>
         </div>
         <div className="p-5 bg-slate-50">
           <div className="rounded-[4px] border border-slate-200 bg-white p-5 text-sm text-slate-600">
-            操作审计、留存策略和报告导出均需真实后端接口支持。当前仅保留安全二次确认入口，不伪造历史日志。
+            操作审计、留存策略和报告导出均需真实后端接口支持。当前不提供可执行审计导出动作，也不伪造历史日志。
           </div>
         </div>
       </div>
-      {/* Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[6px] shadow-xl w-full max-w-md overflow-hidden transform transition-all animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-slate-800 text-lg">安全二次确认</h3>
-              </div>
-              <button onClick={() => setShowConfirmModal(false)} className={fluentButton('icon')}>
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 bg-slate-50/50">
-              <p className="text-sm text-slate-600 mb-4">
-                您正在尝试进行敏感权限操作：<br/>
-                <span className="font-bold text-slate-800 block mt-3 p-4 bg-white rounded-[4px] border border-amber-200 shadow-sm text-base text-center">
-                  {actionPending}
-                </span>
-              </p>
-              <p className="text-xs text-slate-500 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-slate-400" />
-                此操作可能影响系统的正常审批流与数据安全。当前仅显示待接入提示，请确认是否继续？
-              </p>
-            </div>
-            <div className="p-5 bg-white border-t border-slate-100 flex justify-end gap-3">
-              <button 
-                onClick={() => setShowConfirmModal(false)}
-                className={fluentButton('secondary')}
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmAction}
-                className={fluentButton('danger')}
-              >
-                确认并执行操作
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </motion.div>
   );
