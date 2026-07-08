@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react';
-import { CreditCard, Loader2, Save, CheckCircle2, XCircle } from 'lucide-react';
-import { useApi } from '../hooks/useApi';
-import { getAlipayConfig, saveAlipayConfig } from '../api/billing';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, CreditCard, Save, XCircle } from 'lucide-react';
 import type { AlipayConfigInput } from '@nongchang/shared';
+import { getAlipayConfig, saveAlipayConfig } from '../api/billing';
+import { useApi } from '../hooks/useApi';
+import { fluentButton, fluentInput, fluentStatusTag } from '../ui/fluent';
+import { ErrorState, LoadingState } from '../ui/state';
 
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+function errMsg(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
-// 支付宝应用配置(仅 SYSTEM_ADMIN):应用 appId + 应用私钥 + 支付宝公钥(加密入库,仅回掩码)。
 export default function BillingAlipayConfig() {
   const cfgApi = useApi(getAlipayConfig);
   const cfg = cfgApi.data;
+  const configured = !!cfg;
 
   const [appId, setAppId] = useState('');
   const [privateKey, setPrivateKey] = useState('');
@@ -20,92 +22,131 @@ export default function BillingAlipayConfig() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [toast, setToast] = useState('');
-  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 3000); };
 
   useEffect(() => {
-    if (cfg) {
-      setAppId(cfg.appId ?? '');
-      setEnabled(cfg.enabled);
-    }
+    if (!cfg) return;
+    setAppId(cfg.appId ?? '');
+    setEnabled(cfg.enabled);
   }, [cfg]);
 
-  const configured = !!cfg;
-  const inputCls = 'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(''), 3000);
+  };
 
   async function handleSave() {
-    if (!appId.trim()) { setErr('请填写支付宝应用 appId'); return; }
+    if (!appId.trim()) {
+      setErr('请填写支付宝应用 appId');
+      return;
+    }
     if (!configured && (!privateKey.trim() || !alipayPublicKey.trim())) {
       setErr('首次配置需填写应用私钥与支付宝公钥');
       return;
     }
-    setSaving(true); setErr('');
+
+    setSaving(true);
+    setErr('');
     try {
       const dto: AlipayConfigInput = {
         appId: appId.trim(),
         enabled,
-        // 留空表示沿用旧值(密钥更新时才传)。
         ...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
         ...(alipayPublicKey.trim() ? { alipayPublicKey: alipayPublicKey.trim() } : {}),
       };
       await saveAlipayConfig(dto);
-      setPrivateKey(''); setAlipayPublicKey('');
+      setPrivateKey('');
+      setAlipayPublicKey('');
       showToast('支付宝配置已保存');
       void cfgApi.reload();
-    } catch (e) {
-      setErr(errMsg(e));
+    } catch (error) {
+      setErr(errMsg(error));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-800 flex items-center justify-between">
-        <span className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-emerald-600" /> 支付宝支付配置</span>
+    <div className="overflow-hidden border border-[#E1DFDD] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#242424]">
+          <CreditCard className="h-4 w-4 text-[#0078D4]" />
+          支付宝支付配置
+        </div>
         {configured && (
-          enabled
-            ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full"><CheckCircle2 className="w-3 h-3" /> 已启用</span>
-            : <span className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full"><XCircle className="w-3 h-3" /> 未启用</span>
+          <span className={fluentStatusTag(enabled ? 'success' : 'neutral')}>
+            {enabled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+            {enabled ? '已启用' : '未启用'}
+          </span>
         )}
       </div>
 
-      <div className="p-5 space-y-4">
-        {cfgApi.loading && <div className="text-center text-slate-400 text-sm flex items-center justify-center gap-2 py-4"><Loader2 className="w-4 h-4 animate-spin" /> 加载中…</div>}
-        {!cfgApi.loading && (
+      <div className="space-y-4 p-5">
+        {cfgApi.loading && <LoadingState label="加载支付宝配置" />}
+        {cfgApi.error && <ErrorState message={cfgApi.error} onRetry={() => void cfgApi.reload()} />}
+
+        {!cfgApi.loading && !cfgApi.error && (
           <>
-            <p className="text-xs text-slate-500">配置本租户专属的支付宝商户应用。密钥加密入库,保存后仅显示掩码,需更新时重新填写;留空则沿用旧值。</p>
+            <p className="text-xs leading-5 text-[#605E5C]">
+              配置本租户专属的支付宝商户应用。密钥加密入库，保存后仅显示掩码；更新密钥时重新填写，留空则沿用旧值。
+            </p>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">应用 appId</label>
-              <input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="2021000000000000" className={inputCls} />
-            </div>
+            <label htmlFor="alipay-app-id" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
+              应用 appId
+              <input
+                id="alipay-app-id"
+                value={appId}
+                onChange={(event) => setAppId(event.target.value)}
+                placeholder="2021000000000000"
+                className={`${fluentInput} w-full`}
+              />
+            </label>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                应用私钥(PEM)
-                {cfg?.privateKeyMasked && <span className="ml-2 text-emerald-600 font-normal">当前:{cfg.privateKeyMasked}</span>}
-              </label>
-              <textarea value={privateKey} onChange={(e) => setPrivateKey(e.target.value)} rows={3} placeholder={configured ? '留空沿用旧值,如需更新请粘贴新私钥' : '-----BEGIN PRIVATE KEY-----'} className={`${inputCls} font-mono text-xs`} />
-            </div>
+            <label htmlFor="alipay-private-key" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
+              <span>
+                应用私钥（PEM）
+                {cfg?.privateKeyMasked && <span className="ml-2 font-normal text-[#107C10]">当前：{cfg.privateKeyMasked}</span>}
+              </span>
+              <textarea
+                id="alipay-private-key"
+                value={privateKey}
+                onChange={(event) => setPrivateKey(event.target.value)}
+                rows={3}
+                placeholder={configured ? '留空沿用旧值，如需更新请粘贴新私钥' : '-----BEGIN PRIVATE KEY-----'}
+                className={`${fluentInput} min-h-20 w-full py-2 font-mono text-xs`}
+              />
+            </label>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                支付宝公钥(PEM)
-                {cfg?.alipayPublicKeyMasked && <span className="ml-2 text-emerald-600 font-normal">当前:{cfg.alipayPublicKeyMasked}</span>}
-              </label>
-              <textarea value={alipayPublicKey} onChange={(e) => setAlipayPublicKey(e.target.value)} rows={3} placeholder={configured ? '留空沿用旧值,如需更新请粘贴新公钥' : '-----BEGIN PUBLIC KEY-----'} className={`${inputCls} font-mono text-xs`} />
-            </div>
+            <label htmlFor="alipay-public-key" className="grid gap-1 text-sm font-semibold text-[#605E5C]">
+              <span>
+                支付宝公钥（PEM）
+                {cfg?.alipayPublicKeyMasked && <span className="ml-2 font-normal text-[#107C10]">当前：{cfg.alipayPublicKeyMasked}</span>}
+              </span>
+              <textarea
+                id="alipay-public-key"
+                value={alipayPublicKey}
+                onChange={(event) => setAlipayPublicKey(event.target.value)}
+                rows={3}
+                placeholder={configured ? '留空沿用旧值，如需更新请粘贴新公钥' : '-----BEGIN PUBLIC KEY-----'}
+                className={`${fluentInput} min-h-20 w-full py-2 font-mono text-xs`}
+              />
+            </label>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-4 h-4 accent-emerald-600" />
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-[#242424]">
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-[#C8C6C4] text-[#0078D4] focus:ring-[#0078D4]/40"
+              />
               启用支付宝支付
             </label>
 
-            {err && <p className="text-sm text-red-600">{err}</p>}
+            {err && <ErrorState message={err} retryLabel="关闭" onRetry={() => setErr('')} />}
 
             <div className="flex justify-end">
-              <button onClick={() => void handleSave()} disabled={saving} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 保存配置
+              <button type="button" onClick={() => void handleSave()} disabled={saving} className={fluentButton('primary')}>
+                <Save className="h-4 w-4" />
+                {saving ? '保存中...' : '保存配置'}
               </button>
             </div>
           </>
@@ -113,7 +154,9 @@ export default function BillingAlipayConfig() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-50">{toast}</div>
+        <div className="fixed bottom-6 right-6 z-50 border border-[#E1DFDD] bg-[#242424] px-5 py-3 text-sm font-semibold text-white shadow-xl">
+          {toast}
+        </div>
       )}
     </div>
   );
