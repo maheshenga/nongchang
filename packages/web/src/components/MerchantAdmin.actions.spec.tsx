@@ -35,20 +35,6 @@ const batch = {
   inputCost: 0,
 };
 
-function getCreateBatchButton(container: HTMLElement): HTMLButtonElement {
-  const buttons = Array.from(container.querySelectorAll('button'));
-  const button = buttons.find((item) => item.className.includes('bg-emerald-600') && !item.className.includes('w-full'));
-  if (!(button instanceof HTMLButtonElement)) throw new Error('create batch button not found');
-  return button;
-}
-
-function getSidePanelGenerateButton(container: HTMLElement): HTMLButtonElement {
-  const buttons = Array.from(container.querySelectorAll('button'));
-  const button = buttons.find((item) => item.className.includes('w-full bg-emerald-600'));
-  if (!(button instanceof HTMLButtonElement)) throw new Error('side panel generate button not found');
-  return button;
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   listBatchesMock.mockResolvedValue([batch]);
@@ -63,10 +49,10 @@ beforeEach(() => {
 describe('MerchantAdmin production actions', () => {
   it('routes batch creation to the real batch page', async () => {
     const onNavigate = vi.fn();
-    const { container } = render(<MerchantAdmin onNavigate={onNavigate} />);
+    render(<MerchantAdmin onNavigate={onNavigate} />);
     await screen.findByText('Peony');
 
-    fireEvent.click(getCreateBatchButton(container));
+    fireEvent.click(screen.getByRole('button', { name: /新增芍药繁育生产批次/ }));
 
     expect(onNavigate).toHaveBeenCalledWith('batches');
   });
@@ -76,13 +62,14 @@ describe('MerchantAdmin production actions', () => {
     await screen.findByText('Peony');
 
     fireEvent.click(screen.getByText('Peony'));
-    const amountInput = container.querySelector('input[type="number"]') as HTMLInputElement;
+    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
     fireEvent.change(amountInput, { target: { value: '5' } });
-    fireEvent.click(getSidePanelGenerateButton(container));
+    fireEvent.click(screen.getByRole('button', { name: /^生成溯源码$/ }));
 
     await waitFor(() => {
       expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 5, expect.any(String));
     });
+    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledWith('merchant-side-panel', 'batch-1', 5);
     expect(listBatchesMock).toHaveBeenCalledTimes(2);
   });
 
@@ -94,9 +81,9 @@ describe('MerchantAdmin production actions', () => {
     await screen.findByText('Peony');
 
     fireEvent.click(screen.getByText('Peony'));
-    const amountInput = container.querySelector('input[type="number"]') as HTMLInputElement;
+    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
     fireEvent.change(amountInput, { target: { value: '5' } });
-    const generateButton = getSidePanelGenerateButton(container);
+    const generateButton = screen.getByRole('button', { name: /^生成溯源码$/ });
     fireEvent.click(generateButton);
     await waitFor(() => expect(generateCodesMock).toHaveBeenCalledTimes(1));
 
@@ -104,6 +91,7 @@ describe('MerchantAdmin production actions', () => {
     await waitFor(() => expect(generateCodesMock).toHaveBeenCalledTimes(2));
 
     expect(generateCodesMock.mock.calls[1][2]).toBe(generateCodesMock.mock.calls[0][2]);
+    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledTimes(1);
   });
 
   it('shows existing code count and blocks invalid generation amounts', async () => {
@@ -113,11 +101,12 @@ describe('MerchantAdmin production actions', () => {
 
     expect(container.textContent).toContain('7');
     fireEvent.click(screen.getByText('Peony'));
-    const amountInput = container.querySelector('input[type="number"]') as HTMLInputElement;
+    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
     fireEvent.change(amountInput, { target: { value: '1.5' } });
-    fireEvent.click(getSidePanelGenerateButton(container));
+    fireEvent.click(screen.getByRole('button', { name: /^生成溯源码$/ }));
 
     expect(generateCodesMock).not.toHaveBeenCalled();
+    expect(createTraceGenerationRequestKeyMock).not.toHaveBeenCalled();
   });
 
   it('keeps unavailable batch capabilities out of the primary action cluster', async () => {
@@ -141,6 +130,7 @@ describe('MerchantAdmin production actions', () => {
 
     await screen.findByRole('dialog', { name: '溯源码标签打印预览' });
 
+    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledWith('merchant-print', 'batch-1', 1);
     expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 1, expect.any(String));
     expect(container.textContent).toContain('TRACE-001');
     expect(container.textContent).toContain('扫码查看该批次已登记的溯源信息');
