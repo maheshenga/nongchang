@@ -46,4 +46,30 @@ describe('AppLogin Fluent login', () => {
 
     expect(onBackToLanding).toHaveBeenCalledTimes(1);
   });
+
+  it('locks the form and ignores duplicate submits while login is pending', async () => {
+    let resolveLogin: (() => void) | undefined;
+    loginMock.mockImplementation(() => new Promise<void>((resolve) => { resolveLogin = resolve; }));
+
+    render(<AppLogin />);
+
+    fireEvent.change(screen.getByLabelText('机构编码'), { target: { value: 'tenant-a' } });
+    fireEvent.change(screen.getByLabelText('登录账号'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'secret123' } });
+
+    const submit = screen.getByRole('button', { name: '安全登录' });
+    fireEvent.click(submit);
+    fireEvent.submit(submit.closest('form')!);
+
+    expect(loginMock).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', { name: '登录中...' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('机构编码') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('登录账号') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('密码') as HTMLInputElement).disabled).toBe(true);
+
+    resolveLogin?.();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '安全登录' })).toBeTruthy();
+    });
+  });
 });

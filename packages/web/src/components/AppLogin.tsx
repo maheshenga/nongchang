@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Building2, Lock, QrCode, User } from 'lucide-react';
 import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput } from '../ui/fluent';
@@ -14,9 +14,12 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     setSubmitting(true);
     try {
@@ -24,6 +27,7 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -80,6 +84,7 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
                   onChange={(e) => setTenantCode(e.target.value)}
                   className={`${fluentInput} w-full pl-8`}
                   placeholder="请输入机构编码"
+                  disabled={submitting}
                   required
                 />
               </div>
@@ -97,6 +102,7 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
                   onChange={(e) => setUsername(e.target.value)}
                   className={`${fluentInput} w-full pl-8`}
                   placeholder="请输入用户名"
+                  disabled={submitting}
                   required
                 />
               </div>
@@ -114,6 +120,7 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   className={`${fluentInput} w-full pl-8`}
                   placeholder="••••••••"
+                  disabled={submitting}
                   required
                 />
               </div>
