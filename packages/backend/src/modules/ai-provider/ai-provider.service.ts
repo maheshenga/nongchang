@@ -2,34 +2,28 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser, CreateAiProviderInput, UpdateAiProviderInput, AiProviderView, AiTestResponse } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
+import {
+  buildAiProviderCreateData,
+  buildAiProviderUpdateData,
+  buildAiProviderView,
+  buildEnabledAiProvider,
+  findEnabledAiProviderRow,
+  type AiProviderRow,
+  type EnabledAiProvider,
+} from './ai-provider.model';
 
 const AI_TEST_TIMEOUT_MS = 10_000;
-
-interface AiProviderRow {
-  id: string; tenantId: string; name: string; baseUrl: string; apiKeyEnc: string;
-  textModel: string; visionModel: string | null; enabled: boolean; createdAt: Date; updatedAt: Date;
-}
-
-export interface EnabledAiProvider {
-  baseUrl: string; apiKey: string; textModel: string; visionModel: string | null;
-}
+export type { EnabledAiProvider } from './ai-provider.model';
 
 @Injectable()
 export class AiProviderService {
   constructor(private prisma: PrismaService, private enc: EncryptionService) {}
 
   private toView(r: AiProviderRow): AiProviderView {
-    return {
-      id: r.id,
-      name: r.name,
-      baseUrl: r.baseUrl,
+    return buildAiProviderView({
+      row: r,
       apiKeyMasked: this.enc.maskSecret(this.enc.decrypt(r.apiKeyEnc)),
-      textModel: r.textModel,
-      visionModel: r.visionModel ?? null,
-      enabled: r.enabled,
-      createdAt: r.createdAt.toISOString(),
-      updatedAt: r.updatedAt.toISOString(),
-    };
+    });
   }
 
   async list(user: AuthUser): Promise<AiProviderView[]> {
@@ -44,17 +38,16 @@ export class AiProviderService {
   }
 
   async create(user: AuthUser, dto: CreateAiProviderInput): Promise<AiProviderView> {
-    const enabled = dto.enabled ?? false;
-    const data = {
+    const data = buildAiProviderCreateData({
       tenantId: user.tenantId,
       name: dto.name,
       baseUrl: dto.baseUrl,
       apiKeyEnc: this.enc.encrypt(dto.apiKey),
       textModel: dto.textModel,
-      visionModel: dto.visionModel ?? null,
-      enabled,
-    };
-    const row = enabled
+      visionModel: dto.visionModel,
+      enabled: dto.enabled,
+    });
+    const row = data.enabled
       ? await this.prisma.$transaction(async (tx) => {
           const db = tx ?? this.prisma;
           await db.aiProvider.updateMany({ where: { tenantId: user.tenantId }, data: { enabled: false } });
@@ -68,15 +61,11 @@ export class AiProviderService {
     const existing = (await this.prisma.aiProvider.findFirst({ where: { id, tenantId: user.tenantId } })) as AiProviderRow | null;
     if (!existing) throw new NotFoundException('AI 服务商不存在');
 
-    const data: Record<string, unknown> = {};
-    if (dto.name !== undefined) data.name = dto.name;
-    if (dto.baseUrl !== undefined) data.baseUrl = dto.baseUrl;
-    if (dto.textModel !== undefined) data.textModel = dto.textModel;
-    if (dto.visionModel !== undefined) data.visionModel = dto.visionModel ?? null;
-    if (dto.apiKey) data.apiKeyEnc = this.enc.encrypt(dto.apiKey);
-
-    const finalEnabled = dto.enabled ?? existing.enabled;
-    data.enabled = finalEnabled;
+    const { data, finalEnabled } = buildAiProviderUpdateData({
+      dto,
+      existingEnabled: existing.enabled,
+      apiKeyEnc: dto.apiKey ? this.enc.encrypt(dto.apiKey) : null,
+    });
 
     const row = finalEnabled
       ? await this.prisma.$transaction(async (tx) => {
@@ -97,14 +86,12 @@ export class AiProviderService {
 
   async getEnabled(user: AuthUser): Promise<EnabledAiProvider | null> {
     const rows = (await this.prisma.aiProvider.findMany({ where: { tenantId: user.tenantId } })) as AiProviderRow[];
-    const row = rows.find((r) => r.enabled);
+    const row = findEnabledAiProviderRow(rows);
     if (!row) return null;
-    return {
-      baseUrl: row.baseUrl,
+    return buildEnabledAiProvider({
+      row,
       apiKey: this.enc.decrypt(row.apiKeyEnc),
-      textModel: row.textModel,
-      visionModel: row.visionModel ?? null,
-    };
+    });
   }
 
   async test(user: AuthUser, id: string): Promise<AiTestResponse> {

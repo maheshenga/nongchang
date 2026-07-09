@@ -40,7 +40,7 @@ describe('AiProviderService', () => {
     expect(list).toHaveLength(1);
   });
 
-  it('enable 唯一: 启用新的会置反其他', async () => {
+  it('enable 唯一: 启用新的会禁用其他', async () => {
     const a = await svc.create(user, { name: 'a', baseUrl: 'https://x.com/v1', apiKey: 'sk-1111', textModel: 'm', enabled: true });
     await svc.create(user, { name: 'b', baseUrl: 'https://x.com/v1', apiKey: 'sk-2222', textModel: 'm', enabled: true });
     const reloaded = prisma.rows.find((r: any) => r.id === a.id);
