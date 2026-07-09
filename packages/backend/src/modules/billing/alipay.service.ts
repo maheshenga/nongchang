@@ -5,6 +5,7 @@ import type { AuthUser, AlipayConfigInput, AlipayConfigView, CreatePaymentInput,
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import { BillingService } from './billing.service';
+import { resolveBillingBuyer } from './billing.model';
 
 const PROVIDER = 'alipay';
 // 复用 IntegrationConfig 列:app_id=支付宝appId、secret_enc=应用私钥密文、api_key_enc=支付宝公钥密文。
@@ -83,7 +84,7 @@ export class AlipayService {
     const order = await this.prisma.creditOrder.findFirst({ where: { id: dto.orderId, tenantId: user.tenantId } });
     if (!order) throw new NotFoundException('订单不存在');
     // 归属校验:只能为自己账户的订单付款。
-    const buyer = this.resolveBuyer(user);
+    const buyer = resolveBillingBuyer(user, 'payment');
     if (order.ownerType !== buyer.ownerType || order.ownerId !== buyer.ownerId) {
       throw new ForbiddenException('无权支付该订单');
     }
@@ -163,18 +164,6 @@ export class AlipayService {
     const channel = order.payChannel ?? 'alipay';
     await this.billing.settleOrder(order, { payChannel: channel, tradeNo: tenantHintBody.trade_no });
     return 'success';
-  }
-
-  private resolveBuyer(user: AuthUser): { ownerType: 'AGENT' | 'MERCHANT'; ownerId: string } {
-    if (user.role === Role.AGENT_ADMIN) {
-      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
-      return { ownerType: 'AGENT', ownerId: user.agentId };
-    }
-    if (user.role === Role.MERCHANT) {
-      if (!user.ownerId) throw new ForbiddenException('merchant 缺少 ownerId');
-      return { ownerType: 'MERCHANT', ownerId: user.ownerId };
-    }
-    throw new ForbiddenException('当前角色不支持支付');
   }
 
   private publicBaseUrl(): string {

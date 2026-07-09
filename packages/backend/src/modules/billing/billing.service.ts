@@ -9,6 +9,7 @@ import type {
 import { Role, isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
+import { buildBuyerOrderWhere, resolveBillingBuyer, toCreditOrderView } from './billing.model';
 
 const DEFAULT_LIST_CAP = 500;
 
@@ -677,21 +678,8 @@ export class BillingService {
 
   // ===== 自助购买(AGENT_ADMIN / MERCHANT 进自己账户) =====
 
-  // 仅代理商/商户可购买进自己账户;平台无上级故不自助购买。
-  private resolveBuyer(user: AuthUser): { ownerType: CreditOwnerType; ownerId: string } {
-    if (user.role === Role.AGENT_ADMIN) {
-      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId,拒绝购买');
-      return { ownerType: 'AGENT', ownerId: user.agentId };
-    }
-    if (user.role === Role.MERCHANT) {
-      if (!user.ownerId) throw new ForbiddenException('merchant 缺少 ownerId,拒绝购买');
-      return { ownerType: 'MERCHANT', ownerId: user.ownerId };
-    }
-    throw new ForbiddenException('当前角色不支持自助购买额度');
-  }
-
   async createOrder(user: AuthUser, dto: CreateOrderInput): Promise<CreditOrderView> {
-    const buyer = this.resolveBuyer(user);
+    const buyer = resolveBillingBuyer(user);
     let resource: CreditResource;
     let quantity: number;
     let amountCents: number;
@@ -732,7 +720,7 @@ export class BillingService {
         planId, resource, quantity, amountCents, status: 'PENDING', buyerId: user.userId,
       },
     });
-    return this.toOrderView(order, planName);
+    return toCreditOrderView(order, planName);
   }
 
   // 兜底支付(标记已支付即入账,不经真实支付渠道)。幂等——仅 PENDING→PAID 时入账,重复调用不二次入账。
@@ -742,7 +730,7 @@ export class BillingService {
     if (process.env.ALLOW_MANUAL_PAY !== 'true') {
       throw new ForbiddenException('当前环境未开放免支付入账,请通过支付宝完成支付');
     }
-    const buyer = this.resolveBuyer(user);
+    const buyer = resolveBillingBuyer(user);
     const order = await this.prisma.creditOrder.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!order) throw new NotFoundException('订单不存在');
     // 归属校验:只能支付自己账户的订单。
@@ -758,12 +746,12 @@ export class BillingService {
     const planName = updated?.planId
       ? (await this.prisma.creditPlan.findUnique({ where: { id: updated.planId }, select: { name: true } }))?.name ?? null
       : null;
-    return this.toOrderView(updated, planName);
+    return toCreditOrderView(updated!, planName);
   }
 
   // 取消订单:仅本人 PENDING 订单可取消(原子 PENDING→CANCELLED)。已支付不可取消。
   async cancelOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
-    const buyer = this.resolveBuyer(user);
+    const buyer = resolveBillingBuyer(user);
     const order = await this.prisma.creditOrder.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!order) throw new NotFoundException('订单不存在');
     if (order.ownerType !== buyer.ownerType || order.ownerId !== buyer.ownerId) {
@@ -776,7 +764,7 @@ export class BillingService {
     });
     if (flip.count === 0) throw new BadRequestException('订单当前状态不可取消');
     const fresh = await this.prisma.creditOrder.findUnique({ where: { id }, include: { plan: { select: { name: true } } } });
-    return this.toOrderView(fresh, (fresh as any)?.plan?.name ?? null);
+    return toCreditOrderView(fresh!, (fresh as any)?.plan?.name ?? null);
   }
 
   /** 共用入账:对一个订单行原子地 →PAID 并把额度记入对应账户 + 写 PURCHASE 流水。
@@ -812,8 +800,7 @@ export class BillingService {
   }
 
   async listOrders(user: AuthUser, query: OrderQuery): Promise<PaginatedOrders> {
-    const buyer = this.resolveBuyer(user);
-    const where: any = { tenantId: user.tenantId, ownerType: buyer.ownerType, ownerId: buyer.ownerId };
+    const where: any = buildBuyerOrderWhere(user);
     if (query.status) where.status = query.status;
     const [rows, total] = await Promise.all([
       this.prisma.creditOrder.findMany({
@@ -824,28 +811,17 @@ export class BillingService {
       this.prisma.creditOrder.count({ where }),
     ]);
     return {
-      items: rows.map((r: any) => this.toOrderView(r, r.plan?.name ?? null)),
+      items: rows.map((r: any) => toCreditOrderView(r, r.plan?.name ?? null)),
       total, page: query.page, pageSize: query.pageSize,
     };
   }
 
   async getOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
-    const buyer = this.resolveBuyer(user);
     const order = await this.prisma.creditOrder.findFirst({
-      where: { id, tenantId: user.tenantId, ownerType: buyer.ownerType, ownerId: buyer.ownerId },
+      where: buildBuyerOrderWhere(user, id),
       include: { plan: { select: { name: true } } },
     });
     if (!order) throw new NotFoundException('订单不存在');
-    return this.toOrderView(order, (order as any).plan?.name ?? null);
-  }
-
-  private toOrderView(o: any, planName: string | null): CreditOrderView {
-    return {
-      id: o.id, ownerType: o.ownerType, ownerId: o.ownerId,
-      planId: o.planId ?? null, planName,
-      resource: o.resource, quantity: o.quantity, amountCents: o.amountCents,
-      status: o.status, paidAt: o.paidAt ? o.paidAt.toISOString() : null,
-      createdAt: o.createdAt.toISOString(),
-    };
+    return toCreditOrderView(order, (order as any).plan?.name ?? null);
   }
 }
