@@ -1,17 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PublicTraceResult } from '@nongchang/shared';
+import type { PublicTraceResult } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
-
-// 公开溯源页实际消费的 payload 字段白名单(见 web TraceabilityPage)。其余录入字段不外泄。
-const PUBLIC_PAYLOAD_KEYS = ['desc', 'image', 'tag', 'weather', 'data', 'temp'] as const;
-function pickPublicPayload(payload: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const out: Record<string, unknown> = {};
-  for (const k of PUBLIC_PAYLOAD_KEYS) {
-    if (payload[k] !== undefined) out[k] = payload[k];
-  }
-  return Object.keys(out).length ? out : null;
-}
+import { buildPublicTraceResponse } from './public-trace.model';
 
 @Injectable()
 export class PublicTraceService {
@@ -81,39 +71,18 @@ export class PublicTraceService {
         } catch { /* best-effort:落明细失败不阻断溯源响应 */ }
       }
 
-      return {
+      return buildPublicTraceResponse({
         code: traceCode.code,
-        frozen: false,
         scanCount: updated.scanCount,
         tiandituKey,
-        batch: {
-          cropName: batch.cropName,
-          batchNo: batch.batchNo,
-          plantDate: batch.plantDate.toISOString(),
-          expectedHarvest: batch.expectedHarvest.toISOString(),
-          status: batch.status as Extract<PublicTraceResult, { frozen: false }>['batch']['status'],
-          fieldName: field?.name ?? '',
-          region: agent?.region ?? null,
-          fieldLng,
-          fieldLat,
-        },
-        events: events.map((e) => ({
-          type: e.type as Extract<PublicTraceResult, { frozen: false }>['events'][number]['type'],
-          title: e.title,
-          actor: e.actor,
-          location: e.location,
-          occurredAt: e.occurredAt.toISOString(),
-          // 白名单:payload 是录入方自由 JSON,公开端点仅透出前端实际消费的展示字段,避免内部备注泄露。
-          payload: pickPublicPayload(e.payload as Record<string, unknown> | null),
-        })),
-        credentials: credentials.map((c) => ({
-          type: c.type as Extract<PublicTraceResult, { frozen: false }>['credentials'][number]['type'],
-          title: c.title,
-          issuer: c.issuer,
-          issuedAt: c.issuedAt ? c.issuedAt.toISOString() : null,
-          fileUrl: c.fileUrl,
-        })),
-      };
+        batch,
+        field,
+        agent,
+        fieldLng,
+        fieldLat,
+        events,
+        credentials,
+      });
     });
   }
 }
