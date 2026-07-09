@@ -3,15 +3,17 @@ import { Role } from '@nongchang/shared';
 import type { AuthUser, TraceScanItem, AntiFakeAlert, FreezeResponse } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
-
-const WINDOW_MS = 3600_000;
-const MIN_DISTINCT_IPS = 3;
-const MIN_SCANS = 5;
-
-interface ScanRow {
-  id: string; code: string; batchId: string; ip: string;
-  userAgent: string | null; scannedAt: Date;
-}
+import {
+  buildAlertWindowWhere,
+  buildAntiFakeAlertCandidates,
+  buildAntiFakeAlerts,
+  buildFreezeResponse,
+  buildScopedScanWhere,
+  buildTraceCodeStatusWhere,
+  buildTraceScanItem,
+  type ScanRow,
+  type TraceCodeStatusRow,
+} from './anti-fake.model';
 
 @Injectable()
 export class AntiFakeService {
@@ -28,7 +30,7 @@ export class AntiFakeService {
     const batches = await this.prisma.batch.findMany({
       where: owned as any, select: { id: true },
     });
-    return { tenantId: user.tenantId, batchId: { in: batches.map((b) => b.id) } };
+    return buildScopedScanWhere({ tenantId: user.tenantId, batchIds: batches.map((b) => b.id) });
   }
 
   async listScans(user: AuthUser, limit: number): Promise<TraceScanItem[]> {
@@ -36,44 +38,21 @@ export class AntiFakeService {
     const rows = (await this.prisma.traceScan.findMany({
       where, orderBy: { scannedAt: 'desc' }, take: limit,
     })) as ScanRow[];
-    return rows.map((r) => ({
-      id: r.id, code: r.code, batchId: r.batchId, ip: r.ip,
-      userAgent: r.userAgent, scannedAt: r.scannedAt.toISOString(),
-    }));
+    return rows.map(buildTraceScanItem);
   }
 
   async listAlerts(user: AuthUser): Promise<AntiFakeAlert[]> {
-    const where = { ...(await this.scanWhere(user)), scannedAt: { gte: new Date(Date.now() - WINDOW_MS) } };
+    const where = buildAlertWindowWhere(await this.scanWhere(user), Date.now());
     const rows = (await this.prisma.traceScan.findMany({ where })) as ScanRow[];
-    const byCode = new Map<string, ScanRow[]>();
-    for (const r of rows) {
-      const list = byCode.get(r.code) ?? [];
-      list.push(r);
-      byCode.set(r.code, list);
-    }
     // 先按阈值筛出疑似告警 code,再一次性批量查 traceCode 取冻结状态(避免逐 code N+1 查询)。
-    const candidates: { code: string; list: ScanRow[]; ips: Set<string> }[] = [];
-    for (const [code, list] of byCode) {
-      const ips = new Set(list.map((r) => r.ip));
-      if (ips.size < MIN_DISTINCT_IPS || list.length < MIN_SCANS) continue;
-      candidates.push({ code, list, ips });
-    }
+    const candidates = buildAntiFakeAlertCandidates(rows);
     if (candidates.length === 0) return [];
 
     const tcs = (await this.prisma.traceCode.findMany({
-      where: { tenantId: user.tenantId, code: { in: candidates.map((c) => c.code) } },
+      where: buildTraceCodeStatusWhere(user.tenantId, candidates.map((c) => c.code)),
       select: { code: true, status: true },
-    })) as { code: string; status: string }[];
-    const statusByCode = new Map(tcs.map((t) => [t.code, t.status]));
-
-    const alerts: AntiFakeAlert[] = candidates.map(({ code, list, ips }) => {
-      const last = list.reduce((a, b) => (a.scannedAt > b.scannedAt ? a : b));
-      return {
-        code, batchId: list[0].batchId, distinctIps: ips.size, scanCount: list.length,
-        locations: [...ips], lastScanAt: last.scannedAt.toISOString(), frozen: statusByCode.get(code) === 'frozen',
-      };
-    });
-    return alerts.sort((a, b) => b.scanCount - a.scanCount);
+    })) as TraceCodeStatusRow[];
+    return buildAntiFakeAlerts({ candidates, statuses: tcs });
   }
 
   async freeze(user: AuthUser, code: string): Promise<FreezeResponse> {
@@ -91,6 +70,6 @@ export class AntiFakeService {
     });
     if (!tc) throw new ForbiddenException('溯源码不在可操作范围内');
     await this.prisma.traceCode.update({ where: { code }, data: { status } });
-    return { code, frozen: status === 'frozen' };
+    return buildFreezeResponse(code, status);
   }
 }

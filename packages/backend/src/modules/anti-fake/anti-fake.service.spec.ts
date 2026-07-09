@@ -72,12 +72,12 @@ describe('AntiFakeService.listAlerts', () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0].frozen).toBe(true);
   });
-  it('单 IP 高频不告警(IP 多样性不足)', async () => {
+  it('单 IP 高频不告警: IP 多样性不足', async () => {
     const scans = [scan('SOLO','9.9.9.9',5), scan('SOLO','9.9.9.9',4), scan('SOLO','9.9.9.9',3), scan('SOLO','9.9.9.9',2), scan('SOLO','9.9.9.9',1)];
     const { svc } = makeService({ traceScan: { findMany: async () => scans } });
     expect(await svc.listAlerts(sysadmin)).toHaveLength(0);
   });
-  it('多 IP 低频不告警(次数不足)', async () => {
+  it('多 IP 低频不告警: 次数不足', async () => {
     const scans = [scan('LOW','1.1.1.1',5), scan('LOW','2.2.2.2',4), scan('LOW','3.3.3.3',3)];
     const { svc } = makeService({ traceScan: { findMany: async () => scans } });
     expect(await svc.listAlerts(sysadmin)).toHaveLength(0);
