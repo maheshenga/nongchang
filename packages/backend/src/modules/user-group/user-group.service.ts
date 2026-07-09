@@ -3,35 +3,25 @@ import type { AuthUser, UserGroupInput, UserGroupView, AssignUserGroupInput } fr
 import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_USER_GROUP_PERMISSIONS } from './default-permissions';
-
-interface UserGroupRow {
-  id: string;
-  tenantId: string;
-  name: string;
-  isDefault: boolean;
-  permissions: unknown;
-  createdAt: Date;
-}
+import {
+  buildAssignUserScope,
+  buildDefaultUserGroupCreateData,
+  buildUserGroupCreateData,
+  buildUserGroupTenantWhere,
+  buildUserGroupUpdateData,
+  buildUserGroupView,
+  type UserGroupRow,
+} from './user-group.model';
 
 @Injectable()
 export class UserGroupService {
   constructor(private prisma: PrismaService) {}
 
-  private toView(r: UserGroupRow): UserGroupView {
-    return {
-      id: r.id,
-      name: r.name,
-      isDefault: r.isDefault,
-      permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
-      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
-    };
-  }
-
   async list(user: AuthUser): Promise<UserGroupView[]> {
     const rows = (await this.prisma.userGroup.findMany({
-      where: { tenantId: user.tenantId },
+      where: buildUserGroupTenantWhere({ tenantId: user.tenantId }),
     })) as UserGroupRow[];
-    return rows.map(r => this.toView(r));
+    return rows.map(buildUserGroupView);
   }
 
   async create(user: AuthUser, dto: UserGroupInput): Promise<UserGroupView> {
@@ -42,19 +32,14 @@ export class UserGroupService {
       });
     }
     const row = (await this.prisma.userGroup.create({
-      data: {
-        tenantId: user.tenantId,
-        name: dto.name,
-        isDefault: dto.isDefault ?? false,
-        permissions: dto.permissions ?? [],
-      },
+      data: buildUserGroupCreateData({ tenantId: user.tenantId, dto }),
     })) as UserGroupRow;
-    return this.toView(row);
+    return buildUserGroupView(row);
   }
 
   async update(user: AuthUser, id: string, dto: UserGroupInput): Promise<UserGroupView> {
     const existing = (await this.prisma.userGroup.findFirst({
-      where: { id, tenantId: user.tenantId },
+      where: buildUserGroupTenantWhere({ tenantId: user.tenantId, id }),
     })) as UserGroupRow | null;
     if (!existing) throw new NotFoundException('用户组不存在');
 
@@ -64,21 +49,16 @@ export class UserGroupService {
         data: { isDefault: false },
       });
     }
-    const data: Record<string, unknown> = {};
-    if (dto.name !== undefined) data.name = dto.name;
-    if (dto.isDefault !== undefined) data.isDefault = dto.isDefault;
-    if (dto.permissions !== undefined) data.permissions = dto.permissions;
-
     const row = (await this.prisma.userGroup.update({
       where: { id },
-      data,
+      data: buildUserGroupUpdateData(dto),
     })) as UserGroupRow;
-    return this.toView(row);
+    return buildUserGroupView(row);
   }
 
   async remove(user: AuthUser, id: string): Promise<void> {
     const existing = (await this.prisma.userGroup.findFirst({
-      where: { id, tenantId: user.tenantId },
+      where: buildUserGroupTenantWhere({ tenantId: user.tenantId, id }),
     })) as UserGroupRow | null;
     if (!existing) throw new NotFoundException('用户组不存在');
     await this.prisma.userGroup.delete({ where: { id } });
@@ -87,27 +67,19 @@ export class UserGroupService {
   // 微信自动注册时取租户默认组,没有则创建
   async ensureDefault(tenantId: string): Promise<UserGroupView> {
     const existing = (await this.prisma.userGroup.findFirst({
-      where: { tenantId, isDefault: true },
+      where: buildUserGroupTenantWhere({ tenantId, isDefault: true }),
     })) as UserGroupRow | null;
-    if (existing) return this.toView(existing);
+    if (existing) return buildUserGroupView(existing);
     const row = (await this.prisma.userGroup.create({
-      data: {
-        tenantId,
-        name: '默认用户组',
-        isDefault: true,
-        permissions: [...DEFAULT_USER_GROUP_PERMISSIONS],
-      },
+      data: buildDefaultUserGroupCreateData({ tenantId, permissions: DEFAULT_USER_GROUP_PERMISSIONS }),
     })) as UserGroupRow;
-    return this.toView(row);
+    return buildUserGroupView(row);
   }
 
   async assignUserGroup(user: AuthUser, dto: AssignUserGroupInput): Promise<void> {
     // 范围收敛:agent_admin 仅可给本代理商旗下用户改组,防止跨范围越权。
-    const scope: Record<string, string> = { tenantId: user.tenantId };
-    if (user.role === Role.AGENT_ADMIN) {
-      if (!user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝操作');
-      scope.agentId = user.agentId;
-    }
+    if (user.role === Role.AGENT_ADMIN && !user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝操作');
+    const scope = buildAssignUserScope(user);
     const target = await this.prisma.user.findFirst({
       where: { ...scope, id: dto.userId },
     });

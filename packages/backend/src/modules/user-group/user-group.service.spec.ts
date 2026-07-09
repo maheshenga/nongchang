@@ -1,18 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { UserGroupService } from './user-group.service';
-import type { AuthUser } from '@nongchang/shared';
+import { Role, type AuthUser } from '@nongchang/shared';
 
 const user = { userId: 'u1', tenantId: 't1', role: 'system_admin' } as AuthUser;
 const otherTenant = { userId: 'u2', tenantId: 't2', role: 'system_admin' } as AuthUser;
 
 function makePrisma() {
   const groups: any[] = [];
-  const users: any[] = [{ id: 'mem1', tenantId: 't1', groupId: null }];
+  const users: any[] = [{ id: 'mem1', tenantId: 't1', agentId: 'a1', groupId: null }];
   let seq = 0;
+  let userFindFirstWhere: any;
   return {
     get groups() { return groups; },
     get users() { return users; },
+    get userFindFirstWhere() { return userFindFirstWhere; },
     userGroup: {
       create: async ({ data }: any) => { const g = { id: 'g' + seq++, createdAt: new Date(), permissions: [], ...data }; groups.push(g); return g; },
       findMany: async ({ where }: any) => groups.filter(g => g.tenantId === where.tenantId),
@@ -22,7 +24,14 @@ function makePrisma() {
       delete: async ({ where }: any) => { const i = groups.findIndex(g => g.id === where.id); groups.splice(i, 1); return {}; },
     },
     user: {
-      findFirst: async ({ where }: any) => users.find(u => u.id === where.id && u.tenantId === where.tenantId) ?? null,
+      findFirst: async ({ where }: any) => {
+        userFindFirstWhere = where;
+        return users.find(u => (
+          u.id === where.id
+          && u.tenantId === where.tenantId
+          && (where.agentId === undefined || u.agentId === where.agentId)
+        )) ?? null;
+      },
       update: async ({ where, data }: any) => { const u = users.find(x => x.id === where.id); Object.assign(u, data); return u; },
     },
   } as any;
@@ -81,5 +90,21 @@ describe('UserGroupService', () => {
   it('assignUserGroup 跨租户用户抛 NotFound', async () => {
     const g = await svc.create(user, { name: 'A' });
     await expect(svc.assignUserGroup(otherTenant, { userId: 'mem1', groupId: g.id })).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('assignUserGroup agent_admin 缺少 agentId 时 fail-closed', async () => {
+    const agent = { userId: 'a', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: null, ownerId: null } as AuthUser;
+    await expect(svc.assignUserGroup(agent, { userId: 'mem1', groupId: null })).rejects.toThrow('代理管理员缺少 agentId');
+  });
+
+  it('assignUserGroup agent_admin 按 tenantId + agentId 限定目标用户', async () => {
+    const agent = { userId: 'a', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null } as AuthUser;
+    await svc.assignUserGroup(agent, { userId: 'mem1', groupId: null });
+    expect(prisma.userFindFirstWhere).toEqual({ tenantId: 't1', agentId: 'a1', id: 'mem1' });
+  });
+
+  it('update 空 id 不退化为租户任意组', async () => {
+    await svc.create(user, { name: 'A' });
+    await expect(svc.update(user, '', { name: 'B' })).rejects.toBeInstanceOf(NotFoundException);
   });
 });
