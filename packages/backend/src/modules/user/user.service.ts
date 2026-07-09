@@ -5,6 +5,13 @@ import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, Role, ListQuer
 import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import {
+  buildMerchantTargetWhere,
+  buildUserScopedWhere,
+  buildUserStatusUpdateData,
+  resolveCreateUserAgentId,
+  reviewActionToStatus,
+} from './user.model';
 
 // 未分页时的默认安全上限:防无界结果集。
 const DEFAULT_LIST_CAP = 500;
@@ -14,12 +21,7 @@ export class UserService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
   async create(actor: AuthUser, dto: CreateUserDto) {
-    let agentId = dto.role === Role.MEMBER ? null : (dto.agentId ?? null);
-    if (actor.role === Role.AGENT_ADMIN) {
-      if (dto.role !== Role.MERCHANT) throw new ForbiddenException('代理商只能创建商家账号');
-      if (!actor.agentId) throw new ForbiddenException('Agent admin is missing agentId');
-      agentId = actor.agentId;
-    }
+    const agentId = resolveCreateUserAgentId(actor, dto);
     if (agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: agentId, tenantId: actor.tenantId },
@@ -105,7 +107,7 @@ export class UserService {
 
   async update(actor: AuthUser, id: string, dto: UpdateUserDto) {
     if (!id) throw new ForbiddenException('缺少用户 id');
-    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id, role: Role.MERCHANT, status: { not: 'pending' } } });
+    const target = await this.prisma.user.findFirst({ where: buildMerchantTargetWhere(actor, id, 'manageable') });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
     const data: Record<string, unknown> = {};
     if (dto.displayName !== undefined) data.displayName = dto.displayName;
@@ -118,23 +120,16 @@ export class UserService {
 
   async setStatus(actor: AuthUser, id: string, status: 'active' | 'suspended') {
     if (!id) throw new ForbiddenException('缺少用户 id');
-    const target = await this.prisma.user.findFirst({ where: { ...this.scopedWhere(actor), id, role: Role.MERCHANT, status: { not: 'pending' } } });
+    const target = await this.prisma.user.findFirst({ where: buildMerchantTargetWhere(actor, id, 'manageable') });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
-    const data: Record<string, unknown> = { status };
-    if (status === 'suspended') data.sessionVersion = { increment: 1 };
     return this.prisma.user.update({
-      where: { id }, data,
+      where: { id }, data: buildUserStatusUpdateData(status),
       select: { id: true, status: true },
     });
   }
 
   private scopedWhere(actor: AuthUser): Record<string, string> {
-    const where: Record<string, string> = { tenantId: actor.tenantId };
-    if (actor.role === Role.AGENT_ADMIN) {
-      if (!actor.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
-      where.agentId = actor.agentId;
-    }
-    return where;
+    return buildUserScopedWhere(actor);
   }
 
   async listPending(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
@@ -164,10 +159,10 @@ export class UserService {
 
   async review(actor: AuthUser, userId: string, dto: ReviewUserInput) {
     const target = await this.prisma.user.findFirst({
-      where: { ...this.scopedWhere(actor), id: userId, role: Role.MERCHANT, status: 'pending' },
+      where: buildMerchantTargetWhere(actor, userId, 'pending'),
     });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
-    const status = dto.action === 'approve' ? 'active' : 'rejected';
+    const status = reviewActionToStatus(dto.action);
     await this.prisma.user.update({ where: { id: userId }, data: { status } });
     return { id: userId, status };
   }
