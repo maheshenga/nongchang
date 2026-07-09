@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { PhenologyService } from './phenology.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { Role, type AuthUser } from '@nongchang/shared';
@@ -6,6 +6,10 @@ import { Role, type AuthUser } from '@nongchang/shared';
 const sysadmin: AuthUser = { userId: 'u1', tenantId: 't1', role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null };
 
 const DAY = 86400000;
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 function daysAgo(n: number): Date {
   return new Date(Date.now() - n * DAY);
 }
@@ -67,5 +71,25 @@ describe('PhenologyService.deviations', () => {
     expect(res[0].expectedTotalDays).toBeNull();
     expect(res[0].deviationDays).toBeNull();
     expect(res[0].alert).toBe(false);
+  });
+
+  it('uses one time snapshot for every batch in the same deviation response', async () => {
+    const now = new Date('2026-06-15T00:00:00.000Z').getTime();
+    const plantDate = new Date(now - 10 * DAY);
+    const dateNow = vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(now)
+      .mockReturnValueOnce(now + DAY);
+    const svc = makeService(
+      [
+        { id: 'b1', batchNo: 'P-001', cropName: 'Rice', status: 'Growing', plantDate },
+        { id: 'b2', batchNo: 'P-002', cropName: 'Rice', status: 'Growing', plantDate },
+      ],
+      [{ cropName: 'Rice', expectedDays: 1 }],
+    );
+
+    const res = await svc.deviations(sysadmin);
+
+    expect(dateNow).toHaveBeenCalledTimes(1);
+    expect(res.map((item) => item.elapsedDays)).toEqual([10, 10]);
   });
 });
