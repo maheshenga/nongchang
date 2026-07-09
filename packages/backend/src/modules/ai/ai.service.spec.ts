@@ -253,6 +253,36 @@ describe('AiService billing reservation', () => {
 });
 
 describe('AiService.advice', () => {
+  it('builds advice prompt before billing reserve can shift clock time', async () => {
+    const billing = billingSvc();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-01-11T00:00:00Z'));
+    billing.reserve.mockImplementationOnce(async () => {
+      now.mockReturnValue(Date.parse('2026-01-12T00:00:00Z'));
+      return { reservationId: 'res1', balanceAfter: 0 };
+    });
+    let requestBody: any;
+    const prisma: any = {
+      batch: { findFirst: async () => ({ id: 'b1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01T00:00:00Z') }) },
+      farmRecord: { findMany: async () => [] },
+      cropPhenology: { findMany: async () => [] },
+    };
+    const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
+    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const svc = new AiService(providers, {} as any, billing, prisma, scope);
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) };
+    }));
+
+    try {
+      await svc.advice(user, { batchId: 'b1' });
+
+      expect(requestBody.messages[0].content).toContain('已种植10天');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('advice reserves and confirms AI credits', async () => {
     const billing = billingSvc();
     const prisma: any = {
