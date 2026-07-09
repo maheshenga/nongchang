@@ -6,9 +6,14 @@ import { ScopeService } from '../../common/scope/scope.service';
 import {
   assertSupplyQuotaWithinLimit,
   buildFarmRecordCreateData,
+  buildFarmRecordListFindManyArgs,
+  buildFarmRecordListWhere,
+  buildFarmRecordOwnerBatchWhere,
+  buildFarmRecordOwnerWhere,
   enrichFarmRecordRows,
   serializeFarmRecord,
   shouldApplySupplyQuota,
+  toPaginatedFarmRecords,
 } from './farm-record.model';
 
 @Injectable()
@@ -60,40 +65,29 @@ export class FarmRecordService {
   }
 
   async list(user: AuthUser, query: FarmRecordQueryDto) {
-    const { batchId, action, status, page, pageSize } = query;
-    const where: Prisma.FarmRecordWhereInput = { tenantId: user.tenantId };
-    if (batchId) {
+    let scopedBatchIds: string[] | undefined;
+    if (query.batchId) {
       // 指定批次:校验归属在调用方作用域内,fail-closed。
-      await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-      where.batchId = batchId;
+      await this.scope.assertInScope(this.prisma, user, 'batch', query.batchId);
     } else {
       // 未指定:限定在调用方作用域内的全部批次。
       const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
       const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
-      where.batchId = { in: batches.map(b => b.id) };
+      scopedBatchIds = batches.map(batch => batch.id);
     }
-    // action 模糊匹配(不区分大小写),status 精确匹配。
-    if (action) where.action = { contains: action, mode: 'insensitive' };
-    if (status) where.status = status;
+    const where = buildFarmRecordListWhere(user, query, scopedBatchIds);
     const [items, total] = await this.prisma.$transaction([
-      this.prisma.farmRecord.findMany({
-        where, orderBy: { recordedAt: 'desc' },
-        skip: (page - 1) * pageSize, take: pageSize,
-      }),
+      this.prisma.farmRecord.findMany(buildFarmRecordListFindManyArgs(where, query)),
       this.prisma.farmRecord.count({ where }),
     ]);
-    if (items.length === 0) return { items, total, page, pageSize };
+    if (items.length === 0) return toPaginatedFarmRecords(items, total, query);
     // 农事记录无 ownerId,经 batchId → Batch.ownerId → User.displayName 两跳解析归属商户名。
-    const batchIds = [...new Set(items.map(r => r.batchId))];
-    const batches = await this.prisma.batch.findMany({
-      where: { id: { in: batchIds } }, select: { id: true, ownerId: true },
-    });
-    const ownerIds = [...new Set(batches.map((b: any) => b.ownerId))];
-    const owners = await this.prisma.user.findMany({
-      where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
-    });
+    const batchLookup = buildFarmRecordOwnerBatchWhere(items);
+    const batches = batchLookup ? await this.prisma.batch.findMany(batchLookup) : [];
+    const ownerLookup = buildFarmRecordOwnerWhere(batches);
+    const owners = ownerLookup ? await this.prisma.user.findMany(ownerLookup) : [];
     const withOwner = enrichFarmRecordRows(items, batches, owners);
-    return { items: withOwner, total, page, pageSize };
+    return toPaginatedFarmRecords(withOwner, total, query);
   }
 
   // 状态流转:校验记录归属(经其 batchId 在调用方作用域内),再更新 status。

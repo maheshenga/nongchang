@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
-import type { CreateFarmRecordDto } from '@nongchang/shared';
+import { Role, type AuthUser, type CreateFarmRecordDto } from '@nongchang/shared';
 import {
+  FARM_RECORD_LIST_ORDER_BY,
+  FARM_RECORD_OWNER_BATCH_SELECT,
+  FARM_RECORD_OWNER_SELECT,
   assertSupplyQuotaWithinLimit,
+  buildFarmRecordListFindManyArgs,
+  buildFarmRecordListWhere,
   buildFarmRecordCreateData,
+  buildFarmRecordOwnerBatchWhere,
+  buildFarmRecordOwnerWhere,
   enrichFarmRecordRows,
+  getFarmRecordBatchIds,
+  getFarmRecordOwnerIds,
   serializeFarmRecord,
   shouldApplySupplyQuota,
+  toPaginatedFarmRecords,
 } from './farm-record.model';
 
 const dto: CreateFarmRecordDto = {
@@ -16,6 +26,15 @@ const dto: CreateFarmRecordDto = {
   recordedAt: '2026-01-02T00:00:00.000Z',
   source: 'manual',
 };
+
+const actor = (overrides: Partial<AuthUser> = {}): AuthUser => ({
+  userId: 'u1',
+  tenantId: 't1',
+  role: Role.MERCHANT,
+  ownerId: 'm1',
+  agentId: null,
+  ...overrides,
+});
 
 describe('farm record model helpers', () => {
   it('serializes supplyAmount Decimal to number without mutating the source row', () => {
@@ -98,5 +117,81 @@ describe('farm record model helpers', () => {
     const out = enrichFarmRecordRows([{ id: 'r1', batchId: 'b1', supplyAmount: null }], [], []);
 
     expect(out).toEqual([{ id: 'r1', batchId: 'b1', supplyAmount: null, ownerName: null }]);
+  });
+});
+
+describe('farm record list model helpers', () => {
+  it('builds scoped list filters from batch, action, and status query fields', () => {
+    expect(buildFarmRecordListWhere(actor(), {
+      batchId: 'b1',
+      action: 'water',
+      status: 'completed',
+      page: 2,
+      pageSize: 10,
+    })).toEqual({
+      tenantId: 't1',
+      batchId: 'b1',
+      action: { contains: 'water', mode: 'insensitive' },
+      status: 'completed',
+    });
+
+    expect(buildFarmRecordListWhere(actor(), {
+      page: 1,
+      pageSize: 20,
+    }, ['b1', 'b2'])).toEqual({
+      tenantId: 't1',
+      batchId: { in: ['b1', 'b2'] },
+    });
+  });
+
+  it('builds paginated farm record findMany args with stable ordering', () => {
+    const where = buildFarmRecordListWhere(actor(), {
+      page: 3,
+      pageSize: 15,
+    }, ['b1']);
+
+    expect(buildFarmRecordListFindManyArgs(where, { page: 3, pageSize: 15 })).toEqual({
+      where,
+      orderBy: FARM_RECORD_LIST_ORDER_BY,
+      skip: 30,
+      take: 15,
+    });
+  });
+
+  it('builds owner lookup filters from listed farm record rows', () => {
+    const rows = [
+      { id: 'r1', batchId: 'b1', supplyAmount: null },
+      { id: 'r2', batchId: 'b1', supplyAmount: null },
+      { id: 'r3', batchId: 'b2', supplyAmount: null },
+    ];
+    const batches = [
+      { id: 'b1', ownerId: 'm1' },
+      { id: 'b2', ownerId: 'm2' },
+      { id: 'b3', ownerId: 'm1' },
+    ];
+
+    expect(getFarmRecordBatchIds(rows)).toEqual(['b1', 'b2']);
+    expect(buildFarmRecordOwnerBatchWhere(rows)).toEqual({
+      where: { id: { in: ['b1', 'b2'] } },
+      select: FARM_RECORD_OWNER_BATCH_SELECT,
+    });
+    expect(getFarmRecordOwnerIds(batches)).toEqual(['m1', 'm2']);
+    expect(buildFarmRecordOwnerWhere(batches)).toEqual({
+      where: { id: { in: ['m1', 'm2'] } },
+      select: FARM_RECORD_OWNER_SELECT,
+    });
+    expect(buildFarmRecordOwnerBatchWhere([])).toBeNull();
+    expect(buildFarmRecordOwnerWhere([])).toBeNull();
+  });
+
+  it('builds paginated farm record envelopes', () => {
+    const items = [{ id: 'r1', batchId: 'b1', supplyAmount: null, ownerName: null }];
+
+    expect(toPaginatedFarmRecords(items, 7, { page: 2, pageSize: 3 })).toEqual({
+      items,
+      total: 7,
+      page: 2,
+      pageSize: 3,
+    });
   });
 });
