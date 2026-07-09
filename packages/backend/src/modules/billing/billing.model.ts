@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import type { AuthUser, CreditOrderView } from '@nongchang/shared';
+import type { AuthUser, CreditOrderView, OrderQuery, PaginatedOrders } from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 
 export type BillingBuyer = { ownerType: 'AGENT' | 'MERCHANT'; ownerId: string };
@@ -17,6 +17,12 @@ export interface CreditOrderRow {
   paidAt?: Date | null;
   createdAt: Date;
 }
+
+export interface CreditOrderWithPlanRow extends CreditOrderRow {
+  plan?: { name: string } | null;
+}
+
+export const CREDIT_ORDER_PLAN_INCLUDE = { plan: { select: { name: true } } } as const;
 
 export function resolveBillingBuyer(user: AuthUser, context: BillingBuyerContext = 'purchase'): BillingBuyer {
   if (user.role === Role.AGENT_ADMIN) {
@@ -44,6 +50,20 @@ export function buildBuyerOrderWhere(user: AuthUser, id?: string): Record<string
   };
 }
 
+export function buildBuyerOrderListWhere(user: AuthUser, query: Pick<OrderQuery, 'status'>): Record<string, unknown> {
+  return { ...buildBuyerOrderWhere(user), ...(query.status ? { status: query.status } : {}) };
+}
+
+export function buildBuyerOrderListFindManyArgs(where: Record<string, unknown>, query: OrderQuery) {
+  return {
+    where,
+    orderBy: { createdAt: 'desc' as const },
+    skip: (query.page - 1) * query.pageSize,
+    take: query.pageSize,
+    include: CREDIT_ORDER_PLAN_INCLUDE,
+  };
+}
+
 export function toCreditOrderView(row: CreditOrderRow, planName: string | null = null): CreditOrderView {
   return {
     id: row.id,
@@ -57,5 +77,14 @@ export function toCreditOrderView(row: CreditOrderRow, planName: string | null =
     status: row.status,
     paidAt: row.paidAt ? row.paidAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toPaginatedCreditOrders(rows: CreditOrderWithPlanRow[], total: number, query: OrderQuery): PaginatedOrders {
+  return {
+    items: rows.map(row => toCreditOrderView(row, row.plan?.name ?? null)),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
   };
 }

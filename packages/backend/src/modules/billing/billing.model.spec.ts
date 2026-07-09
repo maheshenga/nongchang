@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { Role, type AuthUser } from '@nongchang/shared';
-import { buildBuyerOrderWhere, resolveBillingBuyer, toCreditOrderView } from './billing.model';
+import {
+  CREDIT_ORDER_PLAN_INCLUDE,
+  buildBuyerOrderListFindManyArgs,
+  buildBuyerOrderListWhere,
+  buildBuyerOrderWhere,
+  resolveBillingBuyer,
+  toCreditOrderView,
+  toPaginatedCreditOrders,
+} from './billing.model';
 
 const actor = (overrides: Partial<AuthUser>): AuthUser => ({
   userId: 'u1',
@@ -68,6 +76,73 @@ describe('billing.model order filters', () => {
       tenantId: 't1',
       ownerType: 'MERCHANT',
       ownerId: 'm1',
+    });
+  });
+});
+
+describe('billing.model order list helpers', () => {
+  it('adds optional order status to buyer-scoped list filters', () => {
+    expect(buildBuyerOrderListWhere(actor({ role: Role.MERCHANT, ownerId: 'm1' }), { status: 'PAID' })).toEqual({
+      tenantId: 't1',
+      ownerType: 'MERCHANT',
+      ownerId: 'm1',
+      status: 'PAID',
+    });
+    expect(buildBuyerOrderListWhere(actor({ role: Role.MERCHANT, ownerId: 'm1' }), {})).toEqual({
+      tenantId: 't1',
+      ownerType: 'MERCHANT',
+      ownerId: 'm1',
+    });
+  });
+
+  it('builds order list findMany args with plan include and pagination', () => {
+    const where = { tenantId: 't1', ownerType: 'MERCHANT', ownerId: 'm1', status: 'PENDING' };
+
+    expect(buildBuyerOrderListFindManyArgs(where, { status: 'PENDING', page: 3, pageSize: 25 })).toEqual({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: 50,
+      take: 25,
+      include: CREDIT_ORDER_PLAN_INCLUDE,
+    });
+  });
+
+  it('projects paginated orders with plan names', () => {
+    expect(toPaginatedCreditOrders([
+      {
+        id: 'o1',
+        ownerType: 'MERCHANT',
+        ownerId: 'm1',
+        planId: 'p1',
+        resource: 'AI',
+        quantity: 100,
+        amountCents: 1000,
+        status: 'PAID',
+        paidAt: new Date('2026-01-02T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        plan: { name: 'Starter' },
+      },
+      {
+        id: 'o2',
+        ownerType: 'MERCHANT',
+        ownerId: 'm1',
+        planId: null,
+        resource: 'CODE',
+        quantity: 10,
+        amountCents: 99,
+        status: 'PENDING',
+        paidAt: null,
+        createdAt: new Date('2026-01-03T00:00:00.000Z'),
+        plan: null,
+      },
+    ], 7, { page: 2, pageSize: 2 })).toEqual({
+      items: [
+        expect.objectContaining({ id: 'o1', planName: 'Starter', paidAt: '2026-01-02T00:00:00.000Z' }),
+        expect.objectContaining({ id: 'o2', planName: null, paidAt: null }),
+      ],
+      total: 7,
+      page: 2,
+      pageSize: 2,
     });
   });
 });

@@ -840,6 +840,54 @@ describe('BillingService.createOrder', () => {
   });
 });
 
+describe('BillingService.listOrders', () => {
+  const baseOrder = {
+    id: 'o1',
+    tenantId: 't1',
+    ownerType: 'MERCHANT',
+    ownerId: 'm1',
+    planId: 'p1',
+    resource: 'AI',
+    quantity: 100,
+    amountCents: 1000,
+    status: 'PAID',
+    paidAt: new Date('2026-07-07T00:00:00.000Z'),
+    createdAt: new Date('2026-07-06T00:00:00.000Z'),
+    plan: { name: 'AI100' },
+  };
+
+  function listOrdersPrisma(rows = [baseOrder], total = rows.length) {
+    return {
+      creditOrder: {
+        findMany: vi.fn().mockResolvedValue(rows),
+        count: vi.fn().mockResolvedValue(total),
+      },
+    } as any;
+  }
+
+  it('lists current buyer orders with optional status and pagination', async () => {
+    const prisma = listOrdersPrisma([baseOrder], 3);
+    const out = await new BillingService(prisma).listOrders(merchant, { status: 'PAID', page: 2, pageSize: 1 });
+
+    expect(prisma.creditOrder.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', ownerType: 'MERCHANT', ownerId: 'm1', status: 'PAID' },
+      orderBy: { createdAt: 'desc' },
+      skip: 1,
+      take: 1,
+      include: { plan: { select: { name: true } } },
+    });
+    expect(prisma.creditOrder.count).toHaveBeenCalledWith({
+      where: { tenantId: 't1', ownerType: 'MERCHANT', ownerId: 'm1', status: 'PAID' },
+    });
+    expect(out).toEqual({
+      items: [expect.objectContaining({ id: 'o1', planName: 'AI100', status: 'PAID' })],
+      total: 3,
+      page: 2,
+      pageSize: 1,
+    });
+  });
+});
+
 describe('BillingService.getOrder', () => {
   const baseOrder = {
     id: 'o1',

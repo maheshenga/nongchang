@@ -9,7 +9,15 @@ import type {
 import { Role, isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
-import { buildBuyerOrderWhere, resolveBillingBuyer, toCreditOrderView } from './billing.model';
+import {
+  CreditOrderWithPlanRow,
+  buildBuyerOrderListFindManyArgs,
+  buildBuyerOrderListWhere,
+  buildBuyerOrderWhere,
+  resolveBillingBuyer,
+  toCreditOrderView,
+  toPaginatedCreditOrders,
+} from './billing.model';
 
 const DEFAULT_LIST_CAP = 500;
 
@@ -800,20 +808,12 @@ export class BillingService {
   }
 
   async listOrders(user: AuthUser, query: OrderQuery): Promise<PaginatedOrders> {
-    const where: any = buildBuyerOrderWhere(user);
-    if (query.status) where.status = query.status;
+    const where = buildBuyerOrderListWhere(user, query);
     const [rows, total] = await Promise.all([
-      this.prisma.creditOrder.findMany({
-        where, orderBy: { createdAt: 'desc' },
-        skip: (query.page - 1) * query.pageSize, take: query.pageSize,
-        include: { plan: { select: { name: true } } },
-      }),
+      this.prisma.creditOrder.findMany(buildBuyerOrderListFindManyArgs(where, query)),
       this.prisma.creditOrder.count({ where }),
     ]);
-    return {
-      items: rows.map((r: any) => toCreditOrderView(r, r.plan?.name ?? null)),
-      total, page: query.page, pageSize: query.pageSize,
-    };
+    return toPaginatedCreditOrders(rows as CreditOrderWithPlanRow[], total, query);
   }
 
   async getOrder(user: AuthUser, id: string): Promise<CreditOrderView> {
