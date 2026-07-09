@@ -2,11 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { Role, type AuthUser } from '@nongchang/shared';
 import {
+  DEFAULT_USER_LIST_CAP,
+  MERCHANT_USER_LIST_SELECT,
+  PENDING_USER_LIST_SELECT,
+  USER_LIST_SELECT,
+  buildMerchantFieldAggregateWhere,
+  buildMerchantListFindManyArgs,
+  buildMerchantListWhere,
   buildMerchantTargetWhere,
+  buildPendingMerchantListFindManyArgs,
+  buildPendingMerchantListWhere,
+  buildUserListFindManyArgs,
   buildUserScopedWhere,
   buildUserStatusUpdateData,
+  getMerchantIds,
   resolveCreateUserAgentId,
+  resolveUserListPagination,
   reviewActionToStatus,
+  toMerchantListItems,
+  toPaginatedUserList,
 } from './user.model';
 
 const actor = (overrides: Partial<AuthUser>): AuthUser => ({
@@ -53,6 +67,135 @@ describe('user.model scope helpers', () => {
       role: Role.MERCHANT,
       status: { not: 'pending' },
     });
+  });
+});
+
+describe('user.model list helpers', () => {
+  it('builds capped and paginated general user list args', () => {
+    const where = { tenantId: 't1' };
+
+    expect(resolveUserListPagination()).toEqual({
+      paginated: false,
+      page: 1,
+      pageSize: 20,
+      skip: 0,
+      take: DEFAULT_USER_LIST_CAP,
+    });
+    expect(buildUserListFindManyArgs(where)).toEqual({
+      where,
+      select: USER_LIST_SELECT,
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: DEFAULT_USER_LIST_CAP,
+    });
+    expect(buildUserListFindManyArgs(where, { page: 3, pageSize: 25 })).toEqual({
+      where,
+      select: USER_LIST_SELECT,
+      orderBy: { createdAt: 'desc' },
+      skip: 50,
+      take: 25,
+    });
+  });
+
+  it('builds merchant and pending merchant list where clauses inside actor scope', () => {
+    expect(buildMerchantListWhere(actor({ role: Role.AGENT_ADMIN, agentId: 'a1' }))).toEqual({
+      tenantId: 't1',
+      agentId: 'a1',
+      role: Role.MERCHANT,
+      status: { not: 'pending' },
+    });
+    expect(buildPendingMerchantListWhere(actor({ role: Role.SYSTEM_ADMIN }))).toEqual({
+      tenantId: 't1',
+      role: Role.MERCHANT,
+      status: 'pending',
+    });
+  });
+
+  it('builds merchant and pending findMany args with stable selects', () => {
+    const merchantWhere = { tenantId: 't1', role: Role.MERCHANT, status: { not: 'pending' } };
+    const pendingWhere = { tenantId: 't1', role: Role.MERCHANT, status: 'pending' };
+
+    expect(buildMerchantListFindManyArgs(merchantWhere, { page: 2, pageSize: 10 })).toEqual({
+      where: merchantWhere,
+      orderBy: { createdAt: 'desc' },
+      select: MERCHANT_USER_LIST_SELECT,
+      skip: 10,
+      take: 10,
+    });
+    expect(buildPendingMerchantListFindManyArgs(pendingWhere)).toEqual({
+      where: pendingWhere,
+      orderBy: { createdAt: 'desc' },
+      select: PENDING_USER_LIST_SELECT,
+      skip: 0,
+      take: DEFAULT_USER_LIST_CAP,
+    });
+  });
+
+  it('builds paginated envelopes without transforming raw user rows', () => {
+    const items = [{ id: 'u1', createdAt: new Date('2026-07-06T00:00:00.000Z') }];
+
+    expect(toPaginatedUserList(items, 5, { page: 2, pageSize: 1 })).toEqual({
+      items,
+      total: 5,
+      page: 2,
+      pageSize: 1,
+    });
+  });
+
+  it('projects merchant aggregate fields and skips empty aggregate queries', () => {
+    const merchants = [
+      {
+        id: 'm1',
+        username: 'u1',
+        displayName: 'Merchant 1',
+        phone: null,
+        status: 'active',
+        agentId: 'a1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      {
+        id: 'm2',
+        username: 'u2',
+        displayName: 'Merchant 2',
+        phone: '13800000002',
+        status: 'active',
+        agentId: null,
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      },
+    ];
+
+    expect(getMerchantIds(merchants)).toEqual(['m1', 'm2']);
+    expect(buildMerchantFieldAggregateWhere('t1', [])).toBeNull();
+    expect(buildMerchantFieldAggregateWhere('t1', ['m1', 'm2'])).toEqual({
+      tenantId: 't1',
+      ownerId: { in: ['m1', 'm2'] },
+    });
+    expect(toMerchantListItems(merchants, [
+      { ownerId: 'm1', _count: { _all: 3 }, _sum: { area: 12.5 } },
+    ])).toEqual([
+      {
+        id: 'm1',
+        username: 'u1',
+        displayName: 'Merchant 1',
+        phone: null,
+        status: 'active',
+        agentId: 'a1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        fieldCount: 3,
+        totalArea: 12.5,
+      },
+      {
+        id: 'm2',
+        username: 'u2',
+        displayName: 'Merchant 2',
+        phone: '13800000002',
+        status: 'active',
+        agentId: null,
+        createdAt: '2026-01-02T00:00:00.000Z',
+        fieldCount: 0,
+        totalArea: 0,
+      },
+    ]);
   });
 });
 
