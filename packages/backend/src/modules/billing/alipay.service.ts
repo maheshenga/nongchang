@@ -6,15 +6,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import { BillingService } from './billing.service';
 import { resolveBillingBuyer } from './billing.model';
-
-const PROVIDER = 'alipay';
-// 复用 IntegrationConfig 列:app_id=支付宝appId、secret_enc=应用私钥密文、api_key_enc=支付宝公钥密文。
-interface AlipayRow {
-  appId: string | null;
-  secretEnc: string | null;   // 应用私钥
-  apiKeyEnc: string | null;   // 支付宝公钥
-  enabled: boolean;
-}
+import {
+  ALIPAY_PROVIDER,
+  buildAlipayConfigUpsertArgs,
+  buildAlipayConfigView,
+  buildAlipayPaymentRequest,
+  buildAlipayPaymentView,
+  buildAlipaySdkOptions,
+  isAlipayPaidAmountValid,
+  isSuccessfulAlipayTradeStatus,
+  resolveAlipaySettlementChannel,
+  trimTrailingSlash,
+} from './alipay.model';
+import type { AlipayRow } from './alipay.model';
 
 @Injectable()
 export class AlipayService {
@@ -26,7 +30,7 @@ export class AlipayService {
 
   private async findRow(tenantId: string): Promise<AlipayRow | null> {
     return (await this.prisma.integrationConfig.findUnique({
-      where: { tenantId_provider: { tenantId, provider: PROVIDER } },
+      where: { tenantId_provider: { tenantId, provider: ALIPAY_PROVIDER } },
     })) as AlipayRow | null;
   }
 
@@ -34,12 +38,7 @@ export class AlipayService {
     if (user.role !== Role.SYSTEM_ADMIN) throw new ForbiddenException('仅平台管理员可查看支付配置');
     const row = await this.findRow(user.tenantId);
     if (!row) return null;
-    return {
-      appId: row.appId ?? null,
-      privateKeyMasked: row.secretEnc ? '已配置(已加密)' : null,
-      alipayPublicKeyMasked: row.apiKeyEnc ? '已配置(已加密)' : null,
-      enabled: row.enabled,
-    };
+    return buildAlipayConfigView(row);
   }
 
   async upsertConfig(user: AuthUser, dto: AlipayConfigInput): Promise<AlipayConfigView> {
@@ -52,15 +51,13 @@ export class AlipayService {
     const secretEnc = dto.privateKey ? this.enc.encrypt(dto.privateKey) : undefined;
     const apiKeyEnc = dto.alipayPublicKey ? this.enc.encrypt(dto.alipayPublicKey) : undefined;
 
-    const update: Record<string, unknown> = { appId: dto.appId, enabled };
-    if (secretEnc) update.secretEnc = secretEnc;
-    if (apiKeyEnc) update.apiKeyEnc = apiKeyEnc;
-
-    await this.prisma.integrationConfig.upsert({
-      where: { tenantId_provider: { tenantId: user.tenantId, provider: PROVIDER } },
-      create: { tenantId: user.tenantId, provider: PROVIDER, appId: dto.appId, secretEnc: secretEnc ?? null, apiKeyEnc: apiKeyEnc ?? null, enabled },
-      update,
-    });
+    await this.prisma.integrationConfig.upsert(buildAlipayConfigUpsertArgs({
+      tenantId: user.tenantId,
+      appId: dto.appId,
+      enabled,
+      secretEnc,
+      apiKeyEnc,
+    }));
     return (await this.getConfig(user))!;
   }
 
@@ -70,13 +67,12 @@ export class AlipayService {
     if (!row || !row.enabled || !row.appId || !row.secretEnc || !row.apiKeyEnc) {
       throw new BadRequestException('本租户未启用支付宝支付,请联系管理员配置');
     }
-    return new AlipaySdk({
-      appId: row.appId,
+    return new AlipaySdk(buildAlipaySdkOptions({
+      row,
       privateKey: this.enc.decrypt(row.secretEnc),
       alipayPublicKey: this.enc.decrypt(row.apiKeyEnc),
-      gateway: process.env.ALIPAY_GATEWAY || 'https://openapi.alipay.com/gateway.do',
-      signType: 'RSA2',
-    });
+      gateway: process.env.ALIPAY_GATEWAY,
+    }));
   }
 
   // 发起支付:对 PENDING 订单按渠道生成支付宝支付入口(PC 返回跳转 URL / WAP 返回表单 HTML)。
@@ -91,35 +87,14 @@ export class AlipayService {
     if (order.status !== 'PENDING') throw new BadRequestException('该订单不可支付(非待支付状态)');
 
     const sdk = await this.sdkFor(user.tenantId);
-    const method = dto.channel === 'PC' ? 'alipay.trade.page.pay' : 'alipay.trade.wap.pay';
-    const productCode = dto.channel === 'PC' ? 'FAST_INSTANT_TRADE_PAY' : 'QUICK_WAP_WAY';
-    const notifyUrl = `${this.publicBaseUrl()}/api/billing/alipay/notify`;
-    const returnUrl = `${this.webBaseUrl()}/#/billing/pay-result?orderId=${order.id}`;
-    const subject = `额度购买-${order.resource === 'AI' ? 'AI算力' : '二维码'}-${order.quantity}`;
-
-    // out_trade_no = 订单 id(回调按此定位订单);total_amount 单位元,保留两位。
-    // timeout_express=30m:逾期未支付支付宝自动关单,避免 PENDING 订单永久可支付。
-    const params = {
-      notify_url: notifyUrl,
-      return_url: returnUrl,
-      bizContent: {
-        out_trade_no: order.id,
-        total_amount: (order.amountCents / 100).toFixed(2),
-        subject,
-        product_code: productCode,
-        timeout_express: '30m',
-      },
-      method: dto.channel === 'PC' ? 'GET' : 'POST',
-    } as const;
-
-    const result = sdk.pageExec(method, params as any);
-    // PC(GET)返回可跳转 URL;WAP(POST)返回自动提交表单 HTML。
-    return {
-      orderId: order.id,
+    const request = buildAlipayPaymentRequest({
+      order,
       channel: dto.channel,
-      payUrl: dto.channel === 'PC' ? result : null,
-      formHtml: dto.channel === 'WAP' ? result : null,
-    };
+      publicBaseUrl: this.publicBaseUrl(),
+      webBaseUrl: this.webBaseUrl(),
+    });
+    const result = sdk.pageExec(request.method, request.params as any);
+    return buildAlipayPaymentView({ orderId: order.id, channel: dto.channel, result });
   }
 
   // 支付宝异步通知:验签 → 校验订单/金额/交易状态 → 幂等入账。返回给控制器决定响应文本。
@@ -153,15 +128,14 @@ export class AlipayService {
 
     // 仅处理交易成功/完成。
     const status = tenantHintBody.trade_status;
-    if (status !== 'TRADE_SUCCESS' && status !== 'TRADE_FINISHED') {
+    if (!isSuccessfulAlipayTradeStatus(status)) {
       return 'success'; // 验签通过但非成功态(如 WAIT_BUYER_PAY):应答 success 避免支付宝重试,不入账。
     }
     // 金额防篡改:回调金额必须与订单一致。
-    const paidYuan = Number(tenantHintBody.total_amount);
-    if (!Number.isFinite(paidYuan) || Math.round(paidYuan * 100) !== order.amountCents) {
+    if (!isAlipayPaidAmountValid(tenantHintBody.total_amount, order.amountCents)) {
       return 'failure';
     }
-    const channel = order.payChannel ?? 'alipay';
+    const channel = resolveAlipaySettlementChannel(order.payChannel);
     await this.billing.settleOrder(order, { payChannel: channel, tradeNo: tenantHintBody.trade_no });
     return 'success';
   }
@@ -169,10 +143,10 @@ export class AlipayService {
   private publicBaseUrl(): string {
     const u = process.env.PUBLIC_BASE_URL;
     if (!u) throw new BadRequestException('未配置 PUBLIC_BASE_URL(支付宝回调地址),无法发起支付');
-    return u.replace(/\/$/, '');
+    return trimTrailingSlash(u);
   }
 
   private webBaseUrl(): string {
-    return (process.env.WEB_BASE_URL || '').replace(/\/$/, '');
+    return trimTrailingSlash(process.env.WEB_BASE_URL || '');
   }
 }
