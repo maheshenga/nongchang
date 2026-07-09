@@ -61,7 +61,7 @@ describe('AgentService.listMerchants', () => {
       pageSize: 1,
     });
   });
-  it('agent_admin 缺 agentId:抛 Forbidden(不查库)', () => {
+  it('agent_admin 缺 agentId: 抛 Forbidden(不查库)', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
     const svc = new AgentService(prisma, new ScopeService());
     expect(() => svc.listMerchants(ctx({ agentId: null }))).toThrow(ForbiddenException);
