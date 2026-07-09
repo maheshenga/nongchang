@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import {
@@ -14,32 +14,25 @@ import {
 } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_USER_GROUP_PERMISSIONS } from '../user-group/default-permissions';
+import {
+  assertCanSetTenantStatus,
+  buildDefaultTenantGroupCreateData,
+  buildTenantAdminCreateData,
+  buildTenantCreateData,
+  normalizeTenantCode,
+  TenantRow,
+  toTenantListItem,
+  toTenantStatusResult,
+} from './tenant.model';
 
 const DEFAULT_LIST_CAP = 500;
-
-interface TenantRow {
-  id: string;
-  name: string;
-  code: string;
-  status: string;
-  createdAt: Date;
-  _count?: { users: number; agents: number };
-}
 
 @Injectable()
 export class TenantService {
   constructor(private prisma: PrismaService) {}
 
   private toListItem(row: TenantRow): TenantListItem {
-    return {
-      id: row.id,
-      name: row.name,
-      code: row.code,
-      status: row.status as TenantStatus,
-      createdAt: row.createdAt.toISOString(),
-      userCount: row._count?.users ?? 0,
-      agentCount: row._count?.agents ?? 0,
-    };
+    return toTenantListItem(row);
   }
 
   async list(query?: ListQuery): Promise<TenantListItem[] | Paginated<TenantListItem>> {
@@ -73,7 +66,7 @@ export class TenantService {
   }
 
   async create(dto: CreateTenantDto): Promise<CreateTenantResponse> {
-    const code = dto.code.trim().toUpperCase();
+    const code = normalizeTenantCode(dto.code);
     const existing = await this.prisma.tenant.findUnique({ where: { code } });
     if (existing) throw new ConflictException('Tenant code already exists');
 
@@ -81,27 +74,14 @@ export class TenantService {
     const passwordHash = await bcrypt.hash(initialPassword, 10);
     return this.prisma.$transaction(async tx => {
       const tenant = await tx.tenant.create({
-        data: { name: dto.name, code, status: 'active' },
+        data: buildTenantCreateData(dto, code),
       });
       const admin = await tx.user.create({
-        data: {
-          tenantId: tenant.id,
-          username: dto.adminUsername,
-          passwordHash,
-          role: Role.SYSTEM_ADMIN,
-          displayName: dto.adminDisplayName,
-          phone: dto.adminPhone ?? null,
-          status: 'active',
-        },
+        data: buildTenantAdminCreateData(tenant.id, passwordHash, dto),
         select: { id: true, username: true, role: true, displayName: true },
       });
       await tx.userGroup.create({
-        data: {
-          tenantId: tenant.id,
-          name: '默认用户组',
-          isDefault: true,
-          permissions: [...DEFAULT_USER_GROUP_PERMISSIONS],
-        },
+        data: buildDefaultTenantGroupCreateData(tenant.id, DEFAULT_USER_GROUP_PERMISSIONS),
       });
       return {
         ...this.toListItem({ ...tenant, _count: { users: 1, agents: 0 } }),
@@ -117,9 +97,7 @@ export class TenantService {
   }
 
   async setStatus(actor: AuthUser, tenantId: string, status: TenantStatus): Promise<{ id: string; status: TenantStatus }> {
-    if (tenantId === actor.tenantId && status === 'suspended') {
-      throw new ForbiddenException('Cannot suspend the current platform tenant');
-    }
+    assertCanSetTenantStatus(actor, tenantId, status);
     const tenant = await this.prisma.tenant.findFirst({ where: { id: tenantId }, select: { id: true } });
     if (!tenant) throw new NotFoundException('Tenant not found');
     const updated = await this.prisma.tenant.update({
@@ -127,6 +105,6 @@ export class TenantService {
       data: { status },
       select: { id: true, status: true },
     });
-    return { id: updated.id, status: updated.status as TenantStatus };
+    return toTenantStatusResult(updated);
   }
 }
