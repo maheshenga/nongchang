@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateTraceEventDto, ListQuery, Paginated } from '@nongchang/shared';
@@ -6,8 +6,16 @@ import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { BillingService } from '../billing/billing.service';
-
-const MAX_CODES_PER_BATCH = 10000;
+import {
+  MAX_CODES_PER_BATCH,
+  assertTraceGenerationCount,
+  assertTraceGenerationRetryCount,
+  buildTraceCodeCreateData,
+  buildTraceCodeLookup,
+  buildTraceGenerationKey,
+  buildTraceGenerationRef,
+  normalizeTraceGenerationRequestKey,
+} from './trace.model';
 
 @Injectable()
 export class TraceService {
@@ -15,28 +23,20 @@ export class TraceService {
 
   /** 一物一码:为批次批量生成 count 个唯一溯源码并返回。 */
   async generateCodes(user: AuthUser, batchId: string, count = 1, requestKey?: string) {
-    if (!Number.isInteger(count) || count < 1 || count > MAX_CODES_PER_BATCH) {
-      throw new ForbiddenException(`生成数量须为 1~${MAX_CODES_PER_BATCH} 的整数`);
-    }
-    const normalizedRequestKey = requestKey?.trim();
-    if (!normalizedRequestKey) {
-      throw new BadRequestException('缺少幂等键,请通过 Idempotency-Key 重试安全地生成溯源码');
-    }
+    assertTraceGenerationCount(count);
+    const normalizedRequestKey = normalizeTraceGenerationRequestKey(requestKey);
     await this.scope.assertInScope(this.prisma, user, 'batch', batchId);
-    const generationKey = `trace.generate:${user.tenantId}:${user.userId}:${batchId}:${normalizedRequestKey}`;
-    const ref = {
-      refType: 'trace.generate',
-      refId: batchId,
-      idempotencyKey: generationKey,
-    };
-    const existingCodes = await this.prisma.traceCode.findMany({
-      where: { tenantId: user.tenantId, batchId, generationKey },
-      orderBy: { createdAt: 'asc' },
+    const generationKey = buildTraceGenerationKey({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      batchId,
+      requestKey: normalizedRequestKey,
     });
+    const ref = buildTraceGenerationRef(batchId, generationKey);
+    const traceCodeLookup = buildTraceCodeLookup(user.tenantId, batchId, generationKey);
+    const existingCodes = await this.prisma.traceCode.findMany(traceCodeLookup);
     if (existingCodes.length > 0) {
-      if (existingCodes.length !== count) {
-        throw new BadRequestException(`幂等键已用于生成 ${existingCodes.length} 个溯源码,不能以 ${count} 个重试`);
-      }
+      assertTraceGenerationRetryCount(existingCodes.length, count);
       await this.billing.confirmReservation(user, 'CODE', ref);
       return existingCodes;
     }
@@ -46,24 +46,19 @@ export class TraceService {
       await this.prisma.$transaction(async (tx) => {
         const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${batchId} FOR UPDATE`;
         if (locked.length === 0) throw new NotFoundException('批次不存在');
-        const existingCodes = await tx.traceCode.findMany({
-          where: { tenantId: user.tenantId, batchId, generationKey },
-          orderBy: { createdAt: 'asc' },
-        });
+        const existingCodes = await tx.traceCode.findMany(traceCodeLookup);
         if (existingCodes.length > 0) {
-          if (existingCodes.length !== count) {
-            throw new BadRequestException(`幂等键已用于生成 ${existingCodes.length} 个溯源码,不能以 ${count} 个重试`);
-          }
+          assertTraceGenerationRetryCount(existingCodes.length, count);
           return;
         }
         await tx.traceCode.createMany({
-          data: codes.map((code) => ({
+          data: buildTraceCodeCreateData({
             tenantId: user.tenantId,
             batchId,
-            code,
             reservationId: reservation.reservationId,
+            codes,
             generationKey,
-          })),
+          }),
         });
       });
     } catch (err) {
