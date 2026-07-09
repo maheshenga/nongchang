@@ -8,6 +8,11 @@ import { useAuth } from '../auth/auth-context';
 import { confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import {
+  buildInboundSupplySubmission,
+  buildIssueSupplySubmission,
+  getSupplyUsedPercent,
+} from './LogisticsTracker.model';
 
 const unitOptions = ['箱', '包(50kg)', '桶(20L)', '件'];
 
@@ -28,11 +33,10 @@ export default function LogisticsTracker() {
   };
 
   const handleIssueSubmit = async () => {
-    if (!isMerchant) return showToast('当前视图只读');
-    if (!issuePayload.supplyId || issuePayload.amount <= 0) return showToast('请输入完整信息');
-    if (!issuePayload.batchId) return showToast('请选择关联批次');
+    const submission = buildIssueSupplySubmission(issuePayload, isMerchant);
+    if (!submission.ok) return showToast(submission.message);
     try {
-      await issueSupply(issuePayload.supplyId, { batchId: issuePayload.batchId, amount: issuePayload.amount });
+      await issueSupply(submission.supplyId, submission.input);
       setShowOutboundModal(false);
       setIssuePayload({ supplyId: '', amount: 0, batchId: '' });
       showToast('领用单下发成功');
@@ -43,10 +47,10 @@ export default function LogisticsTracker() {
   };
 
   const handleInboundSubmit = async () => {
-    if (!isMerchant) return showToast('当前视图只读');
-    if (!inboundPayload.name || inboundPayload.amount <= 0) return showToast('请输入完整信息');
+    const submission = buildInboundSupplySubmission(inboundPayload, isMerchant);
+    if (!submission.ok) return showToast(submission.message);
     try {
-      await createSupply({ name: inboundPayload.name, unit: inboundPayload.unit, amount: inboundPayload.amount });
+      await createSupply(submission.input);
       setShowInboundModal(false);
       setInboundPayload({ name: '', amount: 0, unit: '箱' });
       showToast('农资入库完成');
@@ -138,8 +142,7 @@ export default function LogisticsTracker() {
                 </thead>
                 <tbody>
                   {suppliesList.map((item) => {
-                    const total = Math.max(item.total, 0);
-                    const usedPercent = total > 0 ? Math.min(100, Math.round((item.used / total) * 100)) : 0;
+                    const usedPercent = getSupplyUsedPercent(item);
 
                     return (
                       <tr key={item.id} className={fluentTable.row}>
