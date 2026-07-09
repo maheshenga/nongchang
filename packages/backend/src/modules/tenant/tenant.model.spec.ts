@@ -3,11 +3,17 @@ import { ForbiddenException } from '@nestjs/common';
 import { Role, type AuthUser } from '@nongchang/shared';
 import {
   assertCanSetTenantStatus,
+  DEFAULT_TENANT_LIST_CAP,
+  TENANT_LIST_SELECT,
   buildDefaultTenantGroupCreateData,
   buildTenantAdminCreateData,
   buildTenantCreateData,
+  buildTenantListFindManyArgs,
   normalizeTenantCode,
+  resolveTenantListPagination,
+  toPaginatedTenantList,
   toTenantListItem,
+  toTenantListItems,
   toTenantStatusResult,
 } from './tenant.model';
 
@@ -41,6 +47,71 @@ describe('tenant.model', () => {
       createdAt: '2026-07-05T00:00:00.000Z',
       userCount: 0,
       agentCount: 0,
+    });
+  });
+
+  it('builds capped non-paginated tenant list query args', () => {
+    expect(buildTenantListFindManyArgs()).toEqual({
+      orderBy: { createdAt: 'desc' },
+      select: TENANT_LIST_SELECT,
+      skip: 0,
+      take: DEFAULT_TENANT_LIST_CAP,
+    });
+  });
+
+  it('builds paginated tenant list query args', () => {
+    expect(resolveTenantListPagination({ page: 3, pageSize: 25 })).toEqual({
+      page: 3,
+      pageSize: 25,
+      skip: 50,
+      take: 25,
+    });
+    expect(buildTenantListFindManyArgs({ page: 3, pageSize: 25 })).toEqual({
+      orderBy: { createdAt: 'desc' },
+      select: TENANT_LIST_SELECT,
+      skip: 50,
+      take: 25,
+    });
+  });
+
+  it('projects tenant list rows as bare arrays and paginated envelopes', () => {
+    const rows = [
+      {
+        id: 't1',
+        name: 'Tenant A',
+        code: 'TENANT_A',
+        status: 'active',
+        createdAt: new Date('2026-07-05T00:00:00.000Z'),
+        _count: { users: 2, agents: 1 },
+      },
+    ];
+
+    expect(toTenantListItems(rows)).toEqual([
+      {
+        id: 't1',
+        name: 'Tenant A',
+        code: 'TENANT_A',
+        status: 'active',
+        createdAt: '2026-07-05T00:00:00.000Z',
+        userCount: 2,
+        agentCount: 1,
+      },
+    ]);
+    expect(toPaginatedTenantList(rows, 8, { page: 2, pageSize: 1 })).toEqual({
+      items: [
+        {
+          id: 't1',
+          name: 'Tenant A',
+          code: 'TENANT_A',
+          status: 'active',
+          createdAt: '2026-07-05T00:00:00.000Z',
+          userCount: 2,
+          agentCount: 1,
+        },
+      ],
+      total: 8,
+      page: 2,
+      pageSize: 1,
     });
   });
 

@@ -2,9 +2,12 @@ import { ForbiddenException } from '@nestjs/common';
 import {
   AuthUser,
   CreateTenantDto,
+  ListQuery,
+  Paginated,
   Role,
   TenantListItem,
   TenantStatus,
+  isPaginated,
 } from '@nongchang/shared';
 
 export interface TenantRow {
@@ -14,6 +17,31 @@ export interface TenantRow {
   status: string;
   createdAt: Date;
   _count?: { users: number; agents: number };
+}
+
+export const DEFAULT_TENANT_LIST_CAP = 500;
+
+export const TENANT_LIST_SELECT = {
+  id: true,
+  name: true,
+  code: true,
+  status: true,
+  createdAt: true,
+  _count: { select: { users: true, agents: true } },
+} as const;
+
+export function resolveTenantListPagination(query?: ListQuery): { page: number; pageSize: number; skip: number; take: number } {
+  const page = query?.page ?? 1;
+  const pageSize = query?.pageSize ?? 20;
+  return { page, pageSize, skip: (page - 1) * pageSize, take: pageSize };
+}
+
+export function buildTenantListFindManyArgs(query?: ListQuery) {
+  if (isPaginated(query)) {
+    const { skip, take } = resolveTenantListPagination(query);
+    return { orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip, take };
+  }
+  return { orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip: 0, take: DEFAULT_TENANT_LIST_CAP };
 }
 
 export function normalizeTenantCode(code: string): string {
@@ -30,6 +58,15 @@ export function toTenantListItem(row: TenantRow): TenantListItem {
     userCount: row._count?.users ?? 0,
     agentCount: row._count?.agents ?? 0,
   };
+}
+
+export function toTenantListItems(rows: TenantRow[]): TenantListItem[] {
+  return rows.map(row => toTenantListItem(row));
+}
+
+export function toPaginatedTenantList(rows: TenantRow[], total: number, query?: ListQuery): Paginated<TenantListItem> {
+  const { page, pageSize } = resolveTenantListPagination(query);
+  return { items: toTenantListItems(rows), total, page, pageSize };
 }
 
 export function buildTenantCreateData(dto: CreateTenantDto, code: string) {
