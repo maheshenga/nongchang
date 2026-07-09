@@ -1,5 +1,14 @@
 import { ForbiddenException } from '@nestjs/common';
-import type { AuthUser, CreditOrderView, OrderQuery, PaginatedOrders } from '@nongchang/shared';
+import type {
+  AuthUser,
+  CreditAccountItem,
+  CreditOrderView,
+  CreditOwnerType,
+  ListQuery,
+  OrderQuery,
+  Paginated,
+  PaginatedOrders,
+} from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 
 export type BillingBuyer = { ownerType: 'AGENT' | 'MERCHANT'; ownerId: string };
@@ -23,6 +32,117 @@ export interface CreditOrderWithPlanRow extends CreditOrderRow {
 }
 
 export const CREDIT_ORDER_PLAN_INCLUDE = { plan: { select: { name: true } } } as const;
+
+export const DEFAULT_BILLING_ACCOUNT_LIST_CAP = 500;
+
+export const ACCOUNT_AGENT_SELECT = { id: true, name: true } as const;
+
+export const ACCOUNT_MERCHANT_SELECT = { id: true, displayName: true } as const;
+
+export interface AgentAccountRow {
+  id: string;
+  name: string;
+}
+
+export interface MerchantAccountRow {
+  id: string;
+  displayName: string | null;
+}
+
+export type BalanceMap = Map<string, { id: string; aiBalance: number; codeBalance: number }>;
+
+export function resolveBillingAccountListPagination(query?: ListQuery): { paginated: boolean; page: number; pageSize: number; skip: number; take: number } {
+  const paginated = query?.page !== undefined || query?.pageSize !== undefined;
+  const page = query?.page ?? 1;
+  const pageSize = query?.pageSize ?? 20;
+  return {
+    paginated,
+    page,
+    pageSize,
+    skip: paginated ? (page - 1) * pageSize : 0,
+    take: paginated ? pageSize : DEFAULT_BILLING_ACCOUNT_LIST_CAP,
+  };
+}
+
+export function buildSubordinateAgentListWhere(user: AuthUser): Record<string, string> {
+  return { tenantId: user.tenantId };
+}
+
+export function buildSubordinateMerchantListWhere(user: AuthUser): Record<string, string> {
+  if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
+  return { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId };
+}
+
+export function buildSubordinateAgentListFindManyArgs(where: Record<string, unknown>, query?: ListQuery) {
+  const pagination = resolveBillingAccountListPagination(query);
+  return {
+    where,
+    orderBy: { createdAt: 'desc' as const },
+    skip: pagination.skip,
+    take: pagination.take,
+    select: ACCOUNT_AGENT_SELECT,
+  };
+}
+
+export function buildSubordinateMerchantListFindManyArgs(where: Record<string, unknown>, query?: ListQuery) {
+  const pagination = resolveBillingAccountListPagination(query);
+  return {
+    where,
+    orderBy: { createdAt: 'desc' as const },
+    skip: pagination.skip,
+    take: pagination.take,
+    select: ACCOUNT_MERCHANT_SELECT,
+  };
+}
+
+export function getSubordinateOwnerIds(rows: Array<{ id: string }>): string[] {
+  return rows.map(row => row.id);
+}
+
+export function buildCreditAccountBalanceWhere(
+  ownerType: CreditOwnerType,
+  ownerIds: string[],
+  tenantId: string,
+): { tenantId: string; ownerType: CreditOwnerType; ownerId: { in: string[] } } | null {
+  return ownerIds.length ? { tenantId, ownerType, ownerId: { in: ownerIds } } : null;
+}
+
+export function toAgentCreditAccountItems(agents: AgentAccountRow[], balances: BalanceMap): CreditAccountItem[] {
+  return agents.map(agent => {
+    const balance = balances.get(agent.id);
+    return {
+      id: balance?.id ?? `pending:AGENT:${agent.id}`,
+      ownerType: 'AGENT',
+      ownerId: agent.id,
+      ownerName: agent.name,
+      aiBalance: balance?.aiBalance ?? 0,
+      codeBalance: balance?.codeBalance ?? 0,
+    };
+  });
+}
+
+export function toMerchantCreditAccountItems(merchants: MerchantAccountRow[], balances: BalanceMap): CreditAccountItem[] {
+  return merchants.map(merchant => {
+    const balance = balances.get(merchant.id);
+    return {
+      id: balance?.id ?? `pending:MERCHANT:${merchant.id}`,
+      ownerType: 'MERCHANT',
+      ownerId: merchant.id,
+      ownerName: merchant.displayName ?? merchant.id,
+      aiBalance: balance?.aiBalance ?? 0,
+      codeBalance: balance?.codeBalance ?? 0,
+    };
+  });
+}
+
+export function toPaginatedCreditAccountItems(
+  items: CreditAccountItem[],
+  total: number,
+  query?: ListQuery,
+): Paginated<CreditAccountItem> {
+  const { page, pageSize } = resolveBillingAccountListPagination(query);
+  return { items, total, page, pageSize };
+}
 
 export function resolveBillingBuyer(user: AuthUser, context: BillingBuyerContext = 'purchase'): BillingBuyer {
   if (user.role === Role.AGENT_ADMIN) {

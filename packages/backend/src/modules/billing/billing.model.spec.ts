@@ -2,12 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { Role, type AuthUser } from '@nongchang/shared';
 import {
+  ACCOUNT_AGENT_SELECT,
+  ACCOUNT_MERCHANT_SELECT,
   CREDIT_ORDER_PLAN_INCLUDE,
+  DEFAULT_BILLING_ACCOUNT_LIST_CAP,
+  buildCreditAccountBalanceWhere,
   buildBuyerOrderListFindManyArgs,
   buildBuyerOrderListWhere,
   buildBuyerOrderWhere,
+  buildSubordinateAgentListFindManyArgs,
+  buildSubordinateAgentListWhere,
+  buildSubordinateMerchantListFindManyArgs,
+  buildSubordinateMerchantListWhere,
+  getSubordinateOwnerIds,
+  resolveBillingAccountListPagination,
   resolveBillingBuyer,
+  toAgentCreditAccountItems,
   toCreditOrderView,
+  toMerchantCreditAccountItems,
+  toPaginatedCreditAccountItems,
   toPaginatedCreditOrders,
 } from './billing.model';
 
@@ -76,6 +89,80 @@ describe('billing.model order filters', () => {
       tenantId: 't1',
       ownerType: 'MERCHANT',
       ownerId: 'm1',
+    });
+  });
+});
+
+describe('billing.model account list helpers', () => {
+  it('builds subordinate list args for platform and agent admins', () => {
+    const sysWhere = buildSubordinateAgentListWhere(actor({ role: Role.SYSTEM_ADMIN }));
+    const merchantWhere = buildSubordinateMerchantListWhere(actor({ role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null }));
+
+    expect(resolveBillingAccountListPagination()).toEqual({
+      paginated: false,
+      page: 1,
+      pageSize: 20,
+      skip: 0,
+      take: DEFAULT_BILLING_ACCOUNT_LIST_CAP,
+    });
+    expect(buildSubordinateAgentListFindManyArgs(sysWhere, { page: 2, pageSize: 10 })).toEqual({
+      where: { tenantId: 't1' },
+      orderBy: { createdAt: 'desc' },
+      skip: 10,
+      take: 10,
+      select: ACCOUNT_AGENT_SELECT,
+    });
+    expect(buildSubordinateMerchantListFindManyArgs(merchantWhere)).toEqual({
+      where: { tenantId: 't1', role: Role.MERCHANT, agentId: 'a1' },
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: DEFAULT_BILLING_ACCOUNT_LIST_CAP,
+      select: ACCOUNT_MERCHANT_SELECT,
+    });
+  });
+
+  it('rejects agent account listing without agentId before querying', () => {
+    expect(() => buildSubordinateMerchantListWhere(actor({ role: Role.AGENT_ADMIN, agentId: null, ownerId: null })))
+      .toThrow(ForbiddenException);
+  });
+
+  it('builds balance lookup where and account list projections', () => {
+    const balances = new Map([
+      ['a1', { id: 'accA1', aiBalance: 30, codeBalance: 40 }],
+      ['m2', { id: 'accM2', aiBalance: 5, codeBalance: 0 }],
+    ]);
+
+    expect(getSubordinateOwnerIds([{ id: 'a1' }, { id: 'a2' }])).toEqual(['a1', 'a2']);
+    expect(buildCreditAccountBalanceWhere('AGENT', [], 't1')).toBeNull();
+    expect(buildCreditAccountBalanceWhere('AGENT', ['a1', 'a2'], 't1')).toEqual({
+      tenantId: 't1',
+      ownerType: 'AGENT',
+      ownerId: { in: ['a1', 'a2'] },
+    });
+    expect(toAgentCreditAccountItems([
+      { id: 'a1', name: 'Agent One' },
+      { id: 'a2', name: 'Agent Two' },
+    ], balances)).toEqual([
+      { id: 'accA1', ownerType: 'AGENT', ownerId: 'a1', ownerName: 'Agent One', aiBalance: 30, codeBalance: 40 },
+      { id: 'pending:AGENT:a2', ownerType: 'AGENT', ownerId: 'a2', ownerName: 'Agent Two', aiBalance: 0, codeBalance: 0 },
+    ]);
+    expect(toMerchantCreditAccountItems([
+      { id: 'm1', displayName: null },
+      { id: 'm2', displayName: 'Merchant Two' },
+    ], balances)).toEqual([
+      { id: 'pending:MERCHANT:m1', ownerType: 'MERCHANT', ownerId: 'm1', ownerName: 'm1', aiBalance: 0, codeBalance: 0 },
+      { id: 'accM2', ownerType: 'MERCHANT', ownerId: 'm2', ownerName: 'Merchant Two', aiBalance: 5, codeBalance: 0 },
+    ]);
+  });
+
+  it('builds paginated account envelopes', () => {
+    const items = [{ id: 'accA1', ownerType: 'AGENT' as const, ownerId: 'a1', ownerName: 'Agent One', aiBalance: 1, codeBalance: 2 }];
+
+    expect(toPaginatedCreditAccountItems(items, 3, { page: 2, pageSize: 1 })).toEqual({
+      items,
+      total: 3,
+      page: 2,
+      pageSize: 1,
     });
   });
 });

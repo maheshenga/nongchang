@@ -10,12 +10,24 @@ import { Role, isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PLATFORM_OWNER_ID, BALANCE_FIELD } from './billing.constants';
 import {
+  AgentAccountRow,
   CreditOrderWithPlanRow,
+  MerchantAccountRow,
+  buildCreditAccountBalanceWhere,
   buildBuyerOrderListFindManyArgs,
   buildBuyerOrderListWhere,
   buildBuyerOrderWhere,
+  buildSubordinateAgentListFindManyArgs,
+  buildSubordinateAgentListWhere,
+  buildSubordinateMerchantListFindManyArgs,
+  buildSubordinateMerchantListWhere,
+  getSubordinateOwnerIds,
+  resolveBillingAccountListPagination,
   resolveBillingBuyer,
+  toAgentCreditAccountItems,
   toCreditOrderView,
+  toMerchantCreditAccountItems,
+  toPaginatedCreditAccountItems,
   toPaginatedCreditOrders,
 } from './billing.model';
 
@@ -539,60 +551,44 @@ export class BillingService {
 
   // 下级账户列表:平台看代理商;代理商看旗下商户;商户无下级返回空。
   async listAccounts(user: AuthUser, query?: ListQuery): Promise<CreditAccountItem[] | Paginated<CreditAccountItem>> {
-    const page = query?.page ?? 1;
-    const pageSize = query?.pageSize ?? 20;
+    const pagination = resolveBillingAccountListPagination(query);
     if (user.role === Role.SYSTEM_ADMIN) {
-      const where = { tenantId: user.tenantId };
-      const findMany = {
-        where,
-        orderBy: { createdAt: 'desc' as const },
-        ...(isPaginated(query) ? { skip: (page - 1) * pageSize, take: pageSize } : { take: DEFAULT_LIST_CAP }),
-        select: { id: true, name: true },
-      };
-      const [agents, total] = isPaginated(query)
+      const where = buildSubordinateAgentListWhere(user);
+      const [agents, total] = pagination.paginated
         ? await this.prisma.$transaction([
-            this.prisma.agent.findMany(findMany),
+            this.prisma.agent.findMany(buildSubordinateAgentListFindManyArgs(where, query)),
             this.prisma.agent.count({ where }),
           ])
-        : [await this.prisma.agent.findMany(findMany), null];
-      const balances = await this.loadBalances('AGENT', agents.map((a) => a.id), user.tenantId);
-      const items = agents.map((a) => {
-        const b = balances.get(a.id);
-        return { id: b?.id ?? `pending:AGENT:${a.id}`, ownerType: 'AGENT' as const, ownerId: a.id, ownerName: a.name, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
-      });
-      return total === null ? items : { items, total, page, pageSize };
+        : [await this.prisma.agent.findMany(buildSubordinateAgentListFindManyArgs(where, query)), null];
+      const typedAgents = agents as AgentAccountRow[];
+      const balances = await this.loadBalances('AGENT', getSubordinateOwnerIds(typedAgents), user.tenantId);
+      const items = toAgentCreditAccountItems(typedAgents, balances);
+      return total === null ? items : toPaginatedCreditAccountItems(items, total, query);
     }
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
-      const where = { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId };
-      const findMany = {
-        where,
-        orderBy: { createdAt: 'desc' as const },
-        ...(isPaginated(query) ? { skip: (page - 1) * pageSize, take: pageSize } : { take: DEFAULT_LIST_CAP }),
-        select: { id: true, displayName: true },
-      };
-      const [merchants, total] = isPaginated(query)
+      const where = buildSubordinateMerchantListWhere(user);
+      const [merchants, total] = pagination.paginated
         ? await this.prisma.$transaction([
-            this.prisma.user.findMany(findMany),
+            this.prisma.user.findMany(buildSubordinateMerchantListFindManyArgs(where, query)),
             this.prisma.user.count({ where }),
           ])
-        : [await this.prisma.user.findMany(findMany), null];
-      const balances = await this.loadBalances('MERCHANT', merchants.map((m) => m.id), user.tenantId);
-      const items = merchants.map((m) => {
-        const b = balances.get(m.id);
-        return { id: b?.id ?? `pending:MERCHANT:${m.id}`, ownerType: 'MERCHANT' as const, ownerId: m.id, ownerName: m.displayName ?? m.id, aiBalance: b?.aiBalance ?? 0, codeBalance: b?.codeBalance ?? 0 };
-      });
-      return total === null ? items : { items, total, page, pageSize };
+        : [await this.prisma.user.findMany(buildSubordinateMerchantListFindManyArgs(where, query)), null];
+      const typedMerchants = merchants as MerchantAccountRow[];
+      const balances = await this.loadBalances('MERCHANT', getSubordinateOwnerIds(typedMerchants), user.tenantId);
+      const items = toMerchantCreditAccountItems(typedMerchants, balances);
+      return total === null ? items : toPaginatedCreditAccountItems(items, total, query);
     }
-    return isPaginated(query) ? { items: [], total: 0, page, pageSize } : [];
+    return pagination.paginated ? toPaginatedCreditAccountItems([], 0, query) : [];
   }
 
   // 批量取一组下级账户余额,一次 findMany(ownerId in [...]) 取代逐个 ensureAccount(消除 N+1)。
   // 从未触账的下级此前无 CreditAccount 行,展示按 0/0 处理(账户行在其首次充值/消费时惰性创建)。
   private async loadBalances(ownerType: CreditOwnerType, ownerIds: string[], tenantId: string) {
-    if (ownerIds.length === 0) return new Map<string, { id: string; aiBalance: number; codeBalance: number }>();
+    const where = buildCreditAccountBalanceWhere(ownerType, ownerIds, tenantId);
+    if (!where) return new Map<string, { id: string; aiBalance: number; codeBalance: number }>();
     const rows = await this.prisma.creditAccount.findMany({
-      where: { tenantId, ownerType, ownerId: { in: ownerIds } },
+      where,
       select: { id: true, ownerId: true, aiBalance: true, codeBalance: true },
     });
     return new Map(rows.map((r) => [r.ownerId, { id: r.id, aiBalance: r.aiBalance, codeBalance: r.codeBalance }]));
