@@ -3,20 +3,27 @@ import { AuthUser, CreateFieldDto, ListQuery, Paginated } from '@nongchang/share
 import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
-
-// 未分页时的默认安全上限:防无界结果集。
-const DEFAULT_LIST_CAP = 500;
+import {
+  buildFieldCreateData,
+  buildFieldIds,
+  buildFieldListFindManyArgs,
+  buildFieldOwnerIds,
+  buildFieldPagination,
+  enrichFieldRows,
+  type FieldCoordinateRow,
+  type FieldOwnerRow,
+  type FieldRow,
+} from './field.model';
 
 @Injectable()
 export class FieldService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
   async create(user: AuthUser, dto: CreateFieldDto) {
-    const { lng, lat, ...rest } = dto;
-    const ownerId = await this.scope.resolveOwnerId(this.prisma, user, rest.ownerId);
+    const { lng, lat } = dto;
+    const ownerId = await this.scope.resolveOwnerId(this.prisma, user, dto.ownerId);
     const field = await this.prisma.field.create({
-      data: { tenantId: user.tenantId, name: rest.name, area: rest.area,
-        ownerId, iotDeviceId: rest.iotDeviceId ?? null },
+      data: buildFieldCreateData({ tenantId: user.tenantId, ownerId, dto }),
     });
     await this.prisma.$executeRawUnsafe(
       `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
@@ -29,39 +36,31 @@ export class FieldService {
   async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
     const where = await this.scope.ownedScopeWhere(this.prisma, user);
     if (isPaginated(query)) {
-      const page = query.page ?? 1;
-      const pageSize = query.pageSize ?? 20;
+      const { page, pageSize } = buildFieldPagination(query);
       const [fields, total] = await this.prisma.$transaction([
-        this.prisma.field.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize }),
+        this.prisma.field.findMany(buildFieldListFindManyArgs({ where, page, pageSize })),
         this.prisma.field.count({ where }),
       ]);
-      return { items: await this.enrich(fields as any[]), total, page, pageSize };
+      return { items: await this.enrich(fields as FieldRow[]), total, page, pageSize };
     }
-    const fields = await this.prisma.field.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP });
-    return this.enrich(fields as any[]);
+    const fields = await this.prisma.field.findMany(buildFieldListFindManyArgs({ where }));
+    return this.enrich(fields as FieldRow[]);
   }
 
   // 给一页 fields 补 ownerName 与经纬度(从 PostGIS location 列提取)。
-  private async enrich(fields: any[]): Promise<any[]> {
+  private async enrich(fields: FieldRow[]): Promise<any[]> {
     if (fields.length === 0) return [];
-    const ownerIds = [...new Set(fields.map((f: any) => f.ownerId))];
-    const owners = await this.prisma.user.findMany({
+    const ownerIds = buildFieldOwnerIds(fields);
+    const owners = (await this.prisma.user.findMany({
       where: { id: { in: ownerIds } }, select: { id: true, displayName: true },
-    });
-    const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
+    })) as FieldOwnerRow[];
     // 经纬度存 PostGIS geography 列,用 ST_X/ST_Y 从 location 提取(转 geometry 后取坐标)。
     // 注:id 列为 uuid,Prisma 把 JS 字符串数组绑定为 text[],故用 id::text 比较避免 text=uuid 操作符不存在(42883)。
-    const ids = fields.map((f: any) => f.id);
-    const coords = await this.prisma.$queryRawUnsafe<Array<{ id: string; lng: number | null; lat: number | null }>>(
+    const ids = buildFieldIds(fields);
+    const coords = await this.prisma.$queryRawUnsafe<FieldCoordinateRow[]>(
       `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id::text = ANY($1)`,
       ids,
     );
-    const coordMap = new Map(coords.map((c) => [c.id, c]));
-    return fields.map((f: any) => ({
-      ...f,
-      ownerName: nameMap.get(f.ownerId) ?? null,
-      lng: coordMap.get(f.id)?.lng ?? null,
-      lat: coordMap.get(f.id)?.lat ?? null,
-    }));
+    return enrichFieldRows({ fields, owners, coords });
   }
 }
