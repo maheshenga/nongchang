@@ -6,6 +6,7 @@ import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto,
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
+import { canRefreshSession, isKnownRole, toAuthUser } from './auth.model';
 
 const WX_SESSION_URL = 'https://api.weixin.qq.com/sns/jscode2session';
 const WX_TIMEOUT_MS = 8000;
@@ -41,13 +42,12 @@ export class AuthService {
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('账号或密码错误');
 
-    const roles = Object.values(Role) as string[];
-    if (!roles.includes(user.role)) throw new UnauthorizedException('账号角色无效');
+    if (!isKnownRole(user.role)) throw new UnauthorizedException('账号角色无效');
     if (user.status !== 'active') throw new ForbiddenException('账号待审核或已停用');
     if (tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
     await this.assertActiveAgent(user);
 
-    return this.issueTokens(this.toAuthUser(user));
+    return this.issueTokens(toAuthUser(user));
   }
 
   async loginWechat(dto: WechatLoginDto): Promise<TokenPair> {
@@ -67,7 +67,7 @@ export class AuthService {
     if (user.status !== 'active') throw new ForbiddenException('账号审核中');
     if (user.tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
     await this.assertActiveAgent(user);
-    return this.issueTokens(this.toAuthUser(user));
+    return this.issueTokens(toAuthUser(user));
   }
 
   async registerWechat(dto: WechatRegisterDto): Promise<WechatRegisterResponse> {
@@ -136,11 +136,11 @@ export class AuthService {
       include: { tenant: { select: { status: true } } },
     });
     const tokenVersion = payload.sessionVersion ?? 0;
-    if (!user || user.status !== 'active' || user.tenant.status !== 'active' || (user.sessionVersion ?? 0) !== tokenVersion) {
+    if (!canRefreshSession(user, tokenVersion)) {
       throw new UnauthorizedException('刷新令牌无效');
     }
     await this.assertActiveAgent(user);
-    return this.issueTokens(this.toAuthUser(user));
+    return this.issueTokens(toAuthUser(user));
   }
 
   // ── 个人账号(/auth/me)── 任意已登录角色自助查看/维护本人资料。
@@ -186,15 +186,6 @@ export class AuthService {
       select: { status: true },
     });
     if (!agent || agent.status !== 'active') throw new ForbiddenException('Linked agent is suspended');
-  }
-
-  private toAuthUser(user: { id: string; tenantId: string; role: string; agentId: string | null; sessionVersion?: number }): AuthUser {
-    return {
-      userId: user.id, tenantId: user.tenantId, role: user.role as Role,
-      agentId: user.agentId ?? null,
-      ownerId: user.role === Role.MERCHANT ? user.id : null,
-      sessionVersion: user.sessionVersion ?? 0,
-    };
   }
 
   private async issueTokens(user: AuthUser): Promise<TokenPair> {
