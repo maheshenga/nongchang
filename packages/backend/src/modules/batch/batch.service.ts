@@ -1,22 +1,17 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AuthUser, BatchStatus, CreateBatchDto, ListQuery, Paginated } from '@nongchang/shared';
+import { AuthUser, CreateBatchDto, ListQuery, Paginated } from '@nongchang/shared';
 import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
-
-const STATUS_ORDER = [BatchStatus.PLANTING, BatchStatus.GROWING, BatchStatus.HARVESTED, BatchStatus.DISTRIBUTED];
-// 未分页时的默认安全上限:防无界结果集。
-const DEFAULT_LIST_CAP = 500;
-
-// 金额列(laborCost/sellPrice)为 Prisma.Decimal,出口统一转 number 以保持前端 API 契约不变。
-function serializeBatch<T extends Record<string, any> | null>(b: T): T {
-  if (!b) return b;
-  const out: any = { ...b };
-  if (out.laborCost != null) out.laborCost = new Prisma.Decimal(out.laborCost).toNumber();
-  if (out.sellPrice != null) out.sellPrice = new Prisma.Decimal(out.sellPrice).toNumber();
-  return out;
-}
+import {
+  DEFAULT_BATCH_LIST_CAP,
+  assertBatchStatusProgression,
+  buildBatchCostUpdateData,
+  buildBatchCreateData,
+  enrichBatchRows,
+  serializeBatch,
+} from './batch.model';
 
 @Injectable()
 export class BatchService {
@@ -32,12 +27,7 @@ export class BatchService {
     });
     if (!field) throw new ForbiddenException('地块不属于目标商家,拒绝创建批次');
     const created = await this.prisma.batch.create({
-      data: {
-        tenantId: user.tenantId, ownerId, fieldId: dto.fieldId,
-        batchNo: dto.batchNo, cropName: dto.cropName,
-        plantDate: new Date(dto.plantDate), expectedHarvest: new Date(dto.expectedHarvest),
-        status: dto.status,
-      },
+      data: buildBatchCreateData({ tenantId: user.tenantId, ownerId, dto }),
     });
     return serializeBatch(created);
   }
@@ -54,7 +44,7 @@ export class BatchService {
       ]);
       return { items: await this.enrich(batches as any[]), total, page, pageSize };
     }
-    const batches = await this.prisma.batch.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_LIST_CAP });
+    const batches = await this.prisma.batch.findMany({ where, orderBy: { createdAt: 'desc' }, take: DEFAULT_BATCH_LIST_CAP });
     return this.enrich(batches as any[]);
   }
 
@@ -68,23 +58,7 @@ export class BatchService {
       this.prisma.supplyIssue.findMany({ where: { batchId: { in: ids } }, select: { batchId: true, amount: true, unitPrice: true } }),
       this.prisma.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, displayName: true } }),
     ]);
-    const codeMap = new Map(codeAgg.map((c: any) => [c.batchId, { codeCount: c._count._all, scanTotal: c._sum.scanCount ?? 0 }]));
-    const nameMap = new Map(owners.map((o: any) => [o.id, o.displayName]));
-    // 投入成本用 Decimal 精确累加(金额列为 Decimal),出口再转 number 保持 API 契约。
-    const costMap = new Map<string, Prisma.Decimal>();
-    for (const it of issues as any[]) {
-      const add = new Prisma.Decimal(it.amount).times(it.unitPrice);
-      costMap.set(it.batchId, (costMap.get(it.batchId) ?? new Prisma.Decimal(0)).plus(add));
-    }
-    return batches.map((b: any) => ({
-      ...b,
-      laborCost: new Prisma.Decimal(b.laborCost).toNumber(),
-      sellPrice: new Prisma.Decimal(b.sellPrice).toNumber(),
-      ownerName: nameMap.get(b.ownerId) ?? null,
-      codeCount: codeMap.get(b.id)?.codeCount ?? 0,
-      scanTotal: codeMap.get(b.id)?.scanTotal ?? 0,
-      inputCost: (costMap.get(b.id) ?? new Prisma.Decimal(0)).toNumber(),
-    }));
+    return enrichBatchRows(batches, codeAgg as any[], issues as any[], owners as any[]);
   }
 
   /** 状态流转:仅允许沿 STATUS_ORDER 前进,回退/同态非法。 */
@@ -92,9 +66,7 @@ export class BatchService {
     await this.scope.assertInScope(this.prisma, user, 'batch', id);
     const cur = await this.prisma.batch.findUnique({ where: { id } });
     if (!cur) throw new NotFoundException('批次不存在');
-    if (STATUS_ORDER.indexOf(status as any) <= STATUS_ORDER.indexOf(cur.status as any)) {
-      throw new BadRequestException('非法的状态流转');
-    }
+    assertBatchStatusProgression(cur.status, status);
     return serializeBatch(await this.prisma.batch.update({ where: { id }, data: { status } }));
   }
 
@@ -103,10 +75,7 @@ export class BatchService {
     await this.scope.assertInScope(this.prisma, user, 'batch', id);
     return serializeBatch(await this.prisma.batch.update({
       where: { id },
-      data: {
-        ...(dto.laborCost != null ? { laborCost: dto.laborCost } : {}),
-        ...(dto.sellPrice != null ? { sellPrice: dto.sellPrice } : {}),
-      },
+      data: buildBatchCostUpdateData(dto),
     }));
   }
 
