@@ -110,6 +110,25 @@ export { listQuerySchema, isPaginated } from './dto/list-query.dto';
 export type { ListQuery, Paginated } from './dto/list-query.dto';
 
 export {
+  batchViewSchema,
+  fieldViewSchema,
+  farmRecordViewSchema,
+  traceCodeViewSchema,
+  traceEventViewSchema,
+  paginatedFarmRecordViewSchema,
+  batchLifecycleViewSchema,
+} from './dto/resource-views.dto';
+export type {
+  BatchView,
+  FieldView,
+  FarmRecordView,
+  TraceCodeView,
+  TraceEventView,
+  PaginatedFarmRecordView,
+  BatchLifecycleView,
+} from './dto/resource-views.dto';
+
+export {
   createAiProviderSchema, updateAiProviderSchema, aiProviderViewSchema,
   aiChatSchema, aiDiagnoseSchema, ossConfigSchema, ossConfigViewSchema,
   aiAdviceSchema, aiAskSchema,

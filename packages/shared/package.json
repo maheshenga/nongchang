@@ -4,6 +4,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json" },
-  "dependencies": { "zod": "^3.23.8" }
+  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run" },
+  "dependencies": { "zod": "^3.23.8" },
+  "devDependencies": { "vitest": "^2.1.9" }
 }

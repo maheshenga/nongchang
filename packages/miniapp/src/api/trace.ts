@@ -1,14 +1,8 @@
 import { request } from './request';
+import { traceEventViewSchema, type TraceEventView } from '@nongchang/shared';
 
-export interface TraceEvent {
-  type: string;
-  title: string;
-  actor?: string | null;
-  location?: string | null;
-  occurredAt?: string | null;
-  payload?: Record<string, unknown> | null;
-}
+export type TraceEvent = TraceEventView;
 
-export function listTraceEvents(batchId: string): Promise<TraceEvent[]> {
-  return request<TraceEvent[]>({ url: `/trace/events/${batchId}` });
+export async function listTraceEvents(batchId: string): Promise<TraceEvent[]> {
+  return traceEventViewSchema.array().parse(await request<unknown>({ url: `/trace/events/${batchId}` }));
 }
