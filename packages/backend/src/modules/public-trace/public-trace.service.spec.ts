@@ -20,8 +20,8 @@ function makePrisma(overrides: any = {}) {
     user: { findUnique: vi.fn().mockResolvedValue({ id: 'm1', agentId: 'a1' }) },
     agent: { findUnique: vi.fn().mockResolvedValue({ id: 'a1', region: '云南' }) },
     // 经纬度通过 ST_X/ST_Y 原生查询提取,默认无坐标。
-    $queryRawUnsafe: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
-    $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
+    $queryRawUnsafe: vi.fn(),
+    $queryRaw: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
     traceEvent: {
       findMany: vi.fn().mockResolvedValue([
         { type: 'origin', title: '种苗', actor: '李', location: '大理', occurredAt: new Date('2023-04-12T09:30:00Z'), payload: { desc: 'x' } },
@@ -79,6 +79,26 @@ describe('PublicTraceService.getByCode', () => {
     });
     if (res.frozen) throw new Error('未预期的 frozen 响应');
     expect(res.scanCount).toBe(5);
+  });
+
+  it('returns the updated response when scan-detail persistence fails outside a transaction', async () => {
+    const prisma = makePrisma({
+      $transaction: vi.fn().mockRejectedValue(new Error('interactive transaction must not be used')),
+      traceCode: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-1', scanCount: 1,
+        }),
+        update: vi.fn().mockResolvedValue({ scanCount: 2 }),
+      },
+      traceScan: { create: vi.fn().mockRejectedValue(new Error('scan detail unavailable')) },
+    });
+    const service = new PublicTraceService(prisma);
+
+    await expect(service.getByCode('ORC-1', { ip: '127.0.0.1', userAgent: null }))
+      .resolves.toMatchObject({ code: 'ORC-1', scanCount: 2 });
+    expect(prisma.traceCode.update).toHaveBeenCalledTimes(1);
+    expect(prisma.traceScan.create).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('事件按 occurredAt 升序查询', async () => {
@@ -140,7 +160,7 @@ describe('PublicTraceService.getByCode', () => {
   it('公开扫码不锁定 batch 行但仍记录扫码', async () => {
     const calls: string[] = [];
     const prisma = makePrisma({
-      $queryRaw: vi.fn(() => { calls.push('lock-batch'); return Promise.resolve([{ id: 'b1' }]); }),
+      $queryRaw: vi.fn().mockResolvedValue([{ lng: null, lat: null }]),
       traceCode: {
         findUnique: vi.fn().mockResolvedValue({ id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-X', scanCount: 4 }),
         update: vi.fn(() => { calls.push('update-code'); return Promise.resolve({ scanCount: 5 }); }),
@@ -151,8 +171,8 @@ describe('PublicTraceService.getByCode', () => {
     });
     const svc = new PublicTraceService(prisma);
     await svc.getByCode('ORC-X', { ip: '127.0.0.1', userAgent: 'vitest' });
-    expect(prisma.$transaction).toHaveBeenCalled();
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(['update-code', 'create-scan']);
   });
 });
