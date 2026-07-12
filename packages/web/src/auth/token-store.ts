@@ -1,21 +1,13 @@
-import type { TokenPair } from '@nongchang/shared';
+let accessToken: string | null = null;
 
-const ACCESS_KEY = 'nc_access_token';
-const REFRESH_KEY = 'nc_refresh_token';
-
-export function getTokens(): TokenPair | null {
-  const accessToken = localStorage.getItem(ACCESS_KEY);
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
-  if (!accessToken || !refreshToken) return null;
-  return { accessToken, refreshToken };
+export function getAccessToken(): string | null {
+  return accessToken;
 }
 
-export function setTokens(tokens: TokenPair): void {
-  localStorage.setItem(ACCESS_KEY, tokens.accessToken);
-  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+export function setAccessToken(next: string): void {
+  accessToken = next;
 }
 
-export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+export function clearAccessToken(): void {
+  accessToken = null;
 }

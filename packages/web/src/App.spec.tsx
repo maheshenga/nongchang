@@ -1,13 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const authMock = vi.hoisted(() => ({ role: 'platform_admin', isAuthenticated: true }));
+const authMock = vi.hoisted(() => ({ role: 'platform_admin', isAuthenticated: true, isReady: true }));
 
 vi.mock('./auth/auth-context', () => ({
   useAuth: () => ({
     user: { userId: 'mock-user', tenantId: 'mock-tenant', role: authMock.role, agentId: null, ownerId: null },
     profile: { displayName: 'Mock User' },
     isAuthenticated: authMock.isAuthenticated,
+    isReady: authMock.isReady,
     logout: vi.fn(),
   }),
 }));
@@ -28,9 +29,20 @@ beforeEach(() => {
   window.location.hash = '';
   authMock.role = 'platform_admin';
   authMock.isAuthenticated = true;
+  authMock.isReady = true;
 });
 
 describe('App role wiring', () => {
+  it('shows a session bootstrap skeleton before choosing an authenticated or public surface', () => {
+    authMock.isReady = false;
+    authMock.isAuthenticated = false;
+
+    render(<App />);
+
+    expect(screen.getByRole('status', { name: '正在恢复会话' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Landing CTA' })).toBeNull();
+  });
+
   it('shows public landing before the login form for unauthenticated visitors', async () => {
     authMock.isAuthenticated = false;
 

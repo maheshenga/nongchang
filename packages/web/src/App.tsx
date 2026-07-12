@@ -34,7 +34,7 @@ const PayResult = lazy(() => import('./components/PayResult'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 
 const ViewSkeleton = () => (
-  <div className="h-full w-full animate-pulse bg-white p-5">
+  <div role="status" aria-label="正在恢复会话" className="h-full w-full animate-pulse bg-white p-5">
     <div className="mb-5 h-7 w-64 rounded-[4px] bg-[#EDEBE9]" />
     <div className="mb-4 flex gap-2">
       <div className="h-8 w-28 rounded-[4px] bg-[#EDEBE9]" />
@@ -80,7 +80,7 @@ function navLabel(id: AppTab, label: string): string {
 }
 
 export default function App() {
-  const { user, profile, isAuthenticated, logout } = useAuth();
+  const { user, profile, isAuthenticated, isReady, logout } = useAuth();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
@@ -149,7 +149,7 @@ export default function App() {
   }, [isPresentationMode]);
 
   const handleLogout = () => {
-    logout();
+    void logout();
     setActiveTab('overview');
     setAuthView('landing');
   };
@@ -160,6 +160,8 @@ export default function App() {
       setActiveTab(fallbackTab);
     }
   }, [navRole, activeTab]);
+
+  if (!isReady) return <ViewSkeleton />;
 
   if (traceCode) {
     return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;

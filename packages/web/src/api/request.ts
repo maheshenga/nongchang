@@ -1,8 +1,9 @@
-import type { TokenPair } from '@nongchang/shared';
-import { getTokens, setTokens, clearTokens } from '../auth/token-store';
+import type { WebAccessTokenResponse } from '@nongchang/shared';
+import { clearAccessToken, getAccessToken, setAccessToken } from '../auth/token-store';
 
 export class ApiError extends Error {
   status: number;
+
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
@@ -10,68 +11,100 @@ export class ApiError extends Error {
 }
 
 let onAuthExpired: (() => void) | null = null;
+
 export function setOnAuthExpired(cb: () => void): void {
   onAuthExpired = cb;
+}
+
+function expireWebSession(): void {
+  clearAccessToken();
+  onAuthExpired?.();
 }
 
 let refreshing: Promise<string | null> | null = null;
 
 async function doRefresh(): Promise<string | null> {
-  const tokens = getTokens();
-  if (!tokens) return null;
-  const res = await fetch('/api/auth/refresh', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: tokens.refreshToken }),
-  });
-  if (!res.ok) {
-    clearTokens();
-    onAuthExpired?.();
+  let response: Response;
+  try {
+    response = await fetch('/api/auth/web/refresh', {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+  } catch {
+    expireWebSession();
     return null;
   }
-  const pair = (await res.json()) as TokenPair;
-  setTokens(pair);
-  return pair.accessToken;
+
+  if (!response.ok) {
+    expireWebSession();
+    return null;
+  }
+
+  try {
+    const body = (await response.json()) as WebAccessTokenResponse;
+    if (!body.accessToken) throw new Error('Missing access token');
+    setAccessToken(body.accessToken);
+    return body.accessToken;
+  } catch {
+    expireWebSession();
+    return null;
+  }
 }
 
-function refreshAccess(): Promise<string | null> {
-  if (!refreshing) {
-    refreshing = doRefresh().finally(() => { refreshing = null; });
-  }
+export function refreshWebSession(): Promise<string | null> {
+  refreshing ??= doRefresh().finally(() => {
+    refreshing = null;
+  });
   return refreshing;
 }
 
-async function parseError(res: Response): Promise<ApiError> {
-  let message = `请求失败 (${res.status})`;
+async function parseError(response: Response): Promise<ApiError> {
+  let message = `请求失败 (${response.status})`;
   try {
-    const body = (await res.json()) as { message?: string | string[] };
+    const body = (await response.json()) as { message?: string | string[] };
     if (Array.isArray(body.message)) message = body.message.join('; ');
     else if (body.message) message = body.message;
-  } catch { /* keep default */ }
-  return new ApiError(res.status, message);
+  } catch {
+    // Keep the status-based fallback when the response is not JSON.
+  }
+  return new ApiError(response.status, message);
 }
 
 async function send(path: string, init: RequestInit, accessToken: string | null): Promise<Response> {
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+  };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  if (init.body && !(init.body instanceof FormData) && !Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
-  return fetch(`/api${path}`, { ...init, headers });
+  if (
+    init.body
+    && !(init.body instanceof FormData)
+    && !Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')
+  ) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return fetch(`/api${path}`, {
+    ...init,
+    credentials: 'same-origin',
+    headers,
+  });
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const access = getTokens()?.accessToken ?? null;
-  let res = await send(path, init, access);
+  let response = await send(path, init, getAccessToken());
 
-  if (res.status === 401) {
-    const newAccess = await refreshAccess();
-    if (!newAccess) throw await parseError(res);
-    res = await send(path, init, newAccess);
+  if (response.status === 401) {
+    const newAccessToken = await refreshWebSession();
+    if (!newAccessToken) throw await parseError(response);
+
+    response = await send(path, init, newAccessToken);
+    if (response.status === 401) expireWebSession();
   }
 
-  if (!res.ok) throw await parseError(res);
-  if (res.status === 204) return undefined as T;
-  // 空响应体(如后端返回 null/undefined,Content-Length: 0)安全返回 null,避免 res.json() 抛 "Unexpected end of JSON input"
-  const text = await res.text();
+  if (!response.ok) throw await parseError(response);
+  if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
   if (!text) return null as T;
   return JSON.parse(text) as T;
 }
