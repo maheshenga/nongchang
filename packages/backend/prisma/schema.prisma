@@ -238,6 +238,7 @@ model TraceScan {
   @@index([tenantId])
   @@index([code, scannedAt])
   @@index([batchId])
+  @@index([tenantId, scannedAt(sort: Desc), code, ip], map: "trace_scans_tenant_scanned_code_ip_idx")
   @@map("trace_scans")
 }
 
