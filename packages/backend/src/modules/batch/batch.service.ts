@@ -34,7 +34,7 @@ export class BatchService {
 
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
   async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = await this.scope.ownedScopeWhere(this.prisma, user);
+    const where = this.scope.ownedEntityWhere(user);
     if (isPaginated(query)) {
       const page = query.page ?? 1;
       const pageSize = query.pageSize ?? 20;

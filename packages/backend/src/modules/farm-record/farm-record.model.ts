@@ -64,11 +64,14 @@ export interface FarmRecordOwnerRow {
 export function buildFarmRecordListWhere(
   user: Pick<AuthUser, 'tenantId'>,
   query: FarmRecordQueryDto,
-  scopedBatchIds?: string[],
+  batchScope?: Prisma.BatchWhereInput,
 ): Prisma.FarmRecordWhereInput {
   const where: Prisma.FarmRecordWhereInput = { tenantId: user.tenantId };
   if (query.batchId) where.batchId = query.batchId;
-  else where.batchId = { in: scopedBatchIds ?? [] };
+  else {
+    if (!batchScope) throw new BadRequestException('缺少批次作用域,拒绝查询农事记录');
+    where.batch = { is: batchScope };
+  }
   if (query.action) where.action = { contains: query.action, mode: 'insensitive' };
   if (query.status) where.status = query.status;
   return where;

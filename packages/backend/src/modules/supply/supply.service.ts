@@ -20,7 +20,7 @@ export class SupplyService {
 
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
   async list(user: AuthUser, query?: ListQuery): Promise<SupplyItem[] | Paginated<SupplyItem>> {
-    const where = await this.scope.ownedScopeWhere(this.prisma, user);
+    const where = this.scope.ownedEntityWhere(user);
     if (isPaginated(query)) {
       const page = query.page ?? 1;
       const pageSize = query.pageSize ?? 20;
@@ -35,7 +35,7 @@ export class SupplyService {
   }
 
   async create(user: AuthUser, input: CreateSupplyInput): Promise<SupplyItem> {
-    const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+    const scopeWhere = this.scope.ownedEntityWhere(user);
     const ownerId = (scopeWhere as { ownerId?: string }).ownerId;
     if (!ownerId) throw new BadRequestException('当前角色无归属,无法登记农资(需 merchant)');
     const row = (await this.prisma.supply.create({
@@ -46,7 +46,7 @@ export class SupplyService {
 
   /** 校验 supply 在作用域内,否则 fail-closed。 */
   private async scopedSupply(user: AuthUser, id: string): Promise<{ id: string; ownerId: string; total: Prisma.Decimal; used: Prisma.Decimal }> {
-    const where = await this.scope.ownedScopeWhere(this.prisma, user);
+    const where = this.scope.ownedEntityWhere(user);
     const sup = await this.prisma.supply.findFirst({ where: { id, ...(where as object) } as any });
     if (!sup) throw new ForbiddenException('农资不在可操作范围内');
     return sup as { id: string; ownerId: string; total: Prisma.Decimal; used: Prisma.Decimal };

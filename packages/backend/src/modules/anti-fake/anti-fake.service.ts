@@ -8,7 +8,6 @@ import {
   buildAntiFakeAlertCandidates,
   buildAntiFakeAlerts,
   buildFreezeResponse,
-  buildScopedScanWhere,
   buildTraceCodeStatusWhere,
   buildTraceScanItem,
   type ScanRow,
@@ -19,18 +18,13 @@ import {
 export class AntiFakeService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
-  /** 把业务作用域(ownerId/agentId)转成 TraceScan 的 where。
-   *  TraceScan 无 ownerId,故先解析作用域内的 batchId 集合,再按 batchId 过滤。
-   *  sysadmin 直接按 tenantId。fail-closed 由 ScopeService 保证。 */
-  private async scanWhere(user: AuthUser): Promise<Record<string, unknown>> {
+  /** 通过 batch.owner 关系约束 TraceScan/TraceCode，避免预加载并展开 batch IDs。 */
+  private scanWhere(user: AuthUser): Record<string, unknown> {
     if (user.role === Role.SYSTEM_ADMIN) return { tenantId: user.tenantId };
-    // 非 sysadmin:经 ScopeService(fail-closed)解析归属,再转成作用域内的 batchId 集合。
-    // 空集合时 Prisma `in: []` 匹配零行,安全退化为"什么都看不到"。
-    const owned = await this.scope.ownedScopeWhere(this.prisma, user);
-    const batches = await this.prisma.batch.findMany({
-      where: owned as any, select: { id: true },
-    });
-    return buildScopedScanWhere({ tenantId: user.tenantId, batchIds: batches.map((b) => b.id) });
+    return {
+      tenantId: user.tenantId,
+      batch: { is: this.scope.ownedEntityWhere(user) },
+    };
   }
 
   async listScans(user: AuthUser, limit: number): Promise<TraceScanItem[]> {

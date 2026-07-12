@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FarmRecordService } from './farm-record.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -111,14 +111,15 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
   function makeListService(overrides: any = {}) {
     let findManyArgs: any;
     let countArgs: any;
+    const batchFindMany = vi.fn(async () => []);
     const prisma = {
       batch: {
         findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }),
-        findMany: async () => overrides.ownedBatches ?? [{ id: 'b1' }, { id: 'b2' }],
+        findMany: batchFindMany,
       },
       user: { findMany: async () => [] },
       farmRecord: {
-        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1' }]; },
+        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1', batchId: 'b1' }]; },
         count: async (a: any) => { countArgs = a; return overrides.total ?? 1; },
       },
       $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
@@ -127,6 +128,7 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
       svc: new FarmRecordService(prisma as any, new ScopeService()),
       get findManyArgs() { return findManyArgs; },
       get countArgs() { return countArgs; },
+      batchFindMany,
     };
   }
 
@@ -135,7 +137,10 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
     const r = await h.svc.list(merchant, { page: 1, pageSize: 20 });
     expect(r).toMatchObject({ total: 1, page: 1, pageSize: 20 });
     expect(r.items).toHaveLength(1);
-    expect(h.findManyArgs.where.batchId).toEqual({ in: ['b1', 'b2'] });
+    expect(h.findManyArgs.where.batch).toEqual({
+      is: { tenantId: 't1', ownerId: 'm1' },
+    });
+    expect(h.batchFindMany).toHaveBeenCalledTimes(1);
     expect(h.findManyArgs.orderBy).toEqual({ recordedAt: 'desc' });
     expect(h.findManyArgs.skip).toBe(0);
     expect(h.findManyArgs.take).toBe(20);

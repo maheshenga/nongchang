@@ -31,7 +31,7 @@ export class FarmRecordService {
     const data = buildFarmRecordCreateData({ tenantId: user.tenantId, operatorId: user.userId, dto });
     if (shouldApplySupplyQuota(dto)) {
       // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额(只读鉴权,事务外)。
-      const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+      const scopeWhere = this.scope.ownedEntityWhere(user);
       const sup = await this.prisma.supply.findFirst({
         where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
         select: { id: true, ownerId: true },
@@ -65,17 +65,15 @@ export class FarmRecordService {
   }
 
   async list(user: AuthUser, query: FarmRecordQueryDto) {
-    let scopedBatchIds: string[] | undefined;
+    let batchScope: Prisma.BatchWhereInput | undefined;
     if (query.batchId) {
       // 指定批次:校验归属在调用方作用域内,fail-closed。
       await this.scope.assertInScope(this.prisma, user, 'batch', query.batchId);
     } else {
       // 未指定:限定在调用方作用域内的全部批次。
-      const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
-      const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
-      scopedBatchIds = batches.map(batch => batch.id);
+      batchScope = this.scope.ownedEntityWhere(user) as Prisma.BatchWhereInput;
     }
-    const where = buildFarmRecordListWhere(user, query, scopedBatchIds);
+    const where = buildFarmRecordListWhere(user, query, batchScope);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.farmRecord.findMany(buildFarmRecordListFindManyArgs(where, query)),
       this.prisma.farmRecord.count({ where }),

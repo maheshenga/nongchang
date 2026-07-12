@@ -26,38 +26,38 @@ describe('ScopeService.ownedWhere', () => {
   });
 });
 
-describe('ScopeService.merchantIdsForAgent', () => {
-  it('查询某 agent 下所有 merchant 的 id', async () => {
-    const prisma = { user: { findMany: vi.fn().mockResolvedValue([{ id: 'm1' }, { id: 'm2' }]) } } as any;
-    const s = new ScopeService();
-    const ids = await s.merchantIdsForAgent(prisma, 't1', 'a1');
-    expect(prisma.user.findMany).toHaveBeenCalledWith({
-      where: { tenantId: 't1', role: 'merchant', agentId: 'a1' }, select: { id: true },
-    });
-    expect(ids).toEqual(['m1', 'm2']);
-  });
-});
-
-describe('ScopeService.ownedScopeWhere 失败关闭', () => {
-  it('merchant 缺少 ownerId 时抛错(不退化为整租户可见)', async () => {
+describe('ScopeService.ownedEntityWhere 关系作用域', () => {
+  it('merchant 缺少 ownerId 时 fail-closed', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
     const s = new ScopeService();
-    await expect(
-      s.ownedScopeWhere(prisma, ctx({ role: Role.MERCHANT, agentId: null, ownerId: null })),
-    ).rejects.toThrow();
+    expect(() => s.ownedEntityWhere(ctx({ role: Role.MERCHANT, agentId: null, ownerId: null }))).toThrow();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
-  it('agent_admin 缺少 agentId 时抛错(不退化为整租户可见)', async () => {
+  it('agent_admin 缺少 agentId 时 fail-closed', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
     const s = new ScopeService();
-    await expect(
-      s.ownedScopeWhere(prisma, ctx({ role: Role.AGENT_ADMIN, agentId: null, ownerId: null })),
-    ).rejects.toThrow();
+    expect(() => s.ownedEntityWhere(ctx({ role: Role.AGENT_ADMIN, agentId: null, ownerId: null }))).toThrow();
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
-  it('system_admin 仍只按 tenantId 过滤(允许整租户)', async () => {
+  it('system_admin 仅按 tenantId 过滤', () => {
     const prisma = { user: { findMany: vi.fn() } } as any;
     const s = new ScopeService();
-    const where = await s.ownedScopeWhere(prisma, ctx({ role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null }));
+    const where = s.ownedEntityWhere(ctx({ role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null }));
     expect(where).toEqual({ tenantId: 't1' });
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+  it('merchant 直接按 ownerId 过滤', () => {
+    expect(svc.ownedEntityWhere(ctx({ role: Role.MERCHANT, ownerId: 'm1' }))).toEqual({
+      tenantId: 't1', ownerId: 'm1',
+    });
+  });
+  it('agent_admin 使用 owner 关系过滤且不展开 merchant id', () => {
+    const prisma = { user: { findMany: vi.fn() } } as any;
+    expect(svc.ownedEntityWhere(ctx({ role: Role.AGENT_ADMIN, agentId: 'a1' }))).toEqual({
+      tenantId: 't1',
+      owner: { is: { tenantId: 't1', agentId: 'a1', role: Role.MERCHANT } },
+    });
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -100,14 +100,14 @@ describe('ScopeService.assertOwnerInScope', () => {
     await expect(new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.SYSTEM_ADMIN, ownerId: null }), 'mX'))
       .rejects.toThrow();
   });
-  it('sysadmin 校验:where 不含 ownerId 维度约束,仅锁 id+role+tenantId', async () => {
+  it('sysadmin 直接按 id+role+tenantId 校验', async () => {
     const prisma = { user: { findFirst: vi.fn().mockResolvedValue({ id: 'mX' }) } } as any;
     await new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.SYSTEM_ADMIN, ownerId: null }), 'mX');
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: { AND: [{ id: 'mX', role: Role.MERCHANT, tenantId: 't1' }, {}] }, select: { id: true },
+      where: { id: 'mX', role: Role.MERCHANT, tenantId: 't1' }, select: { id: true },
     });
   });
-  it('agent:where 用 AND 数组把范围约束映射为 { id: { in: ids } }', async () => {
+  it('agent 直接按 agentId 校验且不展开 merchant id', async () => {
     const prisma = {
       user: {
         findFirst: vi.fn().mockResolvedValue({ id: 'm1' }),
@@ -116,9 +116,10 @@ describe('ScopeService.assertOwnerInScope', () => {
     } as any;
     await new ScopeService().assertOwnerInScope(prisma, ctx({ role: Role.AGENT_ADMIN, agentId: 'a1' }), 'm1');
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
-      where: { AND: [{ id: 'm1', role: Role.MERCHANT, tenantId: 't1' }, { id: { in: ['m1', 'm2'] } }] },
+      where: { id: 'm1', role: Role.MERCHANT, tenantId: 't1', agentId: 'a1' },
       select: { id: true },
     });
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
   });
   it('agent 旗下无 merchant(ids 为空):匹配不到 → 抛 Forbidden', async () => {
     const prisma = {

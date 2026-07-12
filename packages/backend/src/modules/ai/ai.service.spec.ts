@@ -292,7 +292,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init) => {
       requestBody = JSON.parse(init.body);
@@ -316,7 +316,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
 
@@ -343,7 +343,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
 
@@ -363,7 +363,7 @@ describe('AiService.ask', () => {
       batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
 
@@ -386,7 +386,7 @@ describe('AiService.ask', () => {
       batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
 

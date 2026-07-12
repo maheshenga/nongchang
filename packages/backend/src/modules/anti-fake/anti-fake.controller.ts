@@ -19,7 +19,7 @@ export class AntiFakeController {
     return this.svc.listAlerts(user);
   }
 
-  // 冻结/解冻防伪码属风控写操作:显式声明授权角色;服务层 ownedScopeWhere 再做 fail-closed 范围校验。
+  // 冻结/解冻防伪码属风控写操作:显式声明授权角色;服务层通过 batch.owner 关系做 fail-closed 范围校验。
   @Post('codes/:code/freeze') @Roles(Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT)
   freeze(@CurrentUser() user: AuthUser, @Param('code') code: string) {
     return this.svc.freeze(user, code);

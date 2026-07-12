@@ -66,7 +66,7 @@ export class AiService {
   }
 
   async ask(user: AuthUser, input: AiAskInput): Promise<AiChatResponse> {
-    const where = await this.scope.ownedScopeWhere(this.prisma, user);
+    const where = this.scope.ownedEntityWhere(user);
     const batches = await this.prisma.batch.findMany({ where, select: { batchNo: true, cropName: true, status: true, plantDate: true }, take: 50 });
     const nowMs = Date.now();
     const p = await this.providers.getEnabled(user);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { AntiFakeService } from './anti-fake.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -6,10 +6,11 @@ import { Role, type AuthUser } from '@nongchang/shared';
 
 const sysadmin: AuthUser = { userId: 'u1', tenantId: 't1', role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null };
 const merchant: AuthUser = { userId: 'u2', tenantId: 't1', role: Role.MERCHANT, agentId: null, ownerId: 'm1' };
+const agent: AuthUser = { userId: 'u3', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null };
 
 function makeService(prismaOverrides: any) {
   const prisma = {
-    batch: { findMany: async () => [], ...(prismaOverrides.batch ?? {}) },
+    batch: { findMany: vi.fn(async () => []), ...(prismaOverrides.batch ?? {}) },
     traceScan: { findMany: async () => [], ...(prismaOverrides.traceScan ?? {}) },
     traceCode: { findFirst: async () => null, findMany: async () => [], update: async () => ({}), ...(prismaOverrides.traceCode ?? {}) },
   };
@@ -35,6 +36,22 @@ describe('AntiFakeService.listScans', () => {
     const { svc } = makeService({});
     await expect(svc.listScans({ userId: 'u', tenantId: 't1', role: Role.MERCHANT, agentId: null, ownerId: null } as AuthUser, 50))
       .rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('agent 通过 TraceScan.batch.owner 关系过滤且不预加载批次 ID', async () => {
+    let captured: any;
+    const { svc, prisma } = makeService({
+      traceScan: { findMany: async (args: any) => { captured = args; return []; } },
+    });
+    await svc.listScans(agent, 50);
+    expect(captured.where).toEqual({
+      tenantId: 't1',
+      batch: { is: {
+        tenantId: 't1',
+        owner: { is: { tenantId: 't1', agentId: 'a1', role: Role.MERCHANT } },
+      } },
+    });
+    expect(prisma.batch.findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -96,6 +113,24 @@ describe('AntiFakeService.freeze/unfreeze', () => {
     const res = await svc.freeze(merchant, 'C1');
     expect(updated.data.status).toBe('frozen');
     expect(res).toEqual({ code: 'C1', frozen: true });
+  });
+  it('冻结时通过 TraceCode.batch.owner 关系校验且不预加载批次 ID', async () => {
+    let captured: any;
+    const { svc, prisma } = makeService({
+      traceCode: {
+        findFirst: async (args: any) => { captured = args; return { id: 'tc1', code: 'C1', status: 'active' }; },
+      },
+    });
+    await svc.freeze(agent, 'C1');
+    expect(captured.where).toEqual({
+      code: 'C1',
+      tenantId: 't1',
+      batch: { is: {
+        tenantId: 't1',
+        owner: { is: { tenantId: 't1', agentId: 'a1', role: Role.MERCHANT } },
+      } },
+    });
+    expect(prisma.batch.findMany).not.toHaveBeenCalled();
   });
   it('越权(码不在作用域)抛 Forbidden', async () => {
     const { svc } = makeService({ traceCode: { findFirst: async () => null } });

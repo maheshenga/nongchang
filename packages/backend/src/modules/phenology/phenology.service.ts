@@ -56,7 +56,7 @@ export class PhenologyService {
 
   // 偏离引擎:遍历调用方作用域内批次,实际累计天数对比该作物标准全周期。
   async deviations(user: AuthUser): Promise<BatchDeviation[]> {
-    const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+    const batchWhere = this.scope.ownedEntityWhere(user);
     const batches = await this.prisma.batch.findMany({
       where: batchWhere,
       select: { id: true, batchNo: true, cropName: true, status: true, plantDate: true },
