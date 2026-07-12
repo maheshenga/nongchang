@@ -22,8 +22,11 @@ describe('TraceCredential e2e', () => {
   let tenantAId: string;
   const scanCode = `CRED-E2E-${Date.now()}`;
   const createdIds: string[] = [];
+  let previousOssBaseUrl: string | undefined;
 
   beforeAll(async () => {
+    previousOssBaseUrl = process.env.OSS_BASE_URL;
+    process.env.OSS_BASE_URL = 'https://example.com';
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = mod.createNestApplication();
     app.setGlobalPrefix('api');
@@ -40,10 +43,13 @@ describe('TraceCredential e2e', () => {
   });
 
   afterAll(async () => {
-    if (createdIds.length) {
-      await prisma.traceCredential.deleteMany({ where: { id: { in: createdIds } } });
+    const validCreatedIds = createdIds.filter((id): id is string => typeof id === 'string');
+    if (validCreatedIds.length) {
+      await prisma.traceCredential.deleteMany({ where: { id: { in: validCreatedIds } } });
     }
     await prisma.traceCode.deleteMany({ where: { code: scanCode } });
+    if (previousOssBaseUrl === undefined) delete process.env.OSS_BASE_URL;
+    else process.env.OSS_BASE_URL = previousOssBaseUrl;
     await app.close();
   });
 
@@ -98,6 +104,7 @@ describe('TraceCredential e2e', () => {
         issuedAt: '2026-02-20T00:00:00.000Z',
         fileUrl: 'https://example.com/report.pdf',
       });
+    expect(create.status).toBe(201);
     const id = create.body.id;
     createdIds.push(id);
 

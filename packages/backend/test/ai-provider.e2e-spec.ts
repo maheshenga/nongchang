@@ -18,6 +18,7 @@ describe('AiProvider e2e', () => {
   let prisma: PrismaService;
   let sysToken: string;
   let merchantToken: string;
+  let uniqueTenantId: string;
   const createdIds: string[] = [];
 
   beforeAll(async () => {
@@ -28,12 +29,17 @@ describe('AiProvider e2e', () => {
     prisma = app.get(PrismaService);
     sysToken = await login(app, 'sysadmin');
     merchantToken = await login(app, 'merchantA');
+    const uniqueTenant = await prisma.tenant.create({
+      data: { name: 'AI provider unique-index E2E', code: `AIP-${Date.now()}` },
+    });
+    uniqueTenantId = uniqueTenant.id;
   });
 
   afterAll(async () => {
     if (createdIds.length) {
       await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
     }
+    await prisma.tenant.deleteMany({ where: { id: uniqueTenantId } });
     await app.close();
   });
 
@@ -81,9 +87,8 @@ describe('AiProvider e2e', () => {
 
   it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {
     // ai_providers.tenant_id 无 FK(#20 未纳入),用合成租户隔离真实数据。
-    const fakeTenant = 'e2e-115-tenant';
     const base = {
-      tenantId: fakeTenant,
+      tenantId: uniqueTenantId,
       baseUrl: 'https://x.com/v1',
       apiKeyEnc: 'iv:tag:cipher',
       textModel: 'qwen-plus',

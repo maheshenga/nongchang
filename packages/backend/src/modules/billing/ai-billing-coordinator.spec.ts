@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '@nongchang/shared';
 import { AiBillingCoordinator } from './ai-billing-coordinator';
 
