@@ -32,4 +32,16 @@ describe('HealthService', () => {
       expect((error as ServiceUnavailableException).getResponse()).toEqual({ status: 'not_ready' });
     }
   });
+
+  it('returns not-ready after application shutdown begins without querying PostgreSQL', async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
+    const service = new HealthService({ $queryRaw: queryRaw } as never);
+
+    service.beforeApplicationShutdown();
+
+    await expect(service.ready()).rejects.toMatchObject({
+      response: { status: 'not_ready' },
+    });
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
 });
