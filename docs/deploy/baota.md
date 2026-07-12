@@ -119,14 +119,14 @@ location /api/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Request-Id $request_id;
+    proxy_set_header X-Request-Id $http_x_request_id;
 }
 location / {
     try_files $uri $uri/ /index.html;
 }
 ```
 
-`/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
+`/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，未提供或格式非法时自动生成 UUID，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
 
 ### 结构化请求日志
 
