@@ -86,6 +86,21 @@ controlled manual decision. Never automatically release these rows.
   ALLOW_MANUAL_PAY=false
   ```
 
+### PM2 与健康探针职责
+
+后端提供两个无需认证但受限流保护的探针：
+
+```bash
+curl --fail --silent http://127.0.0.1:3001/api/health/live
+curl --fail --silent http://127.0.0.1:3001/api/health/ready
+```
+
+- `/api/health/live` 表示 Node 进程仍可响应，可用于 PM2/宝塔的进程存活告警。只有进程退出或 liveness 持续失败时才应按 PM2 重启策略处理。
+- `/api/health/ready` 会实际执行 PostgreSQL `SELECT 1`。返回 `200 {"status":"ready"}` 时实例才应接收流量；返回 `503 {"status":"not_ready"}` 时，负载均衡或发布脚本应把实例从流量池摘除。
+- 短暂数据库故障导致的 readiness `503` 不等于 Node 进程失活。不要仅因为一次或短时 readiness 失败就重启 PM2；数据库恢复后探针会自动恢复为 `200`。
+
+建议在宝塔「计划任务」或外部监控中每 30 秒检查 liveness，并在发布切流前连续检查 readiness。单实例部署无法真正“摘流”时，应让 Nginx 保留 `503`，进入维护页或由上游负载均衡停止转发，而不是伪造 `200`。
+
 ## 5. 构建前端
 
 ```bash
@@ -104,11 +119,23 @@ location /api/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-Id $request_id;
 }
 location / {
     try_files $uri $uri/ /index.html;
 }
 ```
+
+`/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
+
+### 结构化请求日志
+
+后端会向标准输出写入每个已完成请求的一条 JSON 日志，PM2/宝塔应采集并轮转该输出。稳定字段为：
+
+- `requestId`、`method`、`path`、`status`、`durationMs`
+- 登录请求可识别调用方时，额外包含 `tenantId`、`userId`
+
+日志采用白名单构造，禁止记录 Authorization、Cookie、请求/响应 body、查询参数中的密钥、AI 提示词/图片/音频内容，以及微信、讯飞、地图、支付、对象存储等集成密钥。排障时使用 `X-Request-Id` 关联日志，不要临时打开 body 或 header 全量打印。
 
 在同一个 HTTPS `server` 块中加入以下响应头。Web 管理端与 `/api` 必须保持同源，
 这样 `nc_refresh` HttpOnly Cookie 才只会发送到 `/api/auth/web`：

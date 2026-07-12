@@ -63,6 +63,38 @@ $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?sch
 corepack pnpm@10.33.2 --filter @nongchang/backend e2e:check-db
 ```
 
+## Deployment Health And Logging Smoke Checks
+
+After PM2 has started the built backend, verify liveness and readiness through the same HTTPS origin used by clients:
+
+```powershell
+$baseUrl = 'https://example.com'
+$live = Invoke-RestMethod "$baseUrl/api/health/live"
+$ready = Invoke-RestMethod "$baseUrl/api/health/ready"
+$live
+$ready
+```
+
+Expected results:
+
+- liveness returns HTTP `200` with `status=ok`, numeric `uptimeSeconds`, and a version string;
+- readiness returns HTTP `200` with `status=ready` while PostgreSQL is reachable;
+- when PostgreSQL is unavailable, readiness returns HTTP `503` with `status=not_ready`, while liveness can remain `200`.
+
+A readiness `503` must remove the instance from traffic or block it from joining the load-balancer pool. Do not restart PM2 solely for a transient database outage; restart only when the process/liveness policy calls for it. Re-admit the instance after readiness returns `200` again.
+
+Verify request-ID propagation with a safe, recognizable value:
+
+```powershell
+$requestId = "release-$([guid]::NewGuid().ToString('N'))"
+$response = Invoke-WebRequest "$baseUrl/api/health/live" -Headers @{ 'X-Request-Id' = $requestId }
+$response.Headers['X-Request-Id']
+```
+
+The response header must equal the supplied ID. Find the same ID in the PM2 application log and confirm the completion entry is one JSON object containing `requestId`, `method`, `path`, `status`, and `durationMs`; authenticated requests may also contain `tenantId` and `userId`.
+
+Before release, use a non-production sentinel request to confirm logs do **not** contain Authorization values, cookies, request or response bodies, query secrets, AI messages/media, or integration credentials. The logger is intentionally allowlist-only; do not enable raw request dumps during troubleshooting.
+
 ## E2E Blocker Interpretation
 
 If the precheck reports `ECONNREFUSED 127.0.0.1:5544` or says it cannot reach `127.0.0.1:5544`, the local database is not running or is not mapped to the expected port. Start Docker Compose, rerun migrations and seed, then rerun the gate.
@@ -94,7 +126,7 @@ Reconciliation rows contain only operation identity, status, provider ID, and a 
 error category. Prompts, images, audio, provider credentials, and provider response
 bodies must never be copied into `ai_operations`.
 
-## Phase 1-6 Coverage Matrix
+## Phase 1-6 And Stage C Coverage Matrix
 
 | Roadmap item | Evidence |
 | --- | --- |
@@ -108,3 +140,6 @@ bodies must never be copied into `ai_operations`.
 | Web refresh sessions stay in HttpOnly cookies and rotate/revoke correctly | `packages/backend/test/web-session.e2e-spec.ts`, `packages/web/src/auth/auth-context.spec.tsx`, `packages/web/src/api/request.spec.ts` |
 | AI reservation outcomes are durable and ambiguous calls are quarantined | `packages/backend/src/modules/billing/ai-billing-coordinator.spec.ts`, `packages/backend/test/ai-reconciliation.e2e-spec.ts` |
 | PostgreSQL rejects cross-tenant and cross-owner writes | `packages/backend/test/tenant-constraints.e2e-spec.ts`, `packages/backend/prisma/audit-data-consistency.sql` |
+| Liveness/readiness distinguish process health from PostgreSQL traffic readiness | `packages/backend/src/modules/health/health.service.spec.ts`, `packages/backend/src/modules/health/health.controller.spec.ts` |
+| Completion logs propagate request IDs while excluding secrets and request content | `packages/backend/src/common/logging/request-id.spec.ts`, `packages/backend/src/common/logging/request-logging.interceptor.spec.ts` |
+| Web and miniapp resource responses are runtime-validated through shared contracts | `packages/shared/src/dto/resource-views.dto.spec.ts`, `packages/web/src/api/batches.spec.ts`, `packages/web/src/api/fields.spec.ts`, `packages/web/src/api/farm-records.spec.ts`, `packages/miniapp/src/api/farm.spec.ts`, `packages/miniapp/src/api/trace.spec.ts` |
