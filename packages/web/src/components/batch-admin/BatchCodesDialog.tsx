@@ -1,0 +1,10 @@
+import { Copy, ExternalLink, ScanLine, X } from 'lucide-react';
+import type { TraceCode } from '../../api/trace';
+import type { ViewBatch } from '../BatchAdmin.model';
+
+export function BatchCodesDialog({ batch, codes, loading, traceUrl, onCopy, onClose }: { batch?: ViewBatch; codes: TraceCode[]; loading: boolean; traceUrl(code: string): string; onCopy(code: string): void; onClose(): void }) {
+  return <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"><div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[6px] bg-white shadow-lg">
+    <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-violet-50 p-6"><h3 className="flex items-center gap-3 text-lg font-bold text-violet-900"><ScanLine className="h-5 w-5" />已生成溯源码 · <span className="font-mono text-violet-700">{batch?.code}</span><span className="rounded border border-violet-200 bg-white px-2 py-0.5 font-mono text-xs text-violet-600">{codes.length} 个</span></h3><button onClick={onClose}><X className="h-5 w-5" /></button></div>
+    <div className="flex-1 overflow-y-auto p-6">{loading && <div className="py-12 text-center text-sm text-slate-400">加载中…</div>}{!loading && codes.length === 0 && <p className="py-12 text-center text-sm text-slate-400">该批次尚未生成任何溯源码</p>}{!loading && <div className="space-y-2">{codes.map(code => <div key={code.id} className="flex items-center gap-3 rounded-[6px] border border-slate-200 bg-white px-4 py-3 shadow-sm"><span className="flex-1 truncate font-mono text-sm font-bold text-slate-800">{code.code}</span><span className="shrink-0 text-xs text-slate-400">扫码 <b className="font-mono text-blue-600">{code.scanCount}</b> 次</span><button onClick={() => onCopy(code.code)} className="flex items-center gap-1 text-xs font-bold text-violet-600"><Copy className="h-3 w-3" />复制链接</button><a href={traceUrl(code.code)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-bold text-blue-600"><ExternalLink className="h-3 w-3" />打开</a></div>)}</div>}</div>
+  </div></div>;
+}
