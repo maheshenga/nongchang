@@ -30,6 +30,7 @@ import { ScopeService } from './common/scope/scope.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     TraceCredentialModule,
     PhenologyModule,
     BillingModule,
+    HealthModule,
   ],
   providers: [
     ScopeService,
