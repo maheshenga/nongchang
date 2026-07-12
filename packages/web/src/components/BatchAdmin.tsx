@@ -157,7 +157,8 @@ export default function BatchAdmin() {
   });
   const toggleOne = (id: string, checked: boolean) => setSelectedIds(previous => {
     const next = new Set(previous);
-    checked ? next.add(id) : next.delete(id);
+    if (checked) next.add(id);
+    else next.delete(id);
     return next;
   });
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle, Download, Layers, Printer, QrCode, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Download, Printer, QrCode, ShieldCheck, X } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { showToast } from '../../hooks/useToast';
 import type { ViewBatch } from '../BatchAdmin.model';
