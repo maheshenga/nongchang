@@ -25,7 +25,7 @@ function testResultLabel(result: TestState | undefined) {
 }
 
 export default function AiProviders() {
-  const { data, loading, error, reload } = useApi(listAiProviders);
+  const { data, loading, error, reload } = useApi(listAiProviders, { cacheKey: 'ai-providers' });
   const providers = data ?? [];
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<AiProviderView | null>(null);

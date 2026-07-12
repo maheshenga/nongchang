@@ -31,7 +31,7 @@ const helpTextCls = 'mt-1 text-xs leading-5 text-[#605E5C]';
 const checkboxCls = `h-4 w-4 rounded-[4px] border-[#C8C6C4] text-[#0078D4] accent-[#0078D4] ${fluentFocus}`;
 
 export default function SystemSettings() {
-  const { data, loading, error, reload } = useApi(getOssConfig);
+  const { data, loading, error, reload } = useApi(getOssConfig, { cacheKey: 'oss-config' });
   const [form, setForm] = useState<FormState>(EMPTY);
   const [secretMasked, setSecretMasked] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

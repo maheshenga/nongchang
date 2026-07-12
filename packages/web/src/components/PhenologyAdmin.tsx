@@ -14,7 +14,7 @@ function errMsg(e: unknown): string {
 
 // 标准物候模型管理:按作物维护各生长阶段的预设累计天数,作为批次偏离预警的基准。
 export default function PhenologyAdmin() {
-  const { data, loading, error, reload } = useApi(listPhenologies);
+  const { data, loading, error, reload } = useApi(listPhenologies, { cacheKey: 'phenologies' });
   const items: CropPhenologyItem[] = data ?? [];
 
   const [showModal, setShowModal] = useState(false);

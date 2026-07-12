@@ -12,7 +12,7 @@ import { fluentButton, fluentInput, fluentSelect } from '../ui/fluent';
 
 export default function FarmFields() {
   const { user } = useAuth();
-  const { data: rawFields, loading, error, reload } = useApi(listFields);
+  const { data: rawFields, loading, error, reload } = useApi(listFields, { cacheKey: 'fields' });
   const fields: Field[] = rawFields ?? [];
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const activeField = fields.find((f) => f.id === activeFieldId) ?? fields[0] ?? null;
@@ -217,7 +217,7 @@ function CreateFieldModal({
   onCreated: () => void;
 }) {
   const isMerchant = user?.role === 'merchant';
-  const { data: merchants } = useApi(listMerchants);
+  const { data: merchants } = useApi(listMerchants, { cacheKey: 'merchants' });
   const [ownerId, setOwnerId] = useState(isMerchant ? (user?.ownerId ?? user?.userId ?? '') : '');
   const [name, setName] = useState('');
   const [area, setArea] = useState('');

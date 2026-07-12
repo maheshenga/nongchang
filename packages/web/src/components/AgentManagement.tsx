@@ -35,7 +35,7 @@ function statusTag(status: string) {
 export default function AgentManagement() {
   const [page, setPage] = useState(1);
   const fetchAgents = useCallback(() => listAgents({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const { data: rawAgents, loading, error, reload } = useApi(fetchAgents);
+  const { data: rawAgents, loading, error, reload } = useApi(fetchAgents, { cacheKey: `agents-page-${page}` });
   const agentPage = normalizePage<AgentListItem>(rawAgents, page);
   const agents = agentPage.items;
   const [searchQuery, setSearchQuery] = useState('');

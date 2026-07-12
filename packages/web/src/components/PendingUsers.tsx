@@ -7,7 +7,7 @@ import { listPendingUsers, reviewUser } from '../api/users';
 import { fluentButton, fluentTable } from '../ui/fluent';
 
 export default function PendingUsers() {
-  const { data, loading, error, reload } = useApi(listPendingUsers);
+  const { data, loading, error, reload } = useApi(listPendingUsers, { cacheKey: 'pending-users' });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
