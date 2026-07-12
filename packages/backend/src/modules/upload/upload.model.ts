@@ -77,11 +77,16 @@ export function validateUploadFile(input: { file?: UploadedFile | null; purpose?
   return { ok: true, purpose, ext };
 }
 
-export function buildUploadObjectKey(input: { purpose: UploadPurpose; yyyymm: string; id: string; ext: string }): string {
+export function calculateUploadChecksum(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+export function buildUploadObjectKey(input: { tenantId: string; purpose: UploadPurpose; yyyymm: string; id: string; ext: string }): string {
   const folder = input.purpose === 'credential'
     ? 'credentials'
     : input.purpose === 'ai-diagnose'
       ? 'ai-diagnose'
       : 'farm-records';
-  return `${folder}/${input.yyyymm}/${input.id}.${input.ext}`;
+  return `tenants/${input.tenantId}/${folder}/${input.yyyymm}/${input.id}.${input.ext}`;
 }
+import { createHash } from 'node:crypto';

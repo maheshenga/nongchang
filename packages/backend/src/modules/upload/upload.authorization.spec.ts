@@ -22,7 +22,12 @@ function makeService(permissions: string[] = []) {
       findFirst: vi.fn().mockResolvedValue({ group: { permissions } }),
     },
   } as any;
-  return { service: new UploadService(oss, prisma), oss, prisma };
+  const quota = {
+    reserve: vi.fn().mockResolvedValue({ assetId: 'asset-1' }),
+    activate: vi.fn().mockResolvedValue(undefined),
+    release: vi.fn().mockResolvedValue(undefined),
+  } as any;
+  return { service: new UploadService(oss, prisma, quota), oss, prisma };
 }
 
 describe('upload purpose authorization', () => {

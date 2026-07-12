@@ -5,9 +5,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { OssService } from './oss.service';
 import {
   buildUploadObjectKey,
+  calculateUploadChecksum,
   validateUploadFile,
 } from './upload.model';
 import type { UploadedFile, UploadPurpose } from './upload.model';
+import { UploadQuotaService } from './upload-quota.service';
 
 export interface UploadOptions {
   purpose?: UploadPurpose | string;
@@ -17,7 +19,11 @@ export type { UploadedFile };
 
 @Injectable()
 export class UploadService {
-  constructor(private oss: OssService, private prisma: PrismaService) {}
+  constructor(
+    private oss: OssService,
+    private prisma: PrismaService,
+    private quota: UploadQuotaService,
+  ) {}
 
   async upload(file: UploadedFile, user: AuthUser, options: UploadOptions = {}): Promise<UploadResponse> {
     const validation = validateUploadFile({ file, purpose: options.purpose });
@@ -26,12 +32,36 @@ export class UploadService {
 
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const key = buildUploadObjectKey({
+      tenantId: user.tenantId,
       purpose: validation.purpose,
       yyyymm,
       id: randomUUID(),
       ext: validation.ext,
     });
-    const url = await this.oss.put(key, file.buffer, user.tenantId);
+    const checksum = calculateUploadChecksum(file.buffer);
+    const { assetId } = await this.quota.reserve({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      purpose: validation.purpose,
+      objectKey: key,
+      sizeBytes: BigInt(file.size),
+      checksum,
+    });
+
+    let url: string;
+    try {
+      url = await this.oss.put(key, file.buffer, user.tenantId);
+    } catch (error) {
+      try { await this.quota.release(assetId, 'FAILED'); } catch { /* reconciliation handles leftovers */ }
+      throw error;
+    }
+    try {
+      await this.quota.activate(assetId, url);
+    } catch (error) {
+      try { await this.oss.delete(key, user.tenantId); } catch { /* cleanup command handles leftovers */ }
+      try { await this.quota.release(assetId, 'FAILED'); } catch { /* reconciliation handles leftovers */ }
+      throw error;
+    }
     return { url };
   }
 

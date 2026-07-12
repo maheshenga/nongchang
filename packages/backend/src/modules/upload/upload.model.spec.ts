@@ -102,22 +102,25 @@ describe('upload model helpers', () => {
 
   it('builds object keys with stable folder and extension rules', () => {
     expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
       purpose: 'farm-record',
       yyyymm: '202607',
       id: '00000000-0000-4000-8000-000000000001',
       ext: 'jpg',
-    })).toBe('farm-records/202607/00000000-0000-4000-8000-000000000001.jpg');
+    })).toBe('tenants/tenant-1/farm-records/202607/00000000-0000-4000-8000-000000000001.jpg');
     expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
       purpose: 'credential',
       yyyymm: '202607',
       id: '00000000-0000-4000-8000-000000000002',
       ext: 'pdf',
-    })).toBe('credentials/202607/00000000-0000-4000-8000-000000000002.pdf');
+    })).toBe('tenants/tenant-1/credentials/202607/00000000-0000-4000-8000-000000000002.pdf');
     expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
       purpose: 'ai-diagnose',
       yyyymm: '202607',
       id: '00000000-0000-4000-8000-000000000003',
       ext: 'jpg',
-    })).toBe('ai-diagnose/202607/00000000-0000-4000-8000-000000000003.jpg');
+    })).toBe('tenants/tenant-1/ai-diagnose/202607/00000000-0000-4000-8000-000000000003.jpg');
   });
 });

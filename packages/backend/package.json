@@ -14,7 +14,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed:demo": "tsx scripts/run-demo-seed.ts",
-    "billing:recover-reservations": "tsx scripts/recover-stale-reservations.ts"
+    "billing:recover-reservations": "tsx scripts/recover-stale-reservations.ts",
+    "upload:cleanup": "tsx scripts/cleanup-stale-uploads.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",

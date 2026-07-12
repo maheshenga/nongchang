@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const putMock = vi.fn();
+const deleteMock = vi.fn();
 const ctorMock = vi.fn();
 vi.mock('ali-oss', () => ({
   default: class {
     put = putMock;
+    delete = deleteMock;
     constructor(opts: unknown) {
       ctorMock(opts);
     }
@@ -20,6 +22,7 @@ const stubNoConfig = { getCredentials: async () => null } as unknown as OssConfi
 describe('OssService.put — env 回退路径', () => {
   beforeEach(() => {
     putMock.mockReset();
+    deleteMock.mockReset();
     ctorMock.mockReset();
     putMock.mockResolvedValue({ url: 'https://oss-default.example.com/farm-records/202606/x.jpg' });
     delete process.env.OSS_BASE_URL;
@@ -53,6 +56,7 @@ describe('OssService.put — env 回退路径', () => {
 describe('OssService.put — 租户 DB 配置路径', () => {
   beforeEach(() => {
     putMock.mockReset();
+    deleteMock.mockReset();
     ctorMock.mockReset();
     putMock.mockResolvedValue({ url: 'https://oss-raw.example.com/farm-records/202606/x.jpg' });
     delete process.env.OSS_BASE_URL;
@@ -91,5 +95,30 @@ describe('OssService.put — 租户 DB 配置路径', () => {
     const url = await svc.put('farm-records/202606/x.jpg', Buffer.from('x'), 'tenant-1');
 
     expect(url).toBe('https://oss-raw.example.com/farm-records/202606/x.jpg');
+  });
+});
+
+describe('OssService.delete', () => {
+  beforeEach(() => {
+    deleteMock.mockReset();
+    ctorMock.mockReset();
+    deleteMock.mockResolvedValue({});
+  });
+
+  it('deletes with the environment client when tenant credentials are absent', async () => {
+    const svc = new OssService(stubNoConfig);
+    await svc.delete('tenants/t1/farm-records/file.jpg', 't1');
+    expect(deleteMock).toHaveBeenCalledWith('tenants/t1/farm-records/file.jpg');
+  });
+
+  it('deletes with tenant-specific credentials when configured', async () => {
+    const getCredentials = vi.fn().mockResolvedValue({
+      region: 'oss-cn-hangzhou', bucket: 'tenant-bucket', accessKeyId: 'AK-DB',
+      accessKeySecret: 'SECRET-DB', baseUrl: null,
+    });
+    const svc = new OssService({ getCredentials } as unknown as OssConfigService);
+    await svc.delete('tenants/t1/credentials/file.pdf', 't1');
+    expect(getCredentials).toHaveBeenCalledWith('t1');
+    expect(deleteMock).toHaveBeenCalledWith('tenants/t1/credentials/file.pdf');
   });
 });

@@ -43,4 +43,21 @@ export class OssService {
     const base = process.env.OSS_BASE_URL;
     return base ? `${base.replace(/\/$/, '')}/${key}` : res.url;
   }
+
+  async delete(key: string, tenantId?: string): Promise<void> {
+    if (tenantId) {
+      const cred = await this.ossConfig.getCredentials(tenantId);
+      if (cred) {
+        const client = new OSS({
+          region: cred.region,
+          bucket: cred.bucket,
+          accessKeyId: cred.accessKeyId,
+          accessKeySecret: cred.accessKeySecret,
+        });
+        await client.delete(key);
+        return;
+      }
+    }
+    await this.envClient().delete(key);
+  }
 }
