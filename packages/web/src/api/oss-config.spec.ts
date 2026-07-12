@@ -1,21 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 const requestMock = vi.fn();
 vi.mock('./request', () => ({ request: (...args: any[]) => requestMock(...args) }));
-import { getOssConfig, upsertOssConfig, testOssConfig } from './oss-config';
 
-beforeEach(() => requestMock.mockReset().mockResolvedValue(undefined));
+import { getOssConfig, testOssConfig, upsertOssConfig } from './oss-config';
+
+const config = {
+  region: 'cn', bucket: 'b', accessKeyId: 'AK', accessKeySecretMasked: '***',
+  baseUrl: null, enabled: true,
+};
+
+beforeEach(() => requestMock.mockReset());
 
 describe('oss-config api client', () => {
-  it('getOssConfig GET /oss-config', async () => {
+  it('gets OSS config', async () => {
+    requestMock.mockResolvedValueOnce(config);
     await getOssConfig();
     expect(requestMock).toHaveBeenCalledWith('/oss-config');
   });
-  it('upsertOssConfig PUT 带 body', async () => {
-    const dto = { region: 'cn', bucket: 'b', accessKeyId: 'AK', accessKeySecret: 'S' };
-    await upsertOssConfig(dto as any);
-    expect(requestMock).toHaveBeenCalledWith('/oss-config', { method: 'PUT', body: JSON.stringify(dto) });
+
+  it('upserts OSS config', async () => {
+    requestMock.mockResolvedValueOnce(config);
+    const input = { region: 'cn', bucket: 'b', accessKeyId: 'AK', accessKeySecret: 'S' };
+    await upsertOssConfig(input);
+    expect(requestMock).toHaveBeenCalledWith('/oss-config', {
+      method: 'PUT', body: JSON.stringify(input),
+    });
   });
-  it('testOssConfig POST /oss-config/test', async () => {
+
+  it('tests OSS config', async () => {
+    requestMock.mockResolvedValueOnce({ ok: true, latencyMs: 12 });
     await testOssConfig();
     expect(requestMock).toHaveBeenCalledWith('/oss-config/test', { method: 'POST' });
   });
