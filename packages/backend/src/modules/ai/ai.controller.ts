@@ -13,6 +13,7 @@ import {
 } from '@nongchang/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { MULTIPART_FILE_LIMITS } from '../../common/upload/upload-limits';
 import { AiService } from './ai.service';
 
 interface MulterFile { buffer: Buffer }
@@ -42,7 +43,9 @@ export class AiController {
   }
 
   @Post('transcribe')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { ...MULTIPART_FILE_LIMITS, fileSize: 10 * 1024 * 1024 } }),
+  )
   transcribe(@CurrentUser() user: AuthUser, @UploadedFile() file?: MulterFile) {
     if (!file?.buffer) throw new BadRequestException('缺少音频文件');
     return this.svc.transcribe(user, file.buffer);
