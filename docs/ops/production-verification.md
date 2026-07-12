@@ -7,15 +7,22 @@ This document is the release checklist for the production-hardening roadmap in `
 Run before committing production-hardening changes:
 
 ```powershell
+$env:TARO_APP_API='https://api.ci.invalid/api'
+$env:TARO_APP_WX_APPID='wx0000000000000000'
 corepack pnpm@10.33.2 verify:local
 ```
 
 This expands to:
 
-- `pnpm --filter @nongchang/shared build`
-- `pnpm --filter @nongchang/backend build`
-- `pnpm --filter web lint`
+- shared and backend builds
+- web typecheck and monorepo-wide warning-free ESLint
 - `pnpm test:unit`
+- web and production miniapp builds
+- `pnpm audit --prod --audit-level high`
+
+The miniapp build rejects missing variables, non-HTTPS API URLs, placeholder hosts,
+API paths that do not end in `/api`, and malformed WeChat AppIDs. Replace the CI
+values above with the real production API URL and AppID for a release build.
 
 ## Full Production Gate
 
@@ -37,6 +44,8 @@ Run the full gate:
 
 ```powershell
 $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public'
+$env:TARO_APP_API='https://api.ci.invalid/api'
+$env:TARO_APP_WX_APPID='wx0000000000000000'
 corepack pnpm@10.33.2 verify:production
 ```
 

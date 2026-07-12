@@ -58,7 +58,7 @@ describe('MerchantAdmin production actions', () => {
   });
 
   it('generates trace codes through the real API from the side panel', async () => {
-    const { container } = render(<MerchantAdmin />);
+    render(<MerchantAdmin />);
     await screen.findByText('Peony');
 
     fireEvent.click(screen.getByText('Peony'));
@@ -77,7 +77,7 @@ describe('MerchantAdmin production actions', () => {
     generateCodesMock
       .mockRejectedValueOnce(new Error('confirm down'))
       .mockResolvedValueOnce([{ code: 'TRACE-001' }]);
-    const { container } = render(<MerchantAdmin />);
+    render(<MerchantAdmin />);
     await screen.findByText('Peony');
 
     fireEvent.click(screen.getByText('Peony'));

@@ -5,24 +5,21 @@
     "build:shared": "pnpm --filter @nongchang/shared build",
     "build:backend": "pnpm --filter @nongchang/backend build",
     "build": "pnpm build:shared && pnpm build:backend",
+    "lint": "eslint packages/backend/src packages/shared/src packages/web/src packages/miniapp/src --max-warnings=0",
+    "typecheck:web": "pnpm --filter web lint",
+    "build:web": "pnpm --filter web build",
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
+    "audit:prod": "pnpm audit --prod --audit-level high",
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:shared && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
     "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e",
-    "verify:local": "pnpm --filter @nongchang/shared build && pnpm --filter @nongchang/backend build && pnpm --filter web lint && pnpm test:unit",
+    "verify:local": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm build:web && pnpm build:miniapp && pnpm audit:prod",
     "verify:production": "pnpm verify:local && pnpm test:e2e"
   },
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@10.33.2",
-  "pnpm": {
-    "overrides": {
-      "multer": "2.2.0",
-      "swiper": "12.1.2",
-      "glob@10.4.5": "10.5.0"
-    }
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.5.0",

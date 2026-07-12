@@ -36,6 +36,8 @@ jobs:
       JWT_SECRET: ci-jwt-secret-not-for-production-use-only
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-not-for-production-use
       APP_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      TARO_APP_API: https://api.ci.invalid/api
+      TARO_APP_WX_APPID: wx0000000000000000
 
     steps:
       - uses: actions/checkout@v4
@@ -70,12 +72,7 @@ jobs:
           DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
         run: pnpm prisma:seed
 
-      - name: Production verification gates (non-e2e)
-        env:
-          DATABASE_URL: postgresql://unit:unit@127.0.0.1:1/unit?schema=public
-        run: pnpm verify:local
-
-      - name: Backend e2e tests
+      - name: Full production verification
         env:
           DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
-        run: pnpm test:e2e
+        run: pnpm verify:production

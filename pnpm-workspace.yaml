@@ -1,6 +1,11 @@
 packages:
   - "packages/*"
 
+overrides:
+  multer: 2.2.0
+  swiper: 12.1.2
+  glob@10.4.5: 10.5.0
+
 allowBuilds:
   '@nestjs/core': false
   '@parcel/watcher': false
