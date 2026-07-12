@@ -434,6 +434,9 @@ export class BillingService {
         },
       });
       if (!reservation || reservation.status !== 'RESERVED') return false;
+      if (reservation.resource === 'AI' || reservation.refType?.startsWith('ai.')) {
+        return false;
+      }
       const existingTerminalLedger = await tx.creditLedger.findFirst({
         where: {
           accountId: reservation.accountId,

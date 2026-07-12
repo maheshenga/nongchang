@@ -350,6 +350,24 @@ describe('BillingService reservation model', () => {
     expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(0);
   });
 
+  it('releaseStaleReservations leaves AI operations for the dedicated reconciler', async () => {
+    const { svc, state, ledgers, reservations } = makeService({ aiBalance: 10 });
+    await svc.reserve(merchant, 'AI', 1, {
+      refType: 'ai.chat',
+      idempotencyKey: 'ai.chat:t1:u3:operation-1',
+    });
+
+    const out = await svc.releaseStaleReservations({
+      olderThanMinutes: 30,
+      now: new Date('2026-07-06T01:00:00.000Z'),
+    });
+
+    expect(out).toMatchObject({ scanned: 1, released: 0, skipped: 1, errors: [] });
+    expect(state.aiBalance).toBe(9);
+    expect(reservations[0].status).toBe('RESERVED');
+    expect(ledgers.filter((ledger) => ledger.reason === 'RELEASED')).toHaveLength(0);
+  });
+
   it('releaseStaleReservations releases stale RESERVED rows once', async () => {
     const { svc, state, ledgers, reservations } = makeService({ codeBalance: 10 });
     await svc.reserve(merchant, 'CODE', 5, { refType: 'trace.generate', idempotencyKey: 'trace:release' });
