@@ -26,6 +26,7 @@ describe('api/ai', () => {
     const arg = (taro.request as any).mock.calls[0][0];
     expect(arg.url).toMatch(/\/ai\/chat$/);
     expect(arg.method).toBe('POST');
+    expect(arg.header['Idempotency-Key']).toMatch(/^[A-Za-z0-9._:-]{16,128}$/);
     expect(arg.data).toEqual({ message: '番茄叶发黄?' });
   });
 
@@ -35,6 +36,7 @@ describe('api/ai', () => {
     expect(out).toBe('健康');
     const arg = (taro.request as any).mock.calls[0][0];
     expect(arg.url).toMatch(/\/ai\/diagnose$/);
+    expect(arg.header['Idempotency-Key']).toMatch(/^[A-Za-z0-9._:-]{16,128}$/);
     expect(arg.data).toEqual({ imageUrl: 'https://x/i.jpg', note: '症状3天' });
   });
 
@@ -58,6 +60,7 @@ describe('api/ai', () => {
     expect(arg.url).toMatch(/\/ai\/transcribe$/);
     expect(arg.name).toBe('file');
     expect(arg.filePath).toBe('/tmp/a.pcm');
+    expect(arg.header['Idempotency-Key']).toMatch(/^[A-Za-z0-9._:-]{16,128}$/);
   });
 
   it('transcribeVoice surfaces backend message on non-2xx', async () => {
@@ -84,5 +87,7 @@ describe('api/ai', () => {
     expect(out).toBe('浇水完成');
     expect(taro.uploadFile).toHaveBeenCalledTimes(2);
     expect((taro.uploadFile as any).mock.calls[1][0].header.Authorization).toBe(`Bearer ${freshAccess}`);
+    expect((taro.uploadFile as any).mock.calls[1][0].header['Idempotency-Key'])
+      .toBe((taro.uploadFile as any).mock.calls[0][0].header['Idempotency-Key']);
   });
 });

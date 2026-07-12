@@ -105,6 +105,27 @@ Do not report e2e as passing until `corepack pnpm@10.33.2 test:e2e` exits `0`.
 
 ## AI Credit Reconciliation
 
+All billable AI requests must include an `Idempotency-Key` header containing 16
+to 128 characters from `A-Z`, `a-z`, `0-9`, `.`, `_`, `:`, or `-`. A client
+creates the key once for a user action and reuses it for transport retries. A
+new user action must use a new key.
+
+Duplicate requests have a stable contract:
+
+- confirmed operations replay the stored sanitized result envelope;
+- reserved, in-flight, or provider-succeeded operations return HTTP `202` with
+  `code=AI_OPERATION_IN_PROGRESS`, the operation ID/status, and retry guidance;
+- review-required operations return HTTP `409` with
+  `code=AI_OPERATION_REVIEW_REQUIRED`;
+- terminal failures and non-replayable confirmed rows return HTTP `409` and
+  require a new user action/key.
+
+The reservation, debit ledger, and AI operation row are created atomically.
+Generic stale-reservation recovery must not release AI-owned reservations.
+An aged AI reservation without an operation row is converted into a
+`REVIEW_REQUIRED` operation so an ambiguous provider outcome cannot silently
+restore credit.
+
 Preview stale reservations and AI operations without changing balances:
 
 ```powershell

@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { AuthUser } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from './billing.service';
@@ -51,28 +52,17 @@ export class AiBillingCoordinator {
     input: AiBillingExecutionInput,
     providerCall: () => Promise<T>,
   ): Promise<T> {
-    const reservation = await this.billing.reserve(input.user, 'AI', input.amount, input.ref);
-
-    try {
-      await this.prisma.aiOperation.create({
-        data: {
-          tenantId: input.user.tenantId,
-          userId: input.user.userId,
-          providerId: input.providerId ?? null,
-          kind: input.kind,
-          operationKey: input.operationKey,
-          reservationId: reservation.reservationId,
-          status: 'RESERVED',
-        },
-      });
-    } catch (error) {
-      try {
-        await this.billing.releaseReservation(input.user, 'AI', input.amount, input.ref);
-      } catch {
-        // Preserve the durable-row failure; generic stale recovery can still inspect the reservation.
-      }
-      throw error;
-    }
+    const reserved = await this.billing.reserveAiOperation({
+      user: input.user,
+      amount: input.amount,
+      ref: input.ref,
+      operation: {
+        providerId: input.providerId ?? null,
+        kind: input.kind,
+        operationKey: input.operationKey,
+      },
+    });
+    if (reserved.existing) return this.handleExisting<T>(reserved.operation);
 
     await this.updateStatus(input, 'IN_FLIGHT');
 
@@ -104,8 +94,34 @@ export class AiBillingCoordinator {
 
     await this.updateStatus(input, 'SUCCEEDED');
     await this.billing.confirmReservation(input.user, 'AI', input.ref);
-    await this.updateStatus(input, 'CONFIRMED');
+    await this.updateStatus(input, 'CONFIRMED', { resultEnvelope: result as Prisma.InputJsonValue });
     return result;
+  }
+
+  private handleExisting<T>(operation: { id: string; status: string; resultEnvelope?: unknown }): T {
+    if (operation.status === 'CONFIRMED' && operation.resultEnvelope !== null && operation.resultEnvelope !== undefined) {
+      return operation.resultEnvelope as T;
+    }
+    if (['RESERVED', 'IN_FLIGHT', 'SUCCEEDED'].includes(operation.status)) {
+      throw new HttpException({
+        statusCode: HttpStatus.ACCEPTED,
+        code: 'AI_OPERATION_IN_PROGRESS',
+        operationId: operation.id,
+        status: operation.status,
+        retryAfterSeconds: 2,
+      }, HttpStatus.ACCEPTED);
+    }
+    const code = operation.status === 'REVIEW_REQUIRED'
+      ? 'AI_OPERATION_REVIEW_REQUIRED'
+      : operation.status === 'CONFIRMED'
+        ? 'AI_RESULT_NOT_REPLAYABLE'
+        : 'AI_OPERATION_TERMINAL_FAILURE';
+    throw new HttpException({
+      statusCode: HttpStatus.CONFLICT,
+      code,
+      operationId: operation.id,
+      status: operation.status,
+    }, HttpStatus.CONFLICT);
   }
 
   async reconcileStale(query: AiReconciliationQuery): Promise<AiReconciliationResult> {
@@ -114,12 +130,18 @@ export class AiBillingCoordinator {
       throw new Error('take must be an integer between 1 and 1000');
     }
 
+    const candidateIds = await this.prisma.$transaction(async (tx) => tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM ai_operations
+      WHERE created_at < ${query.cutoff}
+        AND status IN ('RESERVED', 'FAILED', 'SUCCEEDED', 'IN_FLIGHT', 'REVIEW_REQUIRED')
+      ORDER BY created_at ASC
+      LIMIT ${take}
+      FOR UPDATE SKIP LOCKED
+    `);
     const operations = await this.prisma.aiOperation.findMany({
       where: {
-        createdAt: { lt: query.cutoff },
-        status: {
-          in: ['RESERVED', 'FAILED', 'SUCCEEDED', 'IN_FLIGHT', 'REVIEW_REQUIRED'],
-        },
+        id: { in: candidateIds.map((row) => row.id) },
       },
       orderBy: { createdAt: 'asc' },
       take,
@@ -142,8 +164,23 @@ export class AiBillingCoordinator {
       },
     });
 
+    const orphanLimit = Math.max(0, take - operations.length);
+    const orphans = orphanLimit === 0 ? [] : await this.prisma.$transaction(async (tx) => tx.$queryRaw<Array<{
+      id: string; tenantId: string; userId: string | null; kind: string | null; operationKey: string;
+    }>>`
+      SELECT r.id, r.tenant_id AS "tenantId", r.operator_id AS "userId",
+             r.ref_type AS kind, r.idempotency_key AS "operationKey"
+      FROM credit_reservations r
+      LEFT JOIN ai_operations o ON o.reservation_id = r.id
+      WHERE r.resource = 'AI' AND r.status = 'RESERVED'
+        AND r.created_at < ${query.cutoff} AND o.id IS NULL
+      ORDER BY r.created_at ASC
+      LIMIT ${orphanLimit}
+      FOR UPDATE OF r SKIP LOCKED
+    `);
+
     const result: AiReconciliationResult = {
-      scanned: operations.length,
+      scanned: operations.length + orphans.length,
       confirmed: 0,
       released: 0,
       reviewRequired: 0,
@@ -203,6 +240,38 @@ export class AiBillingCoordinator {
       }
     }
 
+    for (const orphan of orphans) {
+      if (query.dryRun) {
+        result.skipped += 1;
+        continue;
+      }
+      try {
+        if (!orphan.userId) throw new Error('Orphan AI reservation has no operator');
+        await this.prisma.aiOperation.create({
+          data: {
+            tenantId: orphan.tenantId,
+            userId: orphan.userId,
+            providerId: null,
+            kind: orphan.kind ?? 'ai.orphan',
+            operationKey: orphan.operationKey,
+            reservationId: orphan.id,
+            status: 'REVIEW_REQUIRED',
+            errorCategory: 'ORPHAN_RESERVATION',
+          },
+        });
+        result.reviewRequired += 1;
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'P2002') {
+          result.skipped += 1;
+          continue;
+        }
+        result.errors.push({
+          operationId: orphan.id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return result;
   }
 
@@ -215,10 +284,14 @@ export class AiBillingCoordinator {
     };
   }
 
-  private updateStatus(input: AiBillingExecutionInput, status: AiOperationState) {
+  private updateStatus(
+    input: AiBillingExecutionInput,
+    status: AiOperationState,
+    extra: { resultEnvelope?: Prisma.InputJsonValue } = {},
+  ) {
     return this.prisma.aiOperation.update({
       where: this.operationWhere(input),
-      data: { status },
+      data: { status, ...extra },
     });
   }
 

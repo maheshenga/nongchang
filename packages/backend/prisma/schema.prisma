@@ -509,6 +509,7 @@ model AiOperation {
   reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
   status        AiOperationStatus  @default(RESERVED)
   errorCategory String?            @map("error_category")
+  resultEnvelope Json?             @map("result_envelope")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
   tenant        Tenant             @relation(fields: [tenantId], references: [id])

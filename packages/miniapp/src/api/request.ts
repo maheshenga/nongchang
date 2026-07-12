@@ -14,6 +14,7 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH';
   data?: Record<string, unknown>;
   auth?: boolean;
+  header?: Record<string, string>;
 }
 
 class RequestError extends Error {
@@ -72,7 +73,7 @@ async function getUsableAccessToken(): Promise<string> {
   return token;
 }
 
-async function send<T>({ url, method = 'GET', data, auth = true }: RequestOptions, token: string): Promise<T> {
+async function send<T>({ url, method = 'GET', data, auth = true, header = {} }: RequestOptions, token: string): Promise<T> {
   const res = await Taro.request({
     url: `${BASE_URL}${url}`,
     method,
@@ -80,6 +81,7 @@ async function send<T>({ url, method = 'GET', data, auth = true }: RequestOption
     timeout: TIMEOUT,
     header: {
       'Content-Type': 'application/json',
+      ...header,
       ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
@@ -90,11 +92,11 @@ async function send<T>({ url, method = 'GET', data, auth = true }: RequestOption
   return res.data as T;
 }
 
-export async function request<T>({ url, method = 'GET', data, auth = true }: RequestOptions): Promise<T> {
+export async function request<T>({ url, method = 'GET', data, auth = true, header = {} }: RequestOptions): Promise<T> {
   // 本地预判 token 过期:省掉一次必然 401 的往返,优先用 refresh token 静默续期。
   let token = auth ? await getUsableAccessToken() : '';
   try {
-    return await send<T>({ url, method, data, auth }, token);
+    return await send<T>({ url, method, data, auth, header }, token);
   } catch (err) {
     if (!auth || !(err instanceof RequestError) || err.status !== 401) throw err;
     if (!getRefreshToken()) {
@@ -102,7 +104,7 @@ export async function request<T>({ url, method = 'GET', data, auth = true }: Req
     }
     token = await refreshAccessToken();
     try {
-      return await send<T>({ url, method, data, auth }, token);
+      return await send<T>({ url, method, data, auth, header }, token);
     } catch (retryErr) {
       if (retryErr instanceof RequestError && retryErr.status === 401) expireSession();
       throw retryErr;
@@ -110,14 +112,14 @@ export async function request<T>({ url, method = 'GET', data, auth = true }: Req
   }
 }
 
-export async function uploadMultipart(url: string, filePath: string): Promise<{ statusCode: number; data: string }> {
+export async function uploadMultipart(url: string, filePath: string, header: Record<string, string> = {}): Promise<{ statusCode: number; data: string }> {
   let token = await getUsableAccessToken();
   let res = await Taro.uploadFile({
     url: `${BASE_URL}${url}`,
     filePath,
     name: 'file',
     timeout: TIMEOUT,
-    header: token ? { Authorization: `Bearer ${token}` } : {},
+    header: { ...header, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
   if (res.statusCode === 401) {
     if (!getRefreshToken()) expireSession();
@@ -127,7 +129,7 @@ export async function uploadMultipart(url: string, filePath: string): Promise<{ 
       filePath,
       name: 'file',
       timeout: TIMEOUT,
-      header: token ? { Authorization: `Bearer ${token}` } : {},
+      header: { ...header, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
     if (res.statusCode === 401) expireSession();
   }

@@ -27,12 +27,12 @@ export class AiService {
     private scope: ScopeService,
   ) {}
 
-  async chat(user: AuthUser, message: string): Promise<AiChatResponse> {
+  async chat(user: AuthUser, message: string, clientKey?: string): Promise<AiChatResponse> {
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
     const body = buildChatCompletionBody(p.textModel, message);
     // Reserve first so insufficient credits fail before starting a paid provider call.
-    const ref = this.operationRef('ai.chat', user);
+    const ref = this.operationRef('ai.chat', user, undefined, clientKey);
     const answer = await this.billing.execute({
       user,
       providerId: p.id,
@@ -44,7 +44,7 @@ export class AiService {
     return { answer };
   }
 
-  async advice(user: AuthUser, input: AiAdviceInput): Promise<AiChatResponse> {
+  async advice(user: AuthUser, input: AiAdviceInput, clientKey?: string): Promise<AiChatResponse> {
     await this.scope.assertInScope(this.prisma, user, 'batch', input.batchId);
     const batch = await this.prisma.batch.findFirst({ where: { id: input.batchId }, select: { cropName: true, status: true, plantDate: true } });
     const records = await this.prisma.farmRecord.findMany({ where: { batchId: input.batchId }, orderBy: { createdAt: 'desc' }, take: 10, select: { action: true } });
@@ -52,7 +52,7 @@ export class AiService {
     const nowMs = Date.now();
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
-    const ref = this.operationRef('ai.advice', user, input.batchId);
+    const ref = this.operationRef('ai.advice', user, input.batchId, clientKey);
     const body = buildAdviceChatBody(p.textModel, { batch, records, phenology: phen }, nowMs);
     const answer = await this.billing.execute({
       user,
@@ -65,13 +65,13 @@ export class AiService {
     return { answer };
   }
 
-  async ask(user: AuthUser, input: AiAskInput): Promise<AiChatResponse> {
+  async ask(user: AuthUser, input: AiAskInput, clientKey?: string): Promise<AiChatResponse> {
     const where = this.scope.ownedEntityWhere(user);
     const batches = await this.prisma.batch.findMany({ where, select: { batchNo: true, cropName: true, status: true, plantDate: true }, take: 50 });
     const nowMs = Date.now();
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
-    const ref = this.operationRef('ai.ask', user);
+    const ref = this.operationRef('ai.ask', user, undefined, clientKey);
     const body = buildAskChatBody(p.textModel, batches, input.question, nowMs);
     const answer = await this.billing.execute({
       user,
@@ -84,12 +84,12 @@ export class AiService {
     return { answer };
   }
 
-  async diagnose(user: AuthUser, input: AiDiagnoseInput): Promise<AiDiagnoseResponse> {
+  async diagnose(user: AuthUser, input: AiDiagnoseInput, clientKey?: string): Promise<AiDiagnoseResponse> {
     const p = await this.providers.getEnabled(user);
     if (!p) throw new BadRequestException('未配置可用的 AI 服务商');
     if (!p.visionModel) throw new BadRequestException('未配置视觉模型');
     const visionModel = p.visionModel;
-    const ref = this.operationRef('ai.diagnose', user);
+    const ref = this.operationRef('ai.diagnose', user, undefined, clientKey);
     const result = await this.billing.execute({
       user,
       providerId: p.id,
@@ -101,11 +101,11 @@ export class AiService {
     return { result };
   }
 
-  async transcribe(user: AuthUser, audio: Buffer, factory?: WebSocketFactory): Promise<AiTranscribeResponse> {
+  async transcribe(user: AuthUser, audio: Buffer, factory?: WebSocketFactory, clientKey?: string): Promise<AiTranscribeResponse> {
     if (!audio || audio.length === 0) throw new BadRequestException('音频为空');
     const creds = await this.integrations.getEnabledXfyun(user.tenantId);
     if (!creds) throw new BadRequestException('未配置讯飞语音');
-    const ref = this.operationRef('ai.transcribe', user);
+    const ref = this.operationRef('ai.transcribe', user, undefined, clientKey);
     const text = await this.billing.execute({
       user,
       providerId: 'integration:xfyun',
@@ -123,8 +123,8 @@ export class AiService {
     return { text };
   }
 
-  private operationRef(kind: AiOperationKind, user: AuthUser, refId?: string) {
-    const digest = createHash('sha256').update(randomUUID()).digest('hex').slice(0, 16);
+  private operationRef(kind: AiOperationKind, user: AuthUser, refId?: string, clientKey?: string) {
+    const digest = clientKey ?? createHash('sha256').update(randomUUID()).digest('hex').slice(0, 16);
     return buildAiOperationRef(kind, user, digest, refId);
   }
 
