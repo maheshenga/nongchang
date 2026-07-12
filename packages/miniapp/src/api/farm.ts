@@ -40,8 +40,8 @@ export function listSupplies(): Promise<SupplyItem[]> {
   return request<SupplyItem[]>({ url: '/supplies' });
 }
 
-export function uploadImage(filePath: string): Promise<string> {
-  return uploadFile(filePath);
+export function uploadImage(filePath: string, purpose: 'farm-record' | 'ai-diagnose'): Promise<string> {
+  return uploadFile(filePath, purpose);
 }
 
 export type Field = FieldView;

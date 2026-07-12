@@ -135,8 +135,10 @@ export async function uploadMultipart(url: string, filePath: string): Promise<{ 
 }
 
 // 单文件上传(multipart),走 Taro.uploadFile 而非 request
-export async function uploadFile(filePath: string): Promise<string> {
-  const res = await uploadMultipart('/uploads', filePath);
+export type UploadPurpose = 'farm-record' | 'credential' | 'ai-diagnose';
+
+export async function uploadFile(filePath: string, purpose: UploadPurpose): Promise<string> {
+  const res = await uploadMultipart(`/uploads?purpose=${encodeURIComponent(purpose)}`, filePath);
   if (res.statusCode < 200 || res.statusCode >= 300) {
     throw new Error(`图片上传失败(${res.statusCode})`);
   }

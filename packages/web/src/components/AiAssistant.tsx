@@ -53,7 +53,7 @@ export default function AiAssistant() {
     setResult('');
     setImageUrl('');
     try {
-      const res = await uploadImage(file);
+      const res = await uploadImage(file, 'ai-diagnose');
       setImageUrl(res.url);
       setImageName(file.name);
     } catch (err) {
@@ -93,7 +93,7 @@ export default function AiAssistant() {
     try {
       for (const file of batchFiles) {
         try {
-          const up = await uploadImage(file);
+          const up = await uploadImage(file, 'ai-diagnose');
           const res = await aiDiagnose({ imageUrl: up.url });
           done.push({ name: file.name, result: res.result });
           setBatchResults([...done]);

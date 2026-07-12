@@ -1,26 +1,28 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { UploadResponse } from '@nongchang/shared';
+import { Role, type AuthUser, type UploadResponse } from '@nongchang/shared';
+import { PrismaService } from '../../prisma/prisma.service';
 import { OssService } from './oss.service';
 import {
   buildUploadObjectKey,
   validateUploadFile,
 } from './upload.model';
-import type { UploadedFile } from './upload.model';
+import type { UploadedFile, UploadPurpose } from './upload.model';
 
 export interface UploadOptions {
-  purpose?: 'farm-record' | 'credential' | string;
+  purpose?: UploadPurpose | string;
 }
 
 export type { UploadedFile };
 
 @Injectable()
 export class UploadService {
-  constructor(private oss: OssService) {}
+  constructor(private oss: OssService, private prisma: PrismaService) {}
 
-  async upload(file: UploadedFile, tenantId?: string, options: UploadOptions = {}): Promise<UploadResponse> {
+  async upload(file: UploadedFile, user: AuthUser, options: UploadOptions = {}): Promise<UploadResponse> {
     const validation = validateUploadFile({ file, purpose: options.purpose });
     if (!validation.ok) throw new BadRequestException(validation.message);
+    await this.assertPurposeAuthorized(user, validation.purpose);
 
     const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
     const key = buildUploadObjectKey({
@@ -29,7 +31,24 @@ export class UploadService {
       id: randomUUID(),
       ext: validation.ext,
     });
-    const url = await this.oss.put(key, file.buffer, tenantId);
+    const url = await this.oss.put(key, file.buffer, user.tenantId);
     return { url };
+  }
+
+  private async assertPurposeAuthorized(user: AuthUser, purpose: UploadPurpose): Promise<void> {
+    if (purpose === 'ai-diagnose') return;
+
+    const bypassRoles: Role[] = [Role.PLATFORM_ADMIN, Role.SYSTEM_ADMIN, Role.AGENT_ADMIN];
+    if (bypassRoles.includes(user.role)) return;
+    if (purpose === 'credential') throw new ForbiddenException('无权上传资质文件');
+
+    const row = await this.prisma.user.findFirst({
+      where: { id: user.userId, tenantId: user.tenantId },
+      select: { group: { select: { permissions: true } } },
+    }) as { group: { permissions: unknown } | null } | null;
+    const permissions = row?.group?.permissions;
+    if (!Array.isArray(permissions) || !permissions.includes('record:create')) {
+      throw new ForbiddenException('用户组权限不足');
+    }
   }
 }

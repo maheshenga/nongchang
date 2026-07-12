@@ -9,7 +9,7 @@ export const UPLOAD_ERROR_MESSAGES = {
   signatureMismatch: '文件内容与类型不匹配',
 } as const;
 
-export type UploadPurpose = 'farm-record' | 'credential';
+export type UploadPurpose = 'farm-record' | 'credential' | 'ai-diagnose';
 
 export interface UploadedFile {
   originalname: string;
@@ -35,7 +35,7 @@ export type UploadValidationResult =
 
 export function resolveUploadPurpose(rawPurpose?: string): UploadPurpose | null {
   const purpose = rawPurpose ?? 'farm-record';
-  return purpose === 'farm-record' || purpose === 'credential' ? purpose : null;
+  return purpose === 'farm-record' || purpose === 'credential' || purpose === 'ai-diagnose' ? purpose : null;
 }
 
 export function getAllowedExtension(purpose: UploadPurpose, mimetype: string): string | null {
@@ -78,6 +78,10 @@ export function validateUploadFile(input: { file?: UploadedFile | null; purpose?
 }
 
 export function buildUploadObjectKey(input: { purpose: UploadPurpose; yyyymm: string; id: string; ext: string }): string {
-  const folder = input.purpose === 'credential' ? 'credentials' : 'farm-records';
+  const folder = input.purpose === 'credential'
+    ? 'credentials'
+    : input.purpose === 'ai-diagnose'
+      ? 'ai-diagnose'
+      : 'farm-records';
   return `${folder}/${input.yyyymm}/${input.id}.${input.ext}`;
 }
