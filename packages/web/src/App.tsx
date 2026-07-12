@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
+import AppWorkspaceViews from './components/AppWorkspaceViews';
 import GlobalSearch from './components/GlobalSearch';
 import { useAuth } from './auth/auth-context';
 import { DialogHost } from './hooks/useDialog';
@@ -9,27 +10,7 @@ import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRol
 import { fluentButton } from './ui/fluent';
 
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
-const MerchantAdmin = lazy(() => import('./components/MerchantAdmin'));
-const Dashboard = lazy(() => import('./components/Dashboard'));
-const BatchAdmin = lazy(() => import('./components/BatchAdmin'));
-const FarmRecords = lazy(() => import('./components/FarmRecords'));
-const LogisticsTracker = lazy(() => import('./components/LogisticsTracker'));
-const FarmFields = lazy(() => import('./components/FarmFields'));
-const Settings = lazy(() => import('./components/Settings'));
-const MemberCenter = lazy(() => import('./components/MemberCenter'));
-const AgentManagement = lazy(() => import('./components/AgentManagement'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
-const MerchantManagement = lazy(() => import('./components/MerchantManagement'));
-const AiProviders = lazy(() => import('./components/AiProviders'));
-const SystemSettings = lazy(() => import('./components/SystemSettings'));
-const IntegrationSettings = lazy(() => import('./components/IntegrationSettings'));
-const UserGroups = lazy(() => import('./components/UserGroups'));
-const PendingUsers = lazy(() => import('./components/PendingUsers'));
-const QuickTemplates = lazy(() => import('./components/QuickTemplates'));
-const AiAssistant = lazy(() => import('./components/AiAssistant'));
-const PhenologyAdmin = lazy(() => import('./components/PhenologyAdmin'));
-const BillingAdmin = lazy(() => import('./components/BillingAdmin'));
-const TenantManagement = lazy(() => import('./components/TenantManagement'));
 const PayResult = lazy(() => import('./components/PayResult'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
 
@@ -188,7 +169,6 @@ export default function App() {
     );
   }
 
-  const isMounted = (tab: AppTab) => mountedTabs.has(tab) && allowedTabs.includes(tab);
   const activeItem = flatNavItems.find(i => i.id === activeTab);
   const renderNavSections = (mobile = false) => navItems.map((category) => (
     <div key={category.category} className="py-1">
@@ -327,30 +307,13 @@ export default function App() {
         )}
 
         <section className={`fluent-scrollbar min-h-0 flex-1 overflow-auto ${isPresentationMode ? 'p-0' : 'p-4 md:p-6'}`}>
-          <Suspense fallback={<ViewSkeleton />}>
-            <div className="h-full relative">
-              {isMounted('overview') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'overview' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Dashboard /></div>}
-              {isMounted('fields') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'fields' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmFields /></div>}
-              {isMounted('tenants') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'tenants' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><TenantManagement /></div>}
-              {isMounted('agents') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'agents' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AgentManagement /></div>}
-              {isMounted('merchant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantAdmin onNavigate={setActiveTab} /></div>}
-              {isMounted('batches') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'batches' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BatchAdmin /></div>}
-              {isMounted('records') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'records' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><FarmRecords /></div>}
-              {isMounted('logistics') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'logistics' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><LogisticsTracker /></div>}
-              {isMounted('memberHome') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'memberHome' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MemberCenter /></div>}
-              {isMounted('settings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'settings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><Settings /></div>}
-              {isMounted('merchantFiles') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'merchantFiles' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><MerchantManagement /></div>}
-              {isMounted('aiProviders') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiProviders' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiProviders /></div>}
-              {isMounted('aiOssSettings') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiOssSettings' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><SystemSettings /></div>}
-              {isMounted('integrations') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'integrations' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><IntegrationSettings /></div>}
-              {isMounted('userGroups') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'userGroups' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><UserGroups /></div>}
-              {isMounted('pendingUsers') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'pendingUsers' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PendingUsers /></div>}
-              {isMounted('quickTemplates') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'quickTemplates' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><QuickTemplates /></div>}
-              {isMounted('aiAssistant') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'aiAssistant' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><AiAssistant /></div>}
-              {isMounted('phenology') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'phenology' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><PhenologyAdmin /></div>}
-              {isMounted('billing') && <div className={`h-full transition-opacity duration-300 ${activeTab === 'billing' ? 'opacity-100 block' : 'opacity-0 hidden'}`}><BillingAdmin /></div>}
-            </div>
-          </Suspense>
+          <AppWorkspaceViews
+            activeTab={activeTab}
+            mountedTabs={mountedTabs}
+            allowedTabs={allowedTabs}
+            onNavigate={setActiveTab}
+            fallback={<ViewSkeleton />}
+          />
         </section>
       </main>
 
