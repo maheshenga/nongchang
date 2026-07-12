@@ -86,11 +86,29 @@ location /api/ {
     proxy_pass http://127.0.0.1:3001;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 location / {
     try_files $uri $uri/ /index.html;
 }
 ```
+
+在同一个 HTTPS `server` 块中加入以下响应头。Web 管理端与 `/api` 必须保持同源，
+这样 `nc_refresh` HttpOnly Cookie 才只会发送到 `/api/auth/web`：
+
+```nginx
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self)" always;
+add_header X-Frame-Options "DENY" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; connect-src 'self' https:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self' https://*.alipay.com https://*.alipaydev.com" always;
+```
+
+不要给 `script-src` 添加 `'unsafe-inline'`。当前页面中的 `application/ld+json`
+是结构化数据而非可执行脚本。发布后应在浏览器控制台确认无 CSP 违规，并完成登录、
+静默刷新、主要管理页面加载和支付宝跳转的冒烟验证。
 
 ## 7. 安全提醒
 
