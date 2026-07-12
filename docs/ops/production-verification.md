@@ -83,6 +83,8 @@ Expected results:
 
 A readiness `503` must remove the instance from traffic or block it from joining the load-balancer pool. Do not restart PM2 solely for a transient database outage; restart only when the process/liveness policy calls for it. Re-admit the instance after readiness returns `200` again.
 
+During a controlled `SIGTERM`, readiness must change to `503` before the process exits. Confirm the load balancer stops new traffic, in-flight requests finish within the PM2 shutdown window, and the replacement instance reaches `ready` before it is admitted.
+
 Verify request-ID propagation with a safe, recognizable value:
 
 ```powershell
@@ -125,6 +127,33 @@ Interpret `result.ai` as follows:
 Reconciliation rows contain only operation identity, status, provider ID, and a stable
 error category. Prompts, images, audio, provider credentials, and provider response
 bodies must never be copied into `ai_operations`.
+
+## Upload Quota And Cleanup
+
+Production must set and review these tenant-wide limits:
+
+```env
+TRUST_PROXY_HOPS=1
+UPLOAD_DAILY_BYTES_LIMIT=104857600
+UPLOAD_ACTIVE_BYTES_LIMIT=5368709120
+UPLOAD_PENDING_MAX_AGE_MINUTES=60
+```
+
+Quota exhaustion returns HTTP `429` with a stable body containing `code=UPLOAD_QUOTA_EXCEEDED`, `scope` (`daily` or `active`), `limitBytes`, and `usedBytes`. Do not retry in a tight loop; surface the limit to the operator or wait for UTC day rollover for a daily limit.
+
+Preview stale `PENDING` assets:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --limit 100
+```
+
+After reviewing the bounded dry-run result, execute cleanup:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --limit 100 --execute
+```
+
+The command deletes the OSS object before marking the asset `DELETED` and releasing counters. It is idempotent; a non-zero exit status means some objects or rows remain for investigation. Never delete upload ledger rows manually to hide quota drift.
 
 ## Phase 1-6 And Stage C Coverage Matrix
 

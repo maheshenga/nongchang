@@ -4,6 +4,9 @@
  * 在 NestFactory.create 之前调用(此时各模块尚未实例化)。
  */
 
+import { readUploadPendingMaxAgeMinutes, readUploadQuotaLimits } from '../../modules/upload/upload-quota.config';
+import { parseTrustProxyHops } from '../network/trusted-proxy';
+
 // 已知的开发占位值,生产环境绝不允许沿用。
 const WEAK_SECRETS = new Set([
   'dev-access-secret-change-me',
@@ -49,4 +52,8 @@ export function validateEnv(): void {
   if (isProd && process.env.ALLOW_MANUAL_PAY === 'true') {
     throw new Error('[启动校验] 生产环境禁止开启 ALLOW_MANUAL_PAY(免支付兜底入账会绕过真实支付),请置空或设为 false');
   }
+
+  parseTrustProxyHops(process.env);
+  readUploadQuotaLimits(process.env);
+  readUploadPendingMaxAgeMinutes(process.env);
 }

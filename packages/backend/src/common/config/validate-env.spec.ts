@@ -5,6 +5,8 @@ import { validateEnv } from './validate-env';
 const KEYS = [
   'NODE_ENV', 'DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET',
   'APP_ENCRYPTION_KEY', 'ALLOW_MANUAL_PAY',
+  'TRUST_PROXY_HOPS', 'UPLOAD_DAILY_BYTES_LIMIT', 'UPLOAD_ACTIVE_BYTES_LIMIT',
+  'UPLOAD_PENDING_MAX_AGE_MINUTES',
 ];
 
 let snapshot: Record<string, string | undefined>;
@@ -80,5 +82,31 @@ describe('validateEnv 基础密钥校验', () => {
     process.env.JWT_SECRET = 'a'.repeat(40);
     process.env.JWT_REFRESH_SECRET = 'b'.repeat(40);
     expect(() => validateEnv()).toThrow(/APP_ENCRYPTION_KEY/);
+  });
+});
+
+describe('validateEnv runtime safety limits', () => {
+  beforeEach(() => {
+    process.env.NODE_ENV = 'development';
+    setValidProdEnv();
+  });
+
+  it.each(['-1', '6', '1.5', 'x'])('rejects invalid TRUST_PROXY_HOPS=%s', (value) => {
+    process.env.TRUST_PROXY_HOPS = value;
+    expect(() => validateEnv()).toThrow(/TRUST_PROXY_HOPS/);
+  });
+
+  it.each([
+    ['UPLOAD_DAILY_BYTES_LIMIT', '0'],
+    ['UPLOAD_DAILY_BYTES_LIMIT', String(Number.MAX_SAFE_INTEGER + 1)],
+    ['UPLOAD_ACTIVE_BYTES_LIMIT', '5242879'],
+    ['UPLOAD_PENDING_MAX_AGE_MINUTES', '0'],
+  ])('rejects invalid %s=%s', (name, value) => {
+    process.env[name] = value;
+    expect(() => validateEnv()).toThrow(new RegExp(name));
+  });
+
+  it('keeps safe non-production defaults usable', () => {
+    expect(() => validateEnv()).not.toThrow();
   });
 });
