@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NotFoundException } from '@nestjs/common';
 import { UserGroupService } from './user-group.service';
 import { Role, type AuthUser } from '@nongchang/shared';
@@ -11,10 +11,12 @@ function makePrisma() {
   const users: any[] = [{ id: 'mem1', tenantId: 't1', agentId: 'a1', groupId: null }];
   let seq = 0;
   let userFindFirstWhere: any;
-  return {
+  let transactionCalls = 0;
+  const prisma: any = {
     get groups() { return groups; },
     get users() { return users; },
     get userFindFirstWhere() { return userFindFirstWhere; },
+    get transactionCalls() { return transactionCalls; },
     userGroup: {
       create: async ({ data }: any) => { const g = { id: 'g' + seq++, createdAt: new Date(), permissions: [], ...data }; groups.push(g); return g; },
       findMany: async ({ where }: any) => groups.filter(g => g.tenantId === where.tenantId),
@@ -34,7 +36,12 @@ function makePrisma() {
       },
       update: async ({ where, data }: any) => { const u = users.find(x => x.id === where.id); Object.assign(u, data); return u; },
     },
-  } as any;
+  };
+  prisma.$transaction = async (callback: (tx: any) => Promise<unknown>) => {
+    transactionCalls += 1;
+    return callback(prisma);
+  };
+  return prisma;
 }
 
 describe('UserGroupService', () => {
@@ -57,6 +64,15 @@ describe('UserGroupService', () => {
     const groupB = prisma.groups.find((g: any) => g.id === b.id);
     expect(groupA.isDefault).toBe(false);
     expect(groupB.isDefault).toBe(true);
+    expect(prisma.transactionCalls).toBe(2);
+  });
+
+  it('updates the default group inside one transaction', async () => {
+    const g = await svc.create(user, { name: 'A' });
+
+    await svc.update(user, g.id, { name: 'A', isDefault: true });
+
+    expect(prisma.transactionCalls).toBe(1);
   });
 
   it('update 修改权限', async () => {
@@ -101,6 +117,25 @@ describe('UserGroupService', () => {
     const agent = { userId: 'a', tenantId: 't1', role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null } as AuthUser;
     await svc.assignUserGroup(agent, { userId: 'mem1', groupId: null });
     expect(prisma.userFindFirstWhere).toEqual({ tenantId: 't1', agentId: 'a1', id: 'mem1' });
+  });
+
+  it('ensureDefault rereads the concurrent winner after a partial-index conflict', async () => {
+    const winner = {
+      id: 'winner', tenantId: 't1', name: 'Default farmers', isDefault: true,
+      permissions: ['record:view'], createdAt: new Date(),
+    };
+    const findFirst = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
+    const concurrentPrisma = {
+      userGroup: {
+        findFirst,
+        create: vi.fn().mockRejectedValue({ code: 'P2002' }),
+      },
+    } as any;
+
+    const result = await new UserGroupService(concurrentPrisma).ensureDefault('t1');
+
+    expect(result.id).toBe('winner');
+    expect(findFirst).toHaveBeenCalledTimes(2);
   });
 
   it('update 空 id 不退化为租户任意组', async () => {
