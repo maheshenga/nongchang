@@ -55,7 +55,7 @@ Default-group changes execute transactionally. PostgreSQL enforces at most one d
 Every uploaded object receives a durable `UploadAsset` record containing tenant, user, purpose, object key, URL, size, checksum, lifecycle status, and timestamps. Object keys start with the tenant ID and purpose. Purpose authorization is explicit:
 
 - `farm-record`: requires `record:create`.
-- `credential`: requires `SYSTEM_ADMIN` or `AGENT_ADMIN` and later credential scope validation.
+- `credential`: requires `SYSTEM_ADMIN` or `AGENT_ADMIN`; attaching the returned URL to a credential remains protected by the existing batch-scope check.
 - `ai-diagnose`: requires an authenticated tenant user and is covered by the AI resource limit.
 
 Unknown purposes are rejected. A transactionally checked database quota limits daily bytes and active stored bytes per tenant. Default limits come from validated environment variables and can be overridden by a future tenant-plan layer without changing the upload interface.
