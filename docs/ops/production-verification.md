@@ -36,9 +36,16 @@ Prepare the database:
 
 ```powershell
 $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public'
+Get-Content packages/backend/prisma/audit-data-consistency.sql -Raw | docker exec -i nongchang-postgis psql -U nongchang -d nongchang
 corepack pnpm@10.33.2 --filter @nongchang/backend prisma:deploy
 corepack pnpm@10.33.2 --filter @nongchang/backend prisma:seed
 ```
+
+The consistency audit must return zero rows. The tenant-consistency migration repeats
+the same preflight and aborts with a stable `tenant_consistency_*` name when historical
+rows disagree on tenant, owner, field, batch, supply, trace, or credit-account ownership.
+Back up and repair those rows before retrying the migration; do not disable the trigger
+or foreign-key checks.
 
 Run the full gate:
 
@@ -62,6 +69,31 @@ If the precheck reports `ECONNREFUSED 127.0.0.1:5544` or says it cannot reach `1
 
 Do not report e2e as passing until `corepack pnpm@10.33.2 test:e2e` exits `0`.
 
+## AI Credit Reconciliation
+
+Preview stale reservations and AI operations without changing balances:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend billing:recover-reservations -- --older-than-minutes=60 --limit=100
+```
+
+Execute AI reconciliation only after reviewing the preview:
+
+```powershell
+corepack pnpm@10.33.2 --filter @nongchang/backend billing:recover-reservations -- --execute --resource=AI --older-than-minutes=60 --limit=100
+```
+
+Interpret `result.ai` as follows:
+
+- `released`: provider work never started or a failure was durably recorded; reserved credit was restored.
+- `confirmed`: provider success was durably recorded; the existing debit was confirmed.
+- `reviewRequired`: the operation remained `IN_FLIGHT`, so the provider outcome is ambiguous. Credit is intentionally unchanged. Compare provider telemetry, request IDs, and the credit ledger before an explicit manual decision.
+- `errors`: reconciliation could not complete safely. Keep the row and investigate; never bulk-release these operations.
+
+Reconciliation rows contain only operation identity, status, provider ID, and a stable
+error category. Prompts, images, audio, provider credentials, and provider response
+bodies must never be copied into `ai_operations`.
+
 ## Phase 1-6 Coverage Matrix
 
 | Roadmap item | Evidence |
@@ -73,3 +105,6 @@ Do not report e2e as passing until `corepack pnpm@10.33.2 test:e2e` exits `0`.
 | Credit reservation behavior prevents duplicate charges and releases failed operations | `packages/backend/src/modules/billing/billing.service.spec.ts`, `packages/backend/src/modules/trace/trace.service.spec.ts`, `packages/backend/src/modules/ai/ai.service.spec.ts`, `docs/ops/credit-ledger-audit.sql` |
 | WeChat tenant-scoped OpenID behavior is covered | `packages/backend/src/auth/auth.service.spec.ts`, `packages/backend/test/integration-wechat.e2e-spec.ts`, `packages/backend/prisma/migrations/20260706130000_wechat_openid_tenant_unique/migration.sql` |
 | Session revocation rejects stale, disabled-user, and disabled-tenant tokens | `packages/backend/src/auth/jwt.strategy.spec.ts`, `packages/backend/src/auth/auth.service.spec.ts`, `packages/backend/src/modules/user/user.service.spec.ts` |
+| Web refresh sessions stay in HttpOnly cookies and rotate/revoke correctly | `packages/backend/test/web-session.e2e-spec.ts`, `packages/web/src/auth/auth-context.spec.tsx`, `packages/web/src/api/request.spec.ts` |
+| AI reservation outcomes are durable and ambiguous calls are quarantined | `packages/backend/src/modules/billing/ai-billing-coordinator.spec.ts`, `packages/backend/test/ai-reconciliation.e2e-spec.ts` |
+| PostgreSQL rejects cross-tenant and cross-owner writes | `packages/backend/test/tenant-constraints.e2e-spec.ts`, `packages/backend/prisma/audit-data-consistency.sql` |

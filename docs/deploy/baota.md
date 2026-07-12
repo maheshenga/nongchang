@@ -53,6 +53,22 @@ pnpm --filter @nongchang/backend prisma:seed
 
 After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
 
+The tenant-consistency migration repeats the SQL audit as a preflight. If deployment
+reports a stable `tenant_consistency_*` name, back up and repair the corresponding
+historical rows first. Never bypass the release by disabling foreign keys or constraint
+triggers.
+
+Preview AI credit reconciliation before executing it:
+
+```bash
+pnpm --filter @nongchang/backend billing:recover-reservations -- --older-than-minutes=60 --limit=100
+```
+
+Only after reviewing candidates should an operator add `--execute --resource=AI`.
+`REVIEW_REQUIRED` means the provider outcome is ambiguous and the credit balance is
+intentionally unchanged; compare provider telemetry and the credit ledger before a
+controlled manual decision. Never automatically release these rows.
+
 ## 4. PM2 管理器启动后端
 
 宝塔「PM2 管理器」添加项目:
