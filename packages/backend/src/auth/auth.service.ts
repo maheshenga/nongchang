@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
@@ -190,10 +190,10 @@ export class AuthService {
 
   private async issueTokens(user: AuthUser): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(user, {
-      secret: process.env.JWT_SECRET, expiresIn: '15m',
+      secret: process.env.JWT_SECRET, expiresIn: '15m', jwtid: randomUUID(),
     });
     const refreshToken = await this.jwt.signAsync(user, {
-      secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d',
+      secret: process.env.JWT_REFRESH_SECRET, expiresIn: '7d', jwtid: randomUUID(),
     });
     return { accessToken, refreshToken };
   }
