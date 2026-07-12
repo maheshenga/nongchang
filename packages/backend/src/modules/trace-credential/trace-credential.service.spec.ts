@@ -10,6 +10,7 @@ const input: CreateTraceCredentialInput = {
 };
 
 function make(batchInScope = true, credInScope = true) {
+  const cache = { invalidateBatch: vi.fn() };
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
     traceCredential: {
@@ -24,7 +25,7 @@ function make(batchInScope = true, credInScope = true) {
     },
     ossConfig: { findUnique: vi.fn().mockResolvedValue({ enabled: true, baseUrl: 'https://oss.example.com/uploads' }) },
   };
-  return { svc: new TraceCredentialService(prisma as any, new ScopeService()), prisma };
+  return { svc: new TraceCredentialService(prisma as any, new ScopeService(), cache as any), prisma, cache };
 }
 
 describe('TraceCredentialService', () => {
@@ -35,6 +36,7 @@ describe('TraceCredentialService', () => {
     expect(out.id).toBe('cr1');
     expect(out.type).toBe('certificate');
     expect(out.issuedAt).toBe('2026-06-01T00:00:00.000Z');
+    expect(h.cache.invalidateBatch).toHaveBeenCalledWith('b1');
   });
 
   it('create:batch 不在范围则抛 Forbidden(不创建)', async () => {
@@ -93,6 +95,7 @@ describe('TraceCredentialService', () => {
     const h = make(true, true);
     await h.svc.remove(merchant, 'cr1');
     expect(h.prisma.traceCredential.delete).toHaveBeenCalledWith({ where: { id: 'cr1' } });
+    expect(h.cache.invalidateBatch).toHaveBeenCalledWith('b1');
   });
 
   it('remove:不在范围则抛 Forbidden(不删除)', async () => {

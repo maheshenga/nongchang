@@ -23,12 +23,14 @@ function makePrisma(overrides: any = {}) {
     $queryRawUnsafe: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
     traceEvent: {
+      count: vi.fn().mockResolvedValue(2),
       findMany: vi.fn().mockResolvedValue([
         { type: 'origin', title: '种苗', actor: '李', location: '大理', occurredAt: new Date('2023-04-12T09:30:00Z'), payload: { desc: 'x' } },
         { type: 'retail', title: '零售', actor: '店', location: '昆明', occurredAt: new Date('2026-05-12T10:00:00Z'), payload: null },
       ]),
     },
     traceCredential: {
+      count: vi.fn().mockResolvedValue(1),
       findMany: vi.fn().mockResolvedValue([
         { id: 'cr1', batchId: 'b1', type: 'certificate', title: '有机认证', issuer: '认证中心', serialNo: 'OC-1', issuedAt: new Date('2026-06-01T00:00:00Z'), fileUrl: 'https://oss/cert.pdf', createdAt: new Date() },
       ]),
@@ -106,8 +108,46 @@ describe('PublicTraceService.getByCode', () => {
     const svc = new PublicTraceService(prisma);
     await svc.getByCode('ORC-X');
     expect(prisma.traceEvent.findMany).toHaveBeenCalledWith({
-      where: { tenantId: 't1', batchId: 'b1' }, orderBy: { occurredAt: 'asc' },
+      where: { tenantId: 't1', batchId: 'b1' }, orderBy: { occurredAt: 'asc' }, take: 100,
     });
+  });
+
+  it('bounds static collections and returns their full totals', async () => {
+    const prisma = makePrisma();
+    const svc = new PublicTraceService(prisma);
+
+    const res = await svc.getByCode('ORC-X');
+
+    if (res.frozen) throw new Error('unexpected frozen response');
+    expect(prisma.traceCredential.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 't1', batchId: 'b1' }, orderBy: { createdAt: 'desc' }, take: 20,
+    });
+    expect(prisma.traceEvent.count).toHaveBeenCalledWith({ where: { tenantId: 't1', batchId: 'b1' } });
+    expect(prisma.traceCredential.count).toHaveBeenCalledWith({ where: { tenantId: 't1', batchId: 'b1' } });
+    expect(res.eventTotal).toBe(2);
+    expect(res.credentialTotal).toBe(1);
+  });
+
+  it('reuses cached static data while scan writes remain live', async () => {
+    const prisma = makePrisma({
+      traceCode: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-X', scanCount: 4 }),
+        update: vi.fn()
+          .mockResolvedValueOnce({ scanCount: 5 })
+          .mockResolvedValueOnce({ scanCount: 6 }),
+      },
+    });
+    const svc = new PublicTraceService(prisma);
+
+    await svc.getByCode('ORC-X', { ip: '127.0.0.1', userAgent: 'first' });
+    const second = await svc.getByCode('ORC-X', { ip: '127.0.0.2', userAgent: 'second' });
+
+    if (second.frozen) throw new Error('unexpected frozen response');
+    expect(second.scanCount).toBe(6);
+    expect(prisma.batch.findUnique).toHaveBeenCalledTimes(1);
+    expect(prisma.traceEvent.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.traceCode.update).toHaveBeenCalledTimes(2);
+    expect(prisma.traceScan.create).toHaveBeenCalledTimes(2);
   });
 
   it('响应不含任何内部字段(脱敏)', async () => {

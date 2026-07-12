@@ -68,6 +68,9 @@ export type {
 } from './dto/entities.dto';
 
 export {
+  PUBLIC_TRACE_EVENT_LIMIT,
+  PUBLIC_TRACE_CREDENTIAL_LIMIT,
+  PUBLIC_TRACE_CACHE_TTL_MS,
   publicTraceEventSchema,
   publicTraceBatchSchema,
   publicTraceResponseSchema,

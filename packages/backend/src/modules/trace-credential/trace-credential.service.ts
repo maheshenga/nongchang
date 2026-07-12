@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Optional } from '@nestjs/common';
 import type { AuthUser, CreateTraceCredentialInput, TraceCredentialView } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -12,10 +12,15 @@ import {
   validateTrustedFileUrl,
 } from './trace-credential.model';
 import type { CredentialRow, OssConfigRow } from './trace-credential.model';
+import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
 
 @Injectable()
 export class TraceCredentialService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private cache?: PublicTraceCacheService,
+  ) {}
 
   private async trustedFileOrigins(tenantId: string): Promise<Set<string>> {
     const ossConfig = (await this.prisma.ossConfig.findUnique({
@@ -49,6 +54,7 @@ export class TraceCredentialService {
     const row = (await this.prisma.traceCredential.create({
       data: buildTraceCredentialCreateData({ tenantId: user.tenantId, dto: input }),
     })) as CredentialRow;
+    this.cache?.invalidateBatch(input.batchId);
     return toTraceCredentialView(row);
   }
 
@@ -60,6 +66,7 @@ export class TraceCredentialService {
     if (!cred) throw new ForbiddenException('资质记录不在可操作范围内');
     await this.scope.assertInScope(this.prisma, user, 'batch', cred.batchId);
     await this.prisma.traceCredential.delete({ where: { id } });
+    this.cache?.invalidateBatch(cred.batchId);
     return { id };
   }
 }

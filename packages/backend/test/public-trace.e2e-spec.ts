@@ -3,14 +3,20 @@ import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { PublicTraceCacheService } from '../src/modules/public-trace/public-trace-cache.service';
 
 let app: INestApplication;
+let prisma: PrismaService;
+let traceCache: PublicTraceCacheService;
 
 beforeAll(async () => {
   const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
   app = mod.createNestApplication();
   app.setGlobalPrefix('api');
   await app.init();
+  prisma = app.get(PrismaService);
+  traceCache = app.get(PublicTraceCacheService);
 });
 afterAll(async () => { await app.close(); });
 
@@ -24,8 +30,36 @@ describe('公开溯源接口(免登录)', () => {
     expect(res.body.events.length).toBe(7);
     expect(res.body.events[0].type).toBe('origin');
     expect(res.body.events[6].type).toBe('retail');
+    expect(res.body.eventTotal).toBeGreaterThanOrEqual(res.body.events.length);
+    expect(res.body.credentialTotal).toBeGreaterThanOrEqual(res.body.credentials.length);
     const times = res.body.events.map((e: any) => e.occurredAt);
     expect(times).toEqual([...times].sort());
+  });
+
+  it('bounds event rows while returning the live total', async () => {
+    const traceCode = await prisma.traceCode.findUniqueOrThrow({ where: { code: 'ORC-DEMO0001' } });
+    const prefix = `bounded-${Date.now()}-`;
+    const before = await prisma.traceEvent.count({ where: { tenantId: traceCode.tenantId, batchId: traceCode.batchId } });
+    await prisma.traceEvent.createMany({
+      data: Array.from({ length: 105 }, (_, index) => ({
+        tenantId: traceCode.tenantId,
+        batchId: traceCode.batchId,
+        type: 'farm',
+        title: `${prefix}${index}`,
+        actor: 'e2e',
+        location: 'e2e',
+        occurredAt: new Date(`2026-12-${String((index % 20) + 1).padStart(2, '0')}T00:00:00.000Z`),
+      })),
+    });
+    traceCache.invalidateBatch(traceCode.batchId);
+    try {
+      const res = await request(app.getHttpServer()).get('/api/public/trace/ORC-DEMO0001').expect(200);
+      expect(res.body.events).toHaveLength(100);
+      expect(res.body.eventTotal).toBe(before + 105);
+    } finally {
+      await prisma.traceEvent.deleteMany({ where: { title: { startsWith: prefix } } });
+      traceCache.invalidateBatch(traceCode.batchId);
+    }
   });
 
   it('不存在的 code 返回 404', async () => {
