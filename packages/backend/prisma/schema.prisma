@@ -387,6 +387,16 @@ enum CreditReservationStatus {
   RELEASED
 }
 
+enum AiOperationStatus {
+  RESERVED
+  IN_FLIGHT
+  SUCCEEDED
+  FAILED
+  CONFIRMED
+  RELEASED
+  REVIEW_REQUIRED
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -429,11 +439,31 @@ model CreditReservation {
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
   traceCodes     TraceCode[]
+  aiOperation    AiOperation?
 
   @@unique([accountId, resource, idempotencyKey])
   @@index([tenantId, status, createdAt])
   @@index([refType, refId])
   @@map("credit_reservations")
+}
+
+model AiOperation {
+  id             String            @id @default(uuid())
+  tenantId       String            @map("tenant_id")
+  userId         String            @map("user_id")
+  providerId     String?           @map("provider_id")
+  kind           String
+  operationKey   String            @map("operation_key")
+  reservationId  String?           @unique @map("reservation_id")
+  reservation    CreditReservation? @relation(fields: [reservationId], references: [id])
+  status         AiOperationStatus @default(RESERVED)
+  errorCategory  String?           @map("error_category")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  @@unique([tenantId, operationKey])
+  @@index([tenantId, status, createdAt])
+  @@map("ai_operations")
 }
 
 model CreditLedger {
