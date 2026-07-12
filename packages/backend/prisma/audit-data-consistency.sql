@@ -2,6 +2,26 @@
 -- Expected result for a clean database: zero rows.
 
 select
+  'field_owner_tenant_mismatch' as issue_type,
+  f.id as record_id,
+  'field tenant differs from owner tenant' as detail
+from fields f
+join users u on u.id = f.owner_id
+where f.tenant_id <> u.tenant_id
+
+union all
+
+select
+  'supply_owner_tenant_mismatch' as issue_type,
+  s.id as record_id,
+  'supply tenant differs from owner tenant' as detail
+from supplies s
+join users u on u.id = s.owner_id
+where s.tenant_id <> u.tenant_id
+
+union all
+
+select
   'batch_field_owner_mismatch' as issue_type,
   b.id as record_id,
   'batch.owner/tenant differs from field.owner/tenant' as detail
@@ -37,6 +57,56 @@ where fr.tenant_id <> b.tenant_id
    or fr.field_id <> b.field_id
    or f.tenant_id <> b.tenant_id
    or f.owner_id <> b.owner_id
+
+union all
+
+select
+  'trace_code_batch_tenant_mismatch' as issue_type,
+  tc.id as record_id,
+  'trace code tenant differs from batch tenant' as detail
+from trace_codes tc
+left join batches b on b.id = tc.batch_id
+where b.id is null or tc.tenant_id <> b.tenant_id
+
+union all
+
+select
+  'trace_event_batch_tenant_mismatch' as issue_type,
+  te.id as record_id,
+  'trace event tenant differs from batch tenant' as detail
+from trace_events te
+left join batches b on b.id = te.batch_id
+where b.id is null or te.tenant_id <> b.tenant_id
+
+union all
+
+select
+  'trace_scan_batch_tenant_mismatch' as issue_type,
+  ts.id as record_id,
+  'trace scan tenant differs from batch tenant' as detail
+from trace_scans ts
+left join batches b on b.id = ts.batch_id
+where b.id is null or ts.tenant_id <> b.tenant_id
+
+union all
+
+select
+  'trace_credential_batch_tenant_mismatch' as issue_type,
+  tc.id as record_id,
+  'trace credential tenant differs from batch tenant' as detail
+from trace_credentials tc
+left join batches b on b.id = tc.batch_id
+where b.id is null or tc.tenant_id <> b.tenant_id
+
+union all
+
+select
+  'credit_reservation_account_tenant_mismatch' as issue_type,
+  cr.id as record_id,
+  'credit reservation tenant differs from account tenant' as detail
+from credit_reservations cr
+join credit_accounts ca on ca.id = cr.account_id
+where cr.tenant_id <> ca.tenant_id
 
 union all
 
