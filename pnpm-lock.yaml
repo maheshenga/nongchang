@@ -107,6 +107,9 @@ importers:
       '@types/ali-oss':
         specifier: ^6.23.3
         version: 6.23.3
+      '@types/express':
+        specifier: ^5.0.3
+        version: 5.0.6
       '@types/node':
         specifier: ^22.14.0
         version: 22.19.21
