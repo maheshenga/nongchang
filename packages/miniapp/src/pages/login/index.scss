@@ -98,6 +98,42 @@
     font-size: 30px;
     font-weight: bold;
     padding: 6px 0;
+
+    &[disabled] {
+      opacity: 0.55;
+    }
+  }
+
+  &__recovery {
+    margin: 14px 0 0 auto;
+    padding: 0;
+    min-height: 44px;
+    line-height: 44px;
+    background: transparent;
+    color: $c-primary;
+    font-size: 24px;
+  }
+
+  &__consent {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  &__consent-text {
+    font-size: 23px;
+    color: $c-text-sub;
+  }
+
+  &__error {
+    display: block;
+    margin-top: 18px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: #fff1f2;
+    color: $c-rose;
+    font-size: 24px;
   }
 
   &__wechat {
@@ -110,6 +146,10 @@
     border-radius: 16px;
     border: 1px solid $c-border;
     background: #fff;
+
+    &[disabled] {
+      opacity: 0.55;
+    }
   }
 
   &__wechat-text {
