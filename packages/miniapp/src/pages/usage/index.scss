@@ -55,6 +55,37 @@
     color: $c-text;
   }
 
+  &__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__total {
+    font-size: 22px;
+    color: $c-text-sub;
+  }
+
+  &__filters {
+    display: flex;
+    gap: 16px;
+    margin-top: 18px;
+  }
+
+  &__filters picker {
+    flex: 1;
+  }
+
+  &__filter {
+    padding: 18px 20px;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    background: #fff;
+    color: $c-text;
+    font-size: 24px;
+    text-align: center;
+  }
+
   &__hint {
     display: block;
     font-size: 24px;
@@ -110,5 +141,37 @@
   &__row-balance {
     font-size: 22px;
     color: $c-text-sub;
+  }
+
+  &__append {
+    display: block;
+    padding: 18px 0 28px;
+    color: $c-text-sub;
+    font-size: 22px;
+    text-align: center;
+  }
+
+  &__append-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+    border-radius: 14px;
+    background: #fff1f2;
+    color: $c-rose;
+    font-size: 22px;
+  }
+
+  &__append-retry {
+    margin: 0;
+    padding: 0 18px;
+    min-height: 56px;
+    line-height: 56px;
+    border-radius: 12px;
+    background: $c-rose;
+    color: #fff;
+    font-size: 22px;
   }
 }
