@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,7 @@ const apiMocks = vi.hoisted(() => ({
   listBatches: vi.fn(),
   listDeviations: vi.fn(),
 }));
+const dialogMocks = vi.hoisted(() => ({ confirmDialog: vi.fn() }));
 
 vi.mock('../api/farm-records', () => ({
   listFarmRecords: apiMocks.listFarmRecords,
@@ -22,6 +23,7 @@ vi.mock('../api/farm-records', () => ({
 
 vi.mock('../api/batches', () => ({ listBatches: apiMocks.listBatches }));
 vi.mock('../api/phenology', () => ({ listDeviations: apiMocks.listDeviations }));
+vi.mock('../hooks/useDialog', () => ({ confirmDialog: dialogMocks.confirmDialog }));
 
 const sourcePath = resolve(dirname(fileURLToPath(import.meta.url)), 'FarmRecords.tsx');
 
@@ -109,6 +111,7 @@ describe('FarmRecords Fluent UI', () => {
     apiMocks.listDeviations.mockResolvedValue([]);
     apiMocks.createFarmRecord.mockResolvedValue(records[0]);
     apiMocks.updateFarmRecordStatus.mockResolvedValue({ ...records[0], status: 'completed' });
+    dialogMocks.confirmDialog.mockResolvedValue(true);
   });
 
   it('keeps the source inside the Fluent UI boundary', () => {
@@ -121,6 +124,7 @@ describe('FarmRecords Fluent UI', () => {
     expect(source).toContain('ErrorState');
     expect(source).toContain('EmptyState');
     expect(source).toContain('fluentStatusTag');
+    expect(source).toContain('ModalSurface');
     const forbiddenClassTokens = [
       'text-slate-',
       'bg-slate-',
@@ -165,12 +169,16 @@ describe('FarmRecords Fluent UI', () => {
     await waitFor(() => expect(apiMocks.updateFarmRecordStatus).toHaveBeenCalledWith('rec-pending', 'completed'));
 
     fireEvent.click(screen.getByRole('button', { name: '快捷农事实录' }));
+    const createDialog = await screen.findByRole('dialog', { name: '快捷新建记录' });
+    expect(createDialog.closest('[data-modal-layer="true"]')?.parentElement).toBe(document.body);
     fireEvent.change(await screen.findByLabelText('关联批次'), { target: { value: 'batch-1' } });
     fireEvent.change(screen.getByLabelText('作业类型'), { target: { value: ' 施肥 ' } });
     fireEvent.change(screen.getByLabelText('执行描述'), { target: { value: ' 追施有机肥 ' } });
     fireEvent.change(screen.getByLabelText('物料消耗'), { target: { value: ' 有机肥 20kg ' } });
     fireEvent.change(screen.getByLabelText('预估工时'), { target: { value: '2.5' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存记录' }));
+    const saveButton = screen.getByRole('button', { name: '保存记录' });
+    expect(saveButton.getAttribute('form')).toBe('create-farm-record-form');
+    fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(apiMocks.createFarmRecord).toHaveBeenCalledWith(expect.objectContaining({
@@ -183,5 +191,27 @@ describe('FarmRecords Fluent UI', () => {
       }));
     });
     expect(apiMocks.createFarmRecord.mock.calls[0][0].recordedAt).toEqual(expect.any(String));
+  });
+
+  it('confirms completion and exposes a reversible undo action', async () => {
+    dialogMocks.confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    render(<FarmRecords />);
+
+    const complete = await screen.findByRole('button', { name: '标记完成 温室浇水' });
+    fireEvent.click(complete);
+    await waitFor(() => expect(dialogMocks.confirmDialog).toHaveBeenCalledWith({
+      title: '完成农事记录',
+      message: '确认将“温室浇水”标记为已完成并归档？',
+      confirmLabel: '标记完成',
+    }));
+    expect(apiMocks.updateFarmRecordStatus).not.toHaveBeenCalled();
+
+    fireEvent.click(complete);
+    await waitFor(() => expect(apiMocks.updateFarmRecordStatus).toHaveBeenCalledWith('rec-pending', 'completed'));
+
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toContain('温室浇水已完成并归档');
+    fireEvent.click(within(status).getByRole('button', { name: '撤销完成' }));
+    await waitFor(() => expect(apiMocks.updateFarmRecordStatus).toHaveBeenCalledWith('rec-pending', 'pending'));
   });
 });

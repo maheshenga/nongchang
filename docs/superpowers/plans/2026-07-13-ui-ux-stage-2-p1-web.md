@@ -294,23 +294,23 @@ git commit -m "feat(web): add role-specific production workspaces"
 - Desktop and mobile both expose `查看`, `生码`, and one labelled `更多操作` menu.
 - Farm-record completion calls `confirmDialog`; a successful completion exposes an `撤销完成` action that writes `pending` through the existing status endpoint.
 
-- [ ] **Step 1: Add failing action and reversible-completion tests**
+- [x] **Step 1: Add failing action and reversible-completion tests**
 
 In `BatchTable.spec.tsx`, scope to the table and assert only `查看`, `生码`, and `批次 B-001 更多操作` are visible row controls; opening the menu exposes all six secondary actions.
 
 In `FarmRecords.fluent-ui.spec.tsx`, mock `confirmDialog` to resolve `false` then `true`. Assert cancellation does not call the mutation; confirmation calls `updateFarmRecordStatus('rec-pending', 'completed')`; clicking `撤销完成` calls `updateFarmRecordStatus('rec-pending', 'pending')`.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/batch-admin/BatchTable.spec.tsx src/components/FarmRecords.fluent-ui.spec.tsx
 ```
 
-- [ ] **Step 3: Reuse `BatchActionMenu` on desktop**
+- [x] **Step 3: Reuse `BatchActionMenu` on desktop**
 
 Replace the eight-button desktop action cell with the same visible `查看`/`生码` controls and `BatchActionMenu`. Keep the destructive menu item last and red. Preserve all callbacks and critical-flow row semantics.
 
-- [ ] **Step 4: Add completion confirmation and undo banner**
+- [x] **Step 4: Add completion confirmation and undo banner**
 
 Before status mutation, call:
 
@@ -325,7 +325,7 @@ if (!confirmed) return;
 
 After success, store `{ id, label }` in component state and render a `role="status"` banner with `撤销完成`. Undo writes `pending`, reloads, and clears the banner. Migrate the quick-create record overlay to `ModalSurface` and preserve the external form submit association.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/batch-admin/BatchTable.spec.tsx src/components/FarmRecords.fluent-ui.spec.tsx src/components/BatchAdmin.spec.tsx

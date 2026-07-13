@@ -53,6 +53,23 @@ function renderTable() {
 }
 
 describe('BatchTable responsive actions', () => {
+  it('keeps desktop row controls to two primary actions and one overflow menu', () => {
+    renderTable();
+    const table = screen.getByRole('table');
+    const row = within(table).getAllByRole('row')[1];
+
+    expect(within(row).getByRole('button', { name: '查看' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: '生码' })).toBeTruthy();
+    expect(within(row).getByRole('button', { name: '批次 B-001 更多操作' })).toBeTruthy();
+    expect(within(row).getAllByRole('button')).toHaveLength(3);
+
+    fireEvent.click(within(row).getByRole('button', { name: '批次 B-001 更多操作' }));
+    const menu = screen.getByRole('menu', { name: '批次 B-001 操作' });
+    for (const label of ['已生成码', '合规', '资质', '利润', '报告', '删除']) {
+      expect(within(menu).getByRole('menuitem', { name: label })).toBeTruthy();
+    }
+  });
+
   it('renders a semantic mobile card with primary and overflow actions', () => {
     const callbacks = renderTable();
     const list = screen.getByRole('list', { name: '批次列表' });
@@ -75,8 +92,8 @@ describe('BatchTable responsive actions', () => {
 
   it('exposes every secondary action through the overflow menu', () => {
     renderTable();
-
-    fireEvent.click(screen.getByRole('button', { name: '批次 B-001 更多操作' }));
+    const list = screen.getByRole('list', { name: '批次列表' });
+    fireEvent.click(within(list).getByRole('button', { name: '批次 B-001 更多操作' }));
     const menu = screen.getByRole('menu', { name: '批次 B-001 操作' });
 
     for (const label of ['已生成码', '合规', '资质', '利润', '报告', '删除']) {

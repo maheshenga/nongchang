@@ -85,7 +85,7 @@ export function BatchActionMenu({
         onClick={() => onOpenChange(open ? null : batch.id)}
         className={fluentButton('secondary')}
       >
-        <MoreHorizontal className="h-4 w-4" />更多
+        <MoreHorizontal className="h-4 w-4" />更多操作
       </button>
       {open && (
         <div

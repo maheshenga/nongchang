@@ -22,7 +22,9 @@ import {
 } from '../api/farm-records';
 import { listDeviations } from '../api/phenology';
 import { useApi } from '../hooks/useApi';
+import { confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentFocus, fluentInput, fluentSelect, fluentStatusTag } from '../ui/fluent';
+import { ModalSurface } from '../ui/ModalSurface';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { buildIdentityMap, friendlyIdentity } from '../ui/identity';
 
@@ -134,6 +136,9 @@ export default function FarmRecords() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTask, setNewTask] = useState({ type: '', desc: '', material: '', labor: 1, batch: '' });
   const [toastMessage, setToastMessage] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [lastCompleted, setLastCompleted] = useState<{ id: string; label: string } | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   const fetchRecords = useCallback(() => listFarmRecords(query), [query]);
   const recordQueryKey = new URLSearchParams(
@@ -191,12 +196,36 @@ export default function FarmRecords() {
   };
 
   const handleComplete = async (id: string) => {
+    const task = tasks.find(item => item.id === id);
+    if (!task) return;
+    const confirmed = await confirmDialog({
+      title: '完成农事记录',
+      message: `确认将“${task.type}”标记为已完成并归档？`,
+      confirmLabel: '标记完成',
+    });
+    if (!confirmed) return;
     try {
       await updateFarmRecordStatus(id, 'completed');
+      setLastCompleted({ id, label: task.type });
       showToast('已标记完成并归档');
       void reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : '操作失败');
+    }
+  };
+
+  const handleUndoComplete = async () => {
+    if (!lastCompleted) return;
+    setUndoing(true);
+    try {
+      await updateFarmRecordStatus(lastCompleted.id, 'pending');
+      await reload();
+      setLastCompleted(null);
+      showToast('已撤销完成，记录恢复为待完成');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '撤销失败');
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -210,6 +239,7 @@ export default function FarmRecords() {
       showToast('请选择有效批次');
       return;
     }
+    setCreating(true);
     try {
       const dto: CreateFarmRecordDto = {
         batchId: batch.id,
@@ -227,6 +257,8 @@ export default function FarmRecords() {
       void reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -245,6 +277,15 @@ export default function FarmRecords() {
           </div>
           <button type="button" aria-label="关闭偏离预警" onClick={() => setDismissedAlert(true)} className={fluentButton('icon')}>
             <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {lastCompleted && (
+        <div role="status" className="flex items-center justify-between gap-3 border border-[#9FD89F] bg-[#F1FAF1] px-4 py-3 text-sm text-[#0B6A0B]">
+          <span>{lastCompleted.label}已完成并归档</span>
+          <button type="button" onClick={() => void handleUndoComplete()} disabled={undoing} className={fluentButton('secondary')}>
+            {undoing ? '正在撤销…' : '撤销完成'}
           </button>
         </div>
       )}
@@ -407,19 +448,31 @@ export default function FarmRecords() {
       </div>
 
       {showCreateModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
-          <div role="dialog" aria-modal="true" aria-labelledby="fr-modal-title" className="fluent-scrollbar flex max-h-[92vh] w-full max-w-md flex-col overflow-y-auto border border-[#E1DFDD] bg-white">
-            <div className="flex min-h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-3">
-              <h3 id="fr-modal-title" className="flex items-center gap-2 text-base font-semibold text-[#242424]">
-                <FileSpreadsheet className="h-5 w-5 text-[#0078D4]" />
-                快捷新建记录
-              </h3>
-              <button type="button" onClick={() => setShowCreateModal(false)} aria-label="关闭" className={fluentButton('icon')}>
-                <X className="h-4 w-4" />
+        <ModalSurface
+          title="快捷新建记录"
+          onClose={() => setShowCreateModal(false)}
+          closeDisabled={creating}
+          maxWidthClassName="max-w-md"
+          initialFocusSelector="#fr-batch"
+          footer={(
+            <>
+              <button type="button" onClick={() => setShowCreateModal(false)} disabled={creating} className={fluentButton('secondary')}>取消</button>
+              <button
+                type="submit"
+                form="create-farm-record-form"
+                disabled={creating || !newTask.type || !newTask.desc || !newTask.batch}
+                className={fluentButton('primary')}
+              >
+                {creating ? '保存中…' : '保存记录'}
               </button>
-            </div>
-
-            <div className="space-y-5 p-5">
+            </>
+          )}
+        >
+          <form
+            id="create-farm-record-form"
+            onSubmit={(event) => { event.preventDefault(); void handleCreateTask(); }}
+            className="space-y-5 p-5"
+          >
               <section>
                 <div className="mb-2 text-xs font-semibold text-[#605E5C]">常用农事模板（点击一键填充）</div>
                 <div className="grid grid-cols-3 gap-2">
@@ -460,16 +513,8 @@ export default function FarmRecords() {
                 </div>
               </div>
               <p className={checkboxTextClass}>保存后会写入真实农事记录接口，并在当前列表刷新。</p>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
-              <button type="button" onClick={() => setShowCreateModal(false)} className={fluentButton('secondary')}>取消</button>
-              <button type="button" onClick={() => void handleCreateTask()} disabled={!newTask.type || !newTask.desc || !newTask.batch} className={fluentButton('primary')}>
-                保存记录
-              </button>
-            </div>
-          </div>
-        </div>
+          </form>
+        </ModalSurface>
       )}
 
       {toastMessage && (

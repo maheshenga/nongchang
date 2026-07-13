@@ -1,14 +1,8 @@
 import {
-  Calculator,
   ChevronLeft,
   ChevronRight,
   Eye,
-  FileText,
-  Loader2,
   QrCode,
-  ScanLine,
-  ShieldCheck,
-  Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { fluentButton, fluentStatusTag, fluentTable } from '../../ui/fluent';
@@ -40,7 +34,8 @@ interface Props {
 }
 
 export function BatchTable(props: Props) {
-  const [openMenuBatchId, setOpenMenuBatchId] = useState<string | null>(null);
+  const [desktopOpenMenuBatchId, setDesktopOpenMenuBatchId] = useState<string | null>(null);
+  const [mobileOpenMenuBatchId, setMobileOpenMenuBatchId] = useState<string | null>(null);
   const allSelected = props.filteredData.length > 0
     && props.filteredData.every(batch => props.selectedIds.has(batch.id));
   const someSelected = props.filteredData.some(batch => props.selectedIds.has(batch.id));
@@ -111,41 +106,26 @@ export function BatchTable(props: Props) {
                     </td>
                     <td className={fluentTable.td}>{batch.date}</td>
                     <td className={`${fluentTable.td} text-right`}>
-                      <div className="flex max-w-[520px] flex-wrap justify-end gap-1">
+                      <div className="flex flex-wrap justify-end gap-1">
                         <button onClick={() => props.onDetail(batch.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
                           <Eye className="h-3.5 w-3.5" />查看
                         </button>
                         <button onClick={() => props.onGenerate(batch.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
                           <QrCode className="h-3.5 w-3.5" />生码
                         </button>
-                        <button onClick={() => props.onCodes(batch.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
-                          <ScanLine className="h-3.5 w-3.5" />已生成码
-                        </button>
-                        <button onClick={() => props.onCompliance(batch.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
-                          {props.scanningCompliance
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <ShieldCheck className="h-3.5 w-3.5" />}
-                          合规
-                        </button>
-                        <button onClick={() => props.onCredentials(batch)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
-                          <ShieldCheck className="h-3.5 w-3.5" />资质
-                        </button>
-                        <button onClick={() => props.onProfit(batch.id)} className={`${fluentButton('subtle')} whitespace-nowrap`}>
-                          <Calculator className="h-3.5 w-3.5" />利润
-                        </button>
-                        <button
-                          onClick={() => props.onReport(batch.id)}
-                          disabled={props.exportingReportId === batch.id}
-                          className={`${fluentButton('subtle')} whitespace-nowrap`}
-                        >
-                          {props.exportingReportId === batch.id
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <FileText className="h-3.5 w-3.5" />}
-                          报告
-                        </button>
-                        <button onClick={() => props.onDelete(batch)} className={`${fluentButton('subtle')} whitespace-nowrap text-[#A4262C]`}>
-                          <Trash2 className="h-3.5 w-3.5" />删除
-                        </button>
+                        <BatchActionMenu
+                          batch={batch}
+                          open={desktopOpenMenuBatchId === batch.id}
+                          onOpenChange={setDesktopOpenMenuBatchId}
+                          exportingReportId={props.exportingReportId}
+                          scanningCompliance={props.scanningCompliance}
+                          onCodes={props.onCodes}
+                          onCompliance={props.onCompliance}
+                          onCredentials={props.onCredentials}
+                          onProfit={props.onProfit}
+                          onReport={props.onReport}
+                          onDelete={props.onDelete}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -231,8 +211,8 @@ export function BatchTable(props: Props) {
                     </button>
                     <BatchActionMenu
                       batch={batch}
-                      open={openMenuBatchId === batch.id}
-                      onOpenChange={setOpenMenuBatchId}
+                      open={mobileOpenMenuBatchId === batch.id}
+                      onOpenChange={setMobileOpenMenuBatchId}
                       exportingReportId={props.exportingReportId}
                       scanningCompliance={props.scanningCompliance}
                       onCodes={props.onCodes}

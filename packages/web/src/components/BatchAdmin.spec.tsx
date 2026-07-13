@@ -85,11 +85,13 @@ describe('BatchAdmin Fluent console', () => {
     expect(screen.getByRole('columnheader', { name: /签发码数/ })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /扫码量/ })).toBeTruthy();
     const table = screen.getByRole('table');
-    expect(within(table).getAllByRole('button', { name: /已生成码/ })).toHaveLength(2);
-    expect(within(table).getAllByRole('button', { name: /合规/ })).toHaveLength(2);
-    expect(within(table).getAllByRole('button', { name: /资质/ })).toHaveLength(2);
-    expect(within(table).getAllByRole('button', { name: /利润/ })).toHaveLength(2);
-    expect(within(table).getAllByRole('button', { name: /报告/ })).toHaveLength(2);
+    const overflowMenus = within(table).getAllByRole('button', { name: /更多操作/ });
+    expect(overflowMenus).toHaveLength(2);
+    fireEvent.click(overflowMenus[0]);
+    const menu = screen.getByRole('menu', { name: '批次 B20240520001 操作' });
+    for (const label of ['已生成码', '合规', '资质', '利润', '报告', '删除']) {
+      expect(within(menu).getByRole('menuitem', { name: label })).toBeTruthy();
+    }
   });
 
   it('filters visible rows by batch code', async () => {
