@@ -540,27 +540,27 @@ export function isIntegrationDirty(baseline: IntegrationDraft, current: Integrat
 export function validateIntegrationDraft(draft: IntegrationDraft, hasStoredSecret: boolean): string[];
 ```
 
-- [ ] **Step 1: Add failing dirty-state and navigation tests**
+- [x] **Step 1: Add failing dirty-state and navigation tests**
 
 Assert trimmed equivalent values are not dirty; changed AppID/enabled/secret are dirty; enabling a first-time secret-backed integration without a secret returns a field-specific error. In `App.spec.tsx`, register a dirty guard, request another tab, cancel the global confirmation, and assert the active tab does not change.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/unsaved-changes.spec.ts src/components/IntegrationSettings.model.spec.ts src/components/IntegrationSettings.fluent-ui.spec.tsx src/App.spec.tsx
 ```
 
-- [ ] **Step 3: Implement one navigation guard**
+- [x] **Step 3: Implement one navigation guard**
 
 Keep one active checker in `unsaved-changes.ts`. `confirmUnsavedNavigation()` returns `true` immediately when clean; otherwise it calls `confirmDialog` with `放弃未保存更改` / `继续编辑`. Route sidebar, mobile sidebar, search, dashboard, and AI context navigation through one async `requestTabChange(tab)` function.
 
-- [ ] **Step 4: Track changed integration sections**
+- [x] **Step 4: Track changed integration sections**
 
 Each card captures a normalized baseline after load/reload, reports dirty state to the parent, shows `有未保存更改`, validates before mutation, and resets its baseline only after the saved response reloads. Add `beforeunload` while any card is dirty. Keep masked secret inputs blank and never copy masked strings into mutation payloads.
 
 Because the current backend exposes no non-mutating test endpoint for WeChat, Xfyun, or Tianditu, render truthful guidance: `当前后端无独立连接测试；保存后请通过对应登录、转写或地图页面验证。` Do not create a fake success button.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/unsaved-changes.spec.ts src/components/IntegrationSettings.model.spec.ts src/components/IntegrationSettings.fluent-ui.spec.tsx src/App.spec.tsx

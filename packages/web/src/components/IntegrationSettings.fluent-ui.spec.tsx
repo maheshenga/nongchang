@@ -97,6 +97,7 @@ describe('IntegrationSettings Fluent UI', () => {
       expect((within(wechatCard).getByLabelText('AppID') as HTMLInputElement).value).toBe('wechat-app-old');
     });
     fireEvent.change(within(wechatCard).getByLabelText('AppID'), { target: { value: ' wx-new ' } });
+    expect(within(wechatCard).getByText('有未保存更改')).toBeTruthy();
     fireEvent.click(within(wechatCard).getByLabelText('启用微信登录'));
     fireEvent.click(within(wechatCard).getByRole('button', { name: '保存微信配置' }));
 
@@ -131,5 +132,37 @@ describe('IntegrationSettings Fluent UI', () => {
     await waitFor(() => {
       expect(apiMocks.upsertTiandituConfig).toHaveBeenCalledWith({ key: 'tk-new', enabled: true });
     });
+  });
+
+  it('validates first-time secret-backed integrations before mutation', async () => {
+    apiMocks.getIntegrationConfig.mockImplementation((provider: string) => Promise.resolve({
+      provider,
+      appId: provider === 'wechat' ? 'wx-first' : `${provider}-app`,
+      secretMasked: null,
+      apiKeyMasked: null,
+      apiSecretMasked: null,
+      enabled: false,
+    }));
+    render(<IntegrationSettings />);
+
+    const wechatCard = await screen.findByRole('region', { name: '微信小程序登录' });
+    await waitFor(() => expect((within(wechatCard).getByLabelText('AppID') as HTMLInputElement).value).toBe('wx-first'));
+    fireEvent.click(within(wechatCard).getByLabelText('启用微信登录'));
+    fireEvent.click(within(wechatCard).getByRole('button', { name: '保存微信配置' }));
+
+    expect((await within(wechatCard).findByRole('alert')).textContent).toContain('首次启用微信登录时必须填写 AppSecret');
+    expect(apiMocks.upsertWechatConfig).not.toHaveBeenCalled();
+  });
+
+  it('shows truthful integration verification guidance and protects browser unload while dirty', async () => {
+    render(<IntegrationSettings />);
+    expect(await screen.findByText('当前后端无独立连接测试；保存后请通过对应登录、转写或地图页面验证。')).toBeTruthy();
+
+    const wechatCard = screen.getByRole('region', { name: '微信小程序登录' });
+    await waitFor(() => expect((within(wechatCard).getByLabelText('AppID') as HTMLInputElement).value).toBe('wechat-app-old'));
+    fireEvent.change(within(wechatCard).getByLabelText('AppID'), { target: { value: 'wx-dirty' } });
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });

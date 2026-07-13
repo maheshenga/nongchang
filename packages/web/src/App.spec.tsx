@@ -52,6 +52,7 @@ vi.mock('./components/Dashboard', () => ({
 vi.mock('./components/TraceabilityPage', () => ({ default: ({ code }: { code: string }) => <div>Trace View {code}</div> }));
 
 import App from './App';
+import { registerUnsavedChangesGuard } from './ui/unsaved-changes';
 
 beforeEach(() => {
   window.location.hash = '';
@@ -157,6 +158,21 @@ describe('App role wiring', () => {
     expect(await screen.findByText('Production Overview View system_admin')).toBeTruthy();
   });
 
+  it('keeps the active tab when the user cancels leaving unsaved changes', async () => {
+    authMock.role = 'system_admin';
+    const unregister = registerUnsavedChangesGuard(() => true);
+    render(<App />);
+
+    expect(await screen.findByText('Production Overview View system_admin')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /地块管理/ }));
+    expect(await screen.findByRole('dialog', { name: '放弃未保存更改' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+
+    expect(screen.getByText('Production Overview View system_admin')).toBeTruthy();
+    expect(screen.queryByText('Farm Fields View')).toBeNull();
+    unregister();
+  });
+
   it('does not expose production overview to platform admins or ordinary members', async () => {
     render(<App />);
     expect(screen.queryByText(/Production Overview View/)).toBeNull();
@@ -240,7 +256,7 @@ describe('App role wiring', () => {
 
     const batchTab = await screen.findByRole('button', { name: /批次管理/ });
     fireEvent.click(batchTab);
-    expect(batchTab.getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => expect(batchTab.getAttribute('aria-pressed')).toBe('true'));
   });
 
   it('opens mobile navigation from the command bar menu button', async () => {

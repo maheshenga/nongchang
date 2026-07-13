@@ -86,7 +86,7 @@ export default function AppWorkspaceViews({
         {slot('merchantFiles', <MerchantManagement />)}
         {slot('aiProviders', <AiProviders />)}
         {slot('aiOssSettings', <SystemSettings />)}
-        {slot('integrations', <IntegrationSettings />)}
+        {activeTab === 'integrations' && slot('integrations', <IntegrationSettings />)}
         {slot('userGroups', <UserGroups />)}
         {slot('pendingUsers', <PendingUsers />)}
         {slot('quickTemplates', <QuickTemplates />)}

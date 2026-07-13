@@ -9,6 +9,7 @@ import { DialogHost } from './hooks/useDialog';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 import { fluentButton } from './ui/fluent';
+import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
@@ -83,10 +84,16 @@ export default function App() {
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
   const canOpenBilling = allowedTabs.includes('billing');
+  const requestTabChange = async (tab: AppTab, beforeChange?: () => void): Promise<boolean> => {
+    if (!allowedTabs.includes(tab)) return false;
+    if (tab !== activeTab && !(await confirmUnsavedNavigation())) return false;
+    beforeChange?.();
+    setActiveTab(tab);
+    return true;
+  };
   const openAiWorkspace = (context: AiWorkspaceContext) => {
     if (!allowedTabs.includes('aiAssistant')) return;
-    setAiContext(context);
-    setActiveTab('aiAssistant');
+    void requestTabChange('aiAssistant', () => setAiContext(context));
   };
 
   useEffect(() => {
@@ -196,8 +203,9 @@ export default function App() {
             type="button"
             aria-pressed={active}
             onClick={() => {
-              setActiveTab(item.id);
-              if (mobile) setMobileNavOpen(false);
+              void requestTabChange(item.id).then(changed => {
+                if (changed && mobile) setMobileNavOpen(false);
+              });
             }}
             className={`flex h-10 w-full items-center gap-3 border-l-2 px-4 text-left text-sm transition-colors ${
               active
@@ -248,8 +256,9 @@ export default function App() {
                   type="button"
                   aria-label="Open billing resources"
                   onClick={() => {
-                    setActiveTab('billing');
-                    setMobileNavOpen(false);
+                    void requestTabChange('billing').then(changed => {
+                      if (changed) setMobileNavOpen(false);
+                    });
                   }}
                   className={`${fluentButton('secondary')} w-full justify-start`}
                 >
@@ -280,7 +289,7 @@ export default function App() {
               <button
                 type="button"
                 aria-label="Open billing resources"
-                onClick={() => setActiveTab('billing')}
+                onClick={() => void requestTabChange('billing')}
                 className={`${fluentButton('secondary')} w-full justify-start`}
               >
                 <Sparkles className="h-4 w-4" />
@@ -297,7 +306,7 @@ export default function App() {
             <button type="button" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
               <Menu className="h-4 w-4" />
             </button>
-            <GlobalSearch items={searchItems} onOpen={setActiveTab} />
+            <GlobalSearch items={searchItems} onOpen={tab => void requestTabChange(tab)} />
             <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-[#605E5C]">
               <span className="hidden truncate sm:inline">{profile?.displayName ?? user?.userId ?? '已登录用户'}</span>
               <span className="hidden rounded-[4px] bg-[#F3F2F1] px-2 py-1 font-semibold text-[#323130] sm:inline">{roleInfo.badge}</span>
@@ -324,7 +333,7 @@ export default function App() {
             mountedTabs={mountedTabs}
             allowedTabs={allowedTabs}
             role={navRole}
-            onNavigate={setActiveTab}
+            onNavigate={tab => void requestTabChange(tab)}
             aiContext={aiContext}
             onOpenAi={openAiWorkspace}
             fallback={<ViewSkeleton />}
