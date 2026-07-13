@@ -27,7 +27,7 @@ test('merchant completes the field, batch, farm-record, trace-code, and public-s
   await fieldDialog.getByLabel('纬度').fill('25.045678');
   await fieldDialog.getByRole('button', { name: '创建', exact: true }).click();
   await expect(fieldDialog).toBeHidden();
-  await expect(page.getByText(fieldName, { exact: true })).toBeVisible();
+  await expect(page.getByRole('button').filter({ hasText: fieldName })).toBeVisible();
 
   await page.getByRole('button', { name: '批次管理', exact: true }).click();
   await page.getByRole('button', { name: '新建批次', exact: true }).click();
@@ -40,7 +40,7 @@ test('merchant completes the field, batch, farm-record, trace-code, and public-s
   await batchDialog.getByLabel('预计收获').fill('2026-10-01');
   await batchDialog.getByRole('button', { name: '创建', exact: true }).click();
   await expect(batchDialog).toBeHidden();
-  await expect(page.getByText(batchNo, { exact: true })).toBeVisible();
+  await expect(page.getByRole('table').getByRole('cell', { name: batchNo, exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '农事实操', exact: true }).click();
   await page.getByRole('button', { name: '快捷农事实录', exact: true }).click();
