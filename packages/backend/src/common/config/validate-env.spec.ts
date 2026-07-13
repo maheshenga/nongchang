@@ -7,6 +7,7 @@ const KEYS = [
   'APP_ENCRYPTION_KEY', 'ALLOW_MANUAL_PAY',
   'TRUST_PROXY_HOPS', 'UPLOAD_DAILY_BYTES_LIMIT', 'UPLOAD_ACTIVE_BYTES_LIMIT',
   'UPLOAD_PENDING_MAX_AGE_MINUTES', 'RUNTIME_STATE_DRIVER', 'REDIS_URL',
+  'OPERATIONS_WORKER_CONCURRENCY',
 ];
 
 let snapshot: Record<string, string | undefined>;
@@ -121,5 +122,10 @@ describe('validateEnv runtime safety limits', () => {
     process.env.RUNTIME_STATE_DRIVER = 'memory';
     delete process.env.REDIS_URL;
     expect(() => validateEnv()).not.toThrow();
+  });
+
+  it.each(['0', '33', '1.5', 'x'])('rejects invalid OPERATIONS_WORKER_CONCURRENCY=%s', (value) => {
+    process.env.OPERATIONS_WORKER_CONCURRENCY = value;
+    expect(() => validateEnv()).toThrow(/OPERATIONS_WORKER_CONCURRENCY/);
   });
 });

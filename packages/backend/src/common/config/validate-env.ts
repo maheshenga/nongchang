@@ -7,6 +7,7 @@
 import { readUploadPendingMaxAgeMinutes, readUploadQuotaLimits } from '../../modules/upload/upload-quota.config';
 import { parseTrustProxyHops } from '../network/trusted-proxy';
 import { readRedisUrl, readRuntimeStateDriver } from '../runtime/runtime-state.types';
+import { readOperationsWorkerConcurrency } from '../../modules/operations/operations.constants';
 
 // 已知的开发占位值,生产环境绝不允许沿用。
 const WEAK_SECRETS = new Set([
@@ -58,4 +59,5 @@ export function validateEnv(): void {
   readUploadQuotaLimits(process.env);
   readUploadPendingMaxAgeMinutes(process.env);
   if (readRuntimeStateDriver(process.env) === 'redis') readRedisUrl(process.env);
+  readOperationsWorkerConcurrency(process.env);
 }

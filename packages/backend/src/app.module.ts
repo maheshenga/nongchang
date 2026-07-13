@@ -35,6 +35,7 @@ import { RequestLoggingInterceptor } from './common/logging/request-logging.inte
 import { RuntimeStateModule } from './common/runtime/runtime-state.module';
 import { RUNTIME_STATE, type RuntimeStateStore } from './common/runtime/runtime-state.types';
 import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage';
+import { OperationsModule } from './modules/operations/operations.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage'
     PhenologyModule,
     BillingModule,
     HealthModule,
+    OperationsModule,
   ],
   providers: [
     ScopeService,
