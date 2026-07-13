@@ -121,4 +121,17 @@ describe('FarmFields Fluent workspace', () => {
       });
     });
   });
+
+  it('renders the create dialog above the page-local map detail layer', async () => {
+    const view = render(<FarmFields />);
+    await screen.findByText('North Field');
+
+    fireEvent.click(screen.getByRole('button', { name: /绘制新地块/ }));
+
+    const dialog = screen.getByRole('dialog', { name: '新建地块' });
+    const detail = screen.getByTestId('field-map-detail');
+    expect(view.container.contains(dialog)).toBe(false);
+    expect(dialog.closest('[data-modal-layer="true"]')).toBeTruthy();
+    expect(detail.className).not.toContain('z-[400]');
+  });
 });

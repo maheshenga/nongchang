@@ -9,6 +9,7 @@ import TiandituPicker from './TiandituPicker';
 import { listMerchants, type MerchantUser } from '../api/agents';
 import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput, fluentSelect } from '../ui/fluent';
+import { ModalSurface } from '../ui/ModalSurface';
 
 export default function FarmFields() {
   const { user } = useAuth();
@@ -136,11 +137,12 @@ export default function FarmFields() {
               />
               <AnimatePresence mode="wait">
                 <motion.div
+                  data-testid="field-map-detail"
                   key={activeField?.id ?? 'none'}
                   initial={{ opacity: 0, x: 16 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -16 }}
-                  className="absolute bottom-4 left-4 right-4 z-[400] border border-[#E1DFDD] bg-white/95 p-4 shadow-lg sm:left-auto sm:right-4 sm:top-4 sm:w-72"
+                  className="absolute bottom-4 left-4 right-4 z-20 border border-[#E1DFDD] bg-white/95 p-4 shadow-lg sm:left-auto sm:right-4 sm:top-4 sm:w-72"
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <h4 className="font-semibold text-[#242424]">{activeField?.name ?? '-'}</h4>
@@ -248,61 +250,62 @@ function CreateFieldModal({
   };
 
   return (
-    <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label="新建地块">
-      <form onSubmit={submit} className="fluent-scrollbar max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl">
-        <div className="flex h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5">
-          <h3 className="text-base font-semibold text-[#242424]">新建地块</h3>
-          <button type="button" onClick={onClose} className={fluentButton('icon')} aria-label="关闭">×</button>
-        </div>
-        <div className="space-y-4 p-5">
-          {!isMerchant && (
-            <label htmlFor="field-owner" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
-              归属商家
-              <select id="field-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required className={`${fluentSelect} w-full`}>
-                <option value="">请选择...</option>
-                {((merchants as MerchantUser[] | null) ?? []).map((m) => (
-                  <option key={m.id} value={m.id}>{m.displayName} ({m.username})</option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label htmlFor="field-name" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
-            地块名称
-            <input id="field-name" value={name} onChange={(e) => setName(e.target.value)} required className={`${fluentInput} w-full`} />
-          </label>
-          <label htmlFor="field-area" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
-            面积(亩)
-            <input id="field-area" type="number" step="0.1" value={area} onChange={(e) => setArea(e.target.value)} required className={`${fluentInput} w-full`} />
-          </label>
-          <div>
-            <span className="mb-1 block text-xs font-semibold text-[#605E5C]">地块位置(点击地图选点，或手动填写)</span>
-            <div className="h-48 overflow-hidden border border-[#E1DFDD]">
-              <TiandituPicker
-                lng={lng ? Number(lng) : null}
-                lat={lat ? Number(lat) : null}
-                onPick={(pLng, pLat) => { setLng(String(pLng)); setLat(String(pLat)); }}
-              />
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label htmlFor="field-lng" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
-              经度
-              <input id="field-lng" type="number" step="0.000001" value={lng} onChange={(e) => setLng(e.target.value)} required className={`${fluentInput} w-full`} />
-            </label>
-            <label htmlFor="field-lat" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
-              纬度
-              <input id="field-lat" type="number" step="0.000001" value={lat} onChange={(e) => setLat(e.target.value)} required className={`${fluentInput} w-full`} />
-            </label>
-          </div>
-          {err && <p className="text-sm font-semibold text-[#A4262C]">{err}</p>}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
-          <button type="button" onClick={onClose} className={fluentButton('secondary')}>取消</button>
-          <button type="submit" disabled={submitting} className={fluentButton('primary')}>
+    <ModalSurface
+      title="新建地块"
+      onClose={onClose}
+      closeDisabled={submitting}
+      initialFocusSelector={isMerchant ? '#field-name' : '#field-owner'}
+      footer={(
+        <>
+          <button type="button" onClick={onClose} disabled={submitting} className={fluentButton('secondary')}>取消</button>
+          <button type="submit" form="create-field-form" disabled={submitting} className={fluentButton('primary')}>
             {submitting ? '提交中...' : '创建'}
           </button>
+        </>
+      )}
+    >
+      <form id="create-field-form" onSubmit={submit} className="space-y-4 p-5">
+        {!isMerchant && (
+          <label htmlFor="field-owner" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+            归属商家
+            <select id="field-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} required className={`${fluentSelect} w-full`}>
+              <option value="">请选择...</option>
+              {((merchants as MerchantUser[] | null) ?? []).map((merchant) => (
+                <option key={merchant.id} value={merchant.id}>{merchant.displayName} ({merchant.username})</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label htmlFor="field-name" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+          地块名称
+          <input id="field-name" value={name} onChange={(e) => setName(e.target.value)} required className={`${fluentInput} w-full`} />
+        </label>
+        <label htmlFor="field-area" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+          面积(亩)
+          <input id="field-area" type="number" step="0.1" value={area} onChange={(e) => setArea(e.target.value)} required className={`${fluentInput} w-full`} />
+        </label>
+        <div>
+          <span className="mb-1 block text-xs font-semibold text-[#605E5C]">地块位置(点击地图选点，或手动填写)</span>
+          <div className="h-48 overflow-hidden border border-[#E1DFDD]">
+            <TiandituPicker
+              lng={lng ? Number(lng) : null}
+              lat={lat ? Number(lat) : null}
+              onPick={(pickedLng, pickedLat) => { setLng(String(pickedLng)); setLat(String(pickedLat)); }}
+            />
+          </div>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label htmlFor="field-lng" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+            经度
+            <input id="field-lng" type="number" step="0.000001" value={lng} onChange={(e) => setLng(e.target.value)} required className={`${fluentInput} w-full`} />
+          </label>
+          <label htmlFor="field-lat" className="grid gap-1 text-xs font-semibold text-[#605E5C]">
+            纬度
+            <input id="field-lat" type="number" step="0.000001" value={lat} onChange={(e) => setLat(e.target.value)} required className={`${fluentInput} w-full`} />
+          </label>
+        </div>
+        {err && <p className="text-sm font-semibold text-[#A4262C]">{err}</p>}
       </form>
-    </div>
+    </ModalSurface>
   );
 }
