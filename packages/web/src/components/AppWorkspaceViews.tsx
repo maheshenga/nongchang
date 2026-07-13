@@ -60,7 +60,7 @@ export default function AppWorkspaceViews({
     <Suspense fallback={fallback}>
       <div className="relative h-full">
         {slot('overview', <Dashboard />)}
-        {slot('fields', <FarmFields />)}
+        {slot('fields', <FarmFields onNavigate={onNavigate} />)}
         {slot('tenants', <TenantManagement />)}
         {slot('agents', <AgentManagement />)}
         {slot('merchant', <MerchantAdmin onNavigate={onNavigate} />)}

@@ -10,8 +10,9 @@ import { listMerchants, type MerchantUser } from '../api/agents';
 import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput, fluentSelect } from '../ui/fluent';
 import { ModalSurface } from '../ui/ModalSurface';
+import type { AppTab } from '../navigation';
 
-export default function FarmFields() {
+export default function FarmFields({ onNavigate }: { onNavigate?: (tab: AppTab) => void }) {
   const { user } = useAuth();
   const { data: rawFields, loading, error, reload } = useApi(listFields, { cacheKey: 'fields' });
   const fields: Field[] = rawFields ?? [];
@@ -20,6 +21,12 @@ export default function FarmFields() {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const mapRecovery = user?.role === 'system_admin'
+    ? {
+        message: '尚未配置天地图，地块仍可使用列表与手动经纬度。',
+        ...(onNavigate ? { actionLabel: '前往第三方集成', onAction: () => onNavigate('integrations') } : {}),
+      }
+    : { message: '请联系租户系统管理员配置天地图；当前仍可使用列表与手动经纬度。' };
 
   const filteredFields = fields.filter((f) =>
     f.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -134,6 +141,7 @@ export default function FarmFields() {
                 fields={fields}
                 activeFieldId={activeField?.id ?? null}
                 onSelect={setActiveFieldId}
+                recovery={mapRecovery}
               />
               <AnimatePresence mode="wait">
                 <motion.div

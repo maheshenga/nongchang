@@ -5,15 +5,18 @@ import {
   FARM_RECORD_LIST_ORDER_BY,
   FARM_RECORD_OWNER_BATCH_SELECT,
   FARM_RECORD_OWNER_SELECT,
+  FARM_RECORD_OPERATOR_SELECT,
   assertSupplyQuotaWithinLimit,
   buildFarmRecordListFindManyArgs,
   buildFarmRecordListWhere,
   buildFarmRecordCreateData,
   buildFarmRecordOwnerBatchWhere,
   buildFarmRecordOwnerWhere,
+  buildFarmRecordOperatorWhere,
   enrichFarmRecordRows,
   getFarmRecordBatchIds,
   getFarmRecordOwnerIds,
+  getFarmRecordOperatorIds,
   serializeFarmRecord,
   shouldApplySupplyQuota,
   toPaginatedFarmRecords,
@@ -105,18 +108,25 @@ describe('farm record model helpers', () => {
 
   it('enriches rows with owner names through batch owner mapping', () => {
     const out = enrichFarmRecordRows(
-      [{ id: 'r1', batchId: 'b1', supplyAmount: new Prisma.Decimal('2.5') }],
+      [{ id: 'r1', batchId: 'b1', operatorId: 'op1', supplyAmount: new Prisma.Decimal('2.5') }],
       [{ id: 'b1', ownerId: 'm1' }],
       [{ id: 'm1', displayName: 'Merchant A' }],
+      [{ id: 'op1', displayName: 'Operator A' }],
     );
 
-    expect(out).toEqual([{ id: 'r1', batchId: 'b1', supplyAmount: 2.5, ownerName: 'Merchant A' }]);
+    expect(out).toEqual([{
+      id: 'r1', batchId: 'b1', operatorId: 'op1', supplyAmount: 2.5,
+      ownerName: 'Merchant A', operatorName: 'Operator A',
+    }]);
   });
 
-  it('uses null ownerName when batch or owner is missing', () => {
-    const out = enrichFarmRecordRows([{ id: 'r1', batchId: 'b1', supplyAmount: null }], [], []);
+  it('uses null friendly names when related users are missing', () => {
+    const out = enrichFarmRecordRows([{ id: 'r1', batchId: 'b1', operatorId: 'op1', supplyAmount: null }], [], [], []);
 
-    expect(out).toEqual([{ id: 'r1', batchId: 'b1', supplyAmount: null, ownerName: null }]);
+    expect(out).toEqual([{
+      id: 'r1', batchId: 'b1', operatorId: 'op1', supplyAmount: null,
+      ownerName: null, operatorName: null,
+    }]);
   });
 });
 
@@ -182,6 +192,13 @@ describe('farm record list model helpers', () => {
     });
     expect(buildFarmRecordOwnerBatchWhere([])).toBeNull();
     expect(buildFarmRecordOwnerWhere([])).toBeNull();
+    const operatorRows = [{ operatorId: 'op1' }, { operatorId: 'op1' }, { operatorId: 'op2' }];
+    expect(getFarmRecordOperatorIds(operatorRows)).toEqual(['op1', 'op2']);
+    expect(buildFarmRecordOperatorWhere(operatorRows)).toEqual({
+      where: { id: { in: ['op1', 'op2'] } },
+      select: FARM_RECORD_OPERATOR_SELECT,
+    });
+    expect(buildFarmRecordOperatorWhere([])).toBeNull();
   });
 
   it('builds paginated farm record envelopes', () => {

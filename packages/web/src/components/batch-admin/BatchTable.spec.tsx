@@ -5,6 +5,7 @@ import { BatchTable } from './BatchTable';
 
 const batch: ViewBatch = {
   id: 'batch-1',
+  fieldId: 'field-1',
   code: 'B-001',
   type: '番茄',
   date: '2026-07-01',

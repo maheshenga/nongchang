@@ -10,6 +10,7 @@ import {
   buildFarmRecordListWhere,
   buildFarmRecordOwnerBatchWhere,
   buildFarmRecordOwnerWhere,
+  buildFarmRecordOperatorWhere,
   enrichFarmRecordRows,
   serializeFarmRecord,
   shouldApplySupplyQuota,
@@ -83,9 +84,13 @@ export class FarmRecordService {
     const batchLookup = buildFarmRecordOwnerBatchWhere(items);
     const batches = batchLookup ? await this.prisma.batch.findMany(batchLookup) : [];
     const ownerLookup = buildFarmRecordOwnerWhere(batches);
-    const owners = ownerLookup ? await this.prisma.user.findMany(ownerLookup) : [];
-    const withOwner = enrichFarmRecordRows(items, batches, owners);
-    return toPaginatedFarmRecords(withOwner, total, query);
+    const operatorLookup = buildFarmRecordOperatorWhere(items);
+    const [owners, operators] = await Promise.all([
+      ownerLookup ? this.prisma.user.findMany(ownerLookup) : [],
+      operatorLookup ? this.prisma.user.findMany(operatorLookup) : [],
+    ]);
+    const enriched = enrichFarmRecordRows(items, batches, owners, operators);
+    return toPaginatedFarmRecords(enriched, total, query);
   }
 
   // 状态流转:校验记录归属(经其 batchId 在调用方作用域内),再更新 status。

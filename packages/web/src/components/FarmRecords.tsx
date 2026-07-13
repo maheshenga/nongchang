@@ -10,7 +10,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { FarmRecordSource, type BatchDeviation, type CreateFarmRecordDto } from '@nongchang/shared';
 import { listBatches } from '../api/batches';
 import {
@@ -24,14 +24,17 @@ import { listDeviations } from '../api/phenology';
 import { useApi } from '../hooks/useApi';
 import { fluentButton, fluentFocus, fluentInput, fluentSelect, fluentStatusTag } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import { buildIdentityMap, friendlyIdentity } from '../ui/identity';
 
 type RecordTask = {
   id: string;
   time: string;
   batch: string;
+  batchTitle?: string;
   type: string;
   desc: string;
   person: string;
+  personTitle?: string;
   owner: string;
   status: 'pending' | 'completed';
   material?: string;
@@ -51,15 +54,19 @@ const labelClass = 'mb-1 block text-xs font-semibold text-[#605E5C]';
 const modalInputClass = `${fluentInput} w-full`;
 const checkboxTextClass = 'text-xs leading-5 text-[#605E5C]';
 
-function toRecordTask(r: FarmRecord): RecordTask {
+function toRecordTask(r: FarmRecord, batchNames: ReadonlyMap<string, string>): RecordTask {
   const detail = r.detail ?? {};
+  const batch = friendlyIdentity({ id: r.batchId, label: batchNames.get(r.batchId), fallback: '未知批次' });
+  const operator = friendlyIdentity({ id: r.operatorId, label: r.operatorName, fallback: '未知执行人' });
   return {
     id: r.id,
     time: r.recordedAt.slice(0, 10),
-    batch: r.batchId,
+    batch: batch.label,
+    batchTitle: batch.isFallback ? `批次编号: ${batch.shortId}` : undefined,
     type: r.action,
     desc: typeof detail.desc === 'string' ? detail.desc : r.action,
-    person: r.operatorId.slice(0, 8),
+    person: operator.label,
+    personTitle: operator.isFallback ? `执行人编号: ${operator.shortId}` : undefined,
     owner: r.ownerName ?? '-',
     status: r.status === 'pending' ? 'pending' : 'completed',
     material: typeof detail.material === 'string' ? detail.material : undefined,
@@ -88,7 +95,7 @@ function TaskCard({
           </div>
           <div className="mt-1 text-xs text-[#605E5C]">归属商户: <span className="font-semibold text-[#323130]">{task.owner}</span></div>
         </div>
-        <span className="shrink-0 border border-[#E1DFDD] bg-[#FAFAFA] px-2 py-1 font-mono text-xs text-[#605E5C]">{task.batch}</span>
+        <span title={task.batchTitle} className="shrink-0 border border-[#E1DFDD] bg-[#FAFAFA] px-2 py-1 text-xs font-semibold text-[#605E5C]">{task.batch}</span>
       </div>
 
       <p className="mt-3 text-sm leading-6 text-[#323130]">{task.desc}</p>
@@ -100,7 +107,7 @@ function TaskCard({
       <div className="mt-3 flex flex-col gap-2 text-xs text-[#605E5C] sm:flex-row sm:items-center sm:justify-between">
         <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" /> {task.time}</span>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="border border-[#EDEBE9] bg-white px-2 py-1">执行人: {task.person}</span>
+          <span title={task.personTitle} className="border border-[#EDEBE9] bg-white px-2 py-1">执行人: {task.person}</span>
           {!completed && onComplete && (
             <button
               type="button"
@@ -138,7 +145,14 @@ export default function FarmRecords() {
   const { data: batches } = useApi(listBatches, { cacheKey: 'batches' });
   const { data: deviations } = useApi(listDeviations, { cacheKey: 'batch-deviations' });
 
-  const tasks: RecordTask[] = (rawRecords ?? []).map(toRecordTask);
+  const batchNames = useMemo(
+    () => buildIdentityMap(batches ?? [], batch => batch.id, batch => batch.batchNo),
+    [batches],
+  );
+  const tasks: RecordTask[] = useMemo(
+    () => (rawRecords ?? []).map(record => toRecordTask(record, batchNames)),
+    [rawRecords, batchNames],
+  );
   const alertDeviations: BatchDeviation[] = (deviations ?? []).filter((d) => d.alert);
   const pendingTasks = tasks.filter((task) => task.status === 'pending');
   const completedTasks = tasks.filter((task) => task.status === 'completed');

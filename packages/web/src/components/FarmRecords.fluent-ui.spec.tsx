@@ -32,6 +32,7 @@ const records = [
     batchId: 'batch-1',
     fieldId: 'field-1',
     operatorId: 'operator-abcdef',
+    operatorName: '张三',
     ownerName: '大理基地',
     action: '温室浇水',
     detail: { desc: '完成 A 区滴灌', material: '水 2T', labor: 1 },
@@ -48,6 +49,7 @@ const records = [
     batchId: 'batch-2',
     fieldId: 'field-2',
     operatorId: 'operator-ghijkl',
+    operatorName: '李四',
     ownerName: '上海基地',
     action: '采收质检',
     detail: { desc: '完成 A 级花材抽检', material: '质检表', labor: 2 },
@@ -73,6 +75,24 @@ const batches = [
     expectedHarvest: '2026-09-01T00:00:00.000Z',
     status: 'active',
     createdAt: '2026-01-01T00:00:00.000Z',
+    laborCost: 0,
+    sellPrice: 0,
+    codeCount: 0,
+    scanTotal: 0,
+    inputCost: 0,
+  },
+  {
+    id: 'batch-2',
+    tenantId: 'tenant-1',
+    ownerId: 'owner-2',
+    ownerName: '上海基地',
+    fieldId: 'field-2',
+    batchNo: 'PA-2026-002',
+    cropName: '月季',
+    plantDate: '2026-01-02T00:00:00.000Z',
+    expectedHarvest: '2026-09-02T00:00:00.000Z',
+    status: 'active',
+    createdAt: '2026-01-02T00:00:00.000Z',
     laborCost: 0,
     sellPrice: 0,
     codeCount: 0,
@@ -130,6 +150,8 @@ describe('FarmRecords Fluent UI', () => {
 
     expect(await screen.findByText('温室浇水')).toBeTruthy();
     expect(screen.getByText('采收质检')).toBeTruthy();
+    expect(screen.getByText('PA-2026-001')).toBeTruthy();
+    expect(screen.getByText('执行人: 张三')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('按作业类型搜索'), { target: { value: ' 浇水 ' } });
     fireEvent.change(screen.getByLabelText('状态筛选'), { target: { value: 'pending' } });

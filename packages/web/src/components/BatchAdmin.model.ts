@@ -1,8 +1,10 @@
 import { BatchStatus } from '@nongchang/shared';
 import type { Batch } from '../api/batches';
+import { friendlyIdentity } from '../ui/identity';
 
 export interface ViewBatch {
   id: string;
+  fieldId: string;
   code: string;
   type: string;
   date: string;
@@ -55,13 +57,19 @@ export const STATUS_LABEL: Record<string, string> = {
   [BatchStatus.DISTRIBUTED]: '已分销',
 };
 
-export function toViewBatch(batch: Batch): ViewBatch {
+export function toViewBatch(batch: Batch, fieldNames: ReadonlyMap<string, string> = new Map()): ViewBatch {
+  const field = friendlyIdentity({
+    id: batch.fieldId,
+    label: fieldNames.get(batch.fieldId),
+    fallback: '未知地块',
+  });
   return {
     id: batch.id,
+    fieldId: batch.fieldId,
     code: batch.batchNo,
     type: batch.cropName,
     date: batch.plantDate.slice(0, 10),
-    house: batch.fieldId.slice(0, 8),
+    house: field.label,
     owner: batch.ownerName ?? '—',
     stage: batch.status,
     color: STATUS_COLOR[batch.status] ?? 'slate',
@@ -79,7 +87,7 @@ export function filterBatches(batches: ViewBatch[], filters: BatchFilterState): 
       ? batch.code.toLowerCase().includes(filters.searchCode.toLowerCase())
       : true;
     const matchType = filters.filterType === 'all' ? true : batch.type.includes(filters.filterType);
-    const matchHouse = filters.filterHouse === 'all' ? true : batch.house.includes(filters.filterHouse);
+    const matchHouse = filters.filterHouse === 'all' ? true : batch.fieldId === filters.filterHouse;
     let matchDate = true;
     if (filters.filterDateRange === '2024') matchDate = batch.date.startsWith('2024');
     if (filters.filterDateRange === '2023') matchDate = batch.date.startsWith('2023');

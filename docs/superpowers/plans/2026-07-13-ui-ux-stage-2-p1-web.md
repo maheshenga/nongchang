@@ -105,7 +105,7 @@ export function buildIdentityMap<T>(
 - Extends `FarmRecordView` with `operatorName: string | null`.
 - Extends `ViewBatch` with `fieldId: string`; `house` becomes the friendly field label.
 
-- [ ] **Step 1: Write the failing identity and contract tests**
+- [x] **Step 1: Write the failing identity and contract tests**
 
 Add tests that assert:
 
@@ -123,7 +123,7 @@ Update farm-record model tests so `enrichFarmRecordRows` receives an operator ro
 
 Add a map-recovery test: system administrators receive a `前往第三方集成` action, while merchants receive `请联系租户系统管理员配置天地图` and no inaccessible navigation action.
 
-- [ ] **Step 2: Run the tests to verify red**
+- [x] **Step 2: Run the tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/identity.spec.ts src/components/BatchAdmin.model.spec.ts src/components/FarmRecords.fluent-ui.spec.tsx
@@ -133,7 +133,7 @@ $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/backend test -- fa
 
 Expected: FAIL because the helper, `operatorName`, and field-name mapping do not exist.
 
-- [ ] **Step 3: Implement the pure helper and response enrichment**
+- [x] **Step 3: Implement the pure helper and response enrichment**
 
 Create `identity.ts` with:
 
@@ -167,7 +167,7 @@ export function buildIdentityMap<T>(items: readonly T[], idOf: (item: T) => stri
 
 Add `operatorName: z.string().nullable().default(null)` to `farmRecordViewSchema`. In the backend, fetch users whose IDs occur in `items.map(item => item.operatorId)`, and extend `enrichFarmRecordRows(items, batches, owners, operators)` with an operator map. Do not expose usernames or any new IDs.
 
-- [ ] **Step 4: Resolve field, batch, and operator labels in Web view models**
+- [x] **Step 4: Resolve field, batch, and operator labels in Web view models**
 
 Change `toViewBatch` to accept `ReadonlyMap<string, string>` and return:
 
@@ -186,7 +186,7 @@ type MapRecovery = { message: string; actionLabel?: string; onAction?: () => voi
 
 `FarmFields` receives `onNavigate?: (tab: AppTab) => void`. For `system_admin`, pass an action that opens `integrations`; for other roles, pass only the actor-specific message. Wire `App` with `<FarmFields onNavigate={requestTabChange} />` once Task 7 introduces the guarded navigation function; until then use `setActiveTab` with the same prop signature.
 
-- [ ] **Step 5: Run focused tests and type checks**
+- [x] **Step 5: Run focused tests and type checks**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/identity.spec.ts src/components/BatchAdmin.model.spec.ts src/components/BatchAdmin.spec.tsx src/components/FarmRecords.fluent-ui.spec.tsx src/components/FarmFields.spec.tsx

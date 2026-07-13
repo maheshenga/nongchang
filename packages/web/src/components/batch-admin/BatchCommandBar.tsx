@@ -58,7 +58,7 @@ export function BatchCommandBar(props: Props) {
       <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end">
         <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" /><input placeholder="按批次号搜索" value={props.searchCode} onChange={e => props.setSearchCode(e.target.value)} className={`${fluentInput} w-full pl-8`} /></div>
         <select value={props.filterType} onChange={e => props.setFilterType(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}>{cropOptions}</select>
-        <select value={props.filterHouse} onChange={e => props.setFilterHouse(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}><option value="all">全部地块</option>{props.fields.slice(0, 6).map(field => <option key={field.id} value={field.id.slice(0, 8)}>{field.name}</option>)}</select>
+        <select value={props.filterHouse} onChange={e => props.setFilterHouse(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}><option value="all">全部地块</option>{props.fields.slice(0, 6).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select>
         <select value={props.filterDateRange} onChange={e => props.setFilterDateRange(e.target.value)} className={`${fluentSelect} w-full max-w-[180px]`}>{dateOptions}</select>
       </div>
     </div>
@@ -66,7 +66,7 @@ export function BatchCommandBar(props: Props) {
       <div className="mb-3 text-xs font-semibold text-[#605E5C]">高级筛选</div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex w-48 flex-col gap-1 text-xs font-semibold text-[#605E5C]">品种<select value={props.filterType} onChange={e => props.setFilterType(e.target.value)} className={`${fluentSelect} w-full`}>{cropOptions}</select></label>
-        <label className="flex w-56 flex-col gap-1 text-xs font-semibold text-[#605E5C]">地块<select value={props.filterHouse} onChange={e => props.setFilterHouse(e.target.value)} className={`${fluentSelect} w-full`}><option value="all">全部地块</option>{props.fields.slice(0, 6).map(field => <option key={field.id} value={field.id.slice(0, 8)}>{field.name}</option>)}</select></label>
+        <label className="flex w-56 flex-col gap-1 text-xs font-semibold text-[#605E5C]">地块<select value={props.filterHouse} onChange={e => props.setFilterHouse(e.target.value)} className={`${fluentSelect} w-full`}><option value="all">全部地块</option>{props.fields.slice(0, 6).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}</select></label>
         <label className="flex w-48 flex-col gap-1 text-xs font-semibold text-[#605E5C]">日期<select value={props.filterDateRange} onChange={e => props.setFilterDateRange(e.target.value)} className={`${fluentSelect} w-full`}>{dateOptions}</select></label>
         <button type="button" onClick={props.clearFilters} className={fluentButton('secondary')}>清空筛选</button>
       </div>

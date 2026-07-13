@@ -46,6 +46,8 @@ export const FARM_RECORD_OWNER_BATCH_SELECT = { id: true, ownerId: true } as con
 
 export const FARM_RECORD_OWNER_SELECT = { id: true, displayName: true } as const;
 
+export const FARM_RECORD_OPERATOR_SELECT = { id: true, displayName: true } as const;
+
 export interface FarmRecordListRow {
   batchId: string;
   supplyAmount: Prisma.Decimal | number | null;
@@ -57,6 +59,11 @@ export interface FarmRecordOwnerBatchRow {
 }
 
 export interface FarmRecordOwnerRow {
+  id: string;
+  displayName: string | null;
+}
+
+export interface FarmRecordOperatorRow {
   id: string;
   displayName: string | null;
 }
@@ -106,15 +113,27 @@ export function buildFarmRecordOwnerWhere(rows: Array<{ ownerId: string }>) {
   return { where: { id: { in: ownerIds } }, select: FARM_RECORD_OWNER_SELECT };
 }
 
+export function getFarmRecordOperatorIds(rows: Array<{ operatorId: string }>): string[] {
+  return [...new Set(rows.map(row => row.operatorId))];
+}
+
+export function buildFarmRecordOperatorWhere(rows: Array<{ operatorId: string }>) {
+  const operatorIds = getFarmRecordOperatorIds(rows);
+  if (!operatorIds.length) return null;
+  return { where: { id: { in: operatorIds } }, select: FARM_RECORD_OPERATOR_SELECT };
+}
+
 export function toPaginatedFarmRecords<T>(items: T[], total: number, query: FarmRecordQueryDto): PaginatedFarmRecords<T> {
   return { items, total, page: query.page, pageSize: query.pageSize };
 }
 
-export function enrichFarmRecordRows(items: any[], batches: any[], owners: any[]) {
+export function enrichFarmRecordRows(items: any[], batches: any[], owners: any[], operators: any[]) {
   const batchOwner = new Map(batches.map((batch: any) => [batch.id, batch.ownerId]));
-  const nameMap = new Map(owners.map((owner: any) => [owner.id, owner.displayName]));
+  const ownerNameMap = new Map(owners.map((owner: any) => [owner.id, owner.displayName]));
+  const operatorNameMap = new Map(operators.map((operator: any) => [operator.id, operator.displayName]));
   return items.map((record: any) => ({
     ...serializeFarmRecord(record),
-    ownerName: nameMap.get(batchOwner.get(record.batchId) as string) ?? null,
+    ownerName: ownerNameMap.get(batchOwner.get(record.batchId) as string) ?? null,
+    operatorName: operatorNameMap.get(record.operatorId) ?? null,
   }));
 }

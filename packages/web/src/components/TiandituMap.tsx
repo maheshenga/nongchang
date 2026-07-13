@@ -2,16 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { loadTianditu } from '../lib/tianditu';
 import type { Field } from '../api/fields';
+import { fluentButton } from '../ui/fluent';
+
+export type MapRecovery = {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
 
 interface Props {
   fields: Field[];
   activeFieldId: string | null;
   onSelect: (id: string) => void;
   apiKey?: string; // 显式 key(公开溯源页用);不传则走已登录的租户配置接口
+  recovery?: MapRecovery;
 }
 
 // 用天地图真实底图按经纬度展示地块标注。无 key / 加载失败时回退到「去配置」提示。
-export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }: Props) {
+export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey, recovery }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
@@ -82,9 +90,15 @@ export default function TiandituMap({ fields, activeFieldId, onSelect, apiKey }:
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 gap-3">
         <div className="p-3 bg-slate-100 rounded-full"><MapPin className="w-6 h-6 text-slate-400" /></div>
         <p className="max-w-xs text-sm text-[#605E5C]">
-          {errMsg.includes('未配置') ? '尚未配置天地图密钥,无法加载真实底图。' : `底图加载失败:${errMsg}`}
+          {recovery?.message ?? (errMsg.includes('未配置') ? '尚未配置天地图密钥,无法加载真实底图。' : `底图加载失败:${errMsg}`)}
         </p>
-        <p className="text-xs text-[#605E5C]">请在「系统设置 → 第三方集成」中配置并启用天地图 key。</p>
+        {recovery?.actionLabel && recovery.onAction ? (
+          <button type="button" onClick={recovery.onAction} className={fluentButton('primary')}>
+            {recovery.actionLabel}
+          </button>
+        ) : !recovery ? (
+          <p className="text-xs text-[#605E5C]">请在「系统设置 → 第三方集成」中配置并启用天地图 key。</p>
+        ) : null}
       </div>
     );
   }

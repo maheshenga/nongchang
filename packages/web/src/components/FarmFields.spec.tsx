@@ -7,6 +7,7 @@ const createFieldMock = vi.fn();
 const listMerchantsMock = vi.fn();
 let authUser: AuthUser | null = null;
 let mapFieldNames: string[] = [];
+let mapRecovery: { message: string; actionLabel?: string; onAction?: () => void } | undefined;
 
 vi.mock('../api/fields', () => ({
   listFields: () => listFieldsMock(),
@@ -22,8 +23,13 @@ vi.mock('../auth/auth-context', () => ({
 }));
 
 vi.mock('./TiandituMap', () => ({
-  default: ({ fields, onSelect }: { fields: Array<{ id: string; name: string }>; onSelect: (id: string) => void }) => {
+  default: ({ fields, onSelect, recovery }: {
+    fields: Array<{ id: string; name: string }>;
+    onSelect: (id: string) => void;
+    recovery?: { message: string; actionLabel?: string; onAction?: () => void };
+  }) => {
     mapFieldNames = fields.map((field) => field.name);
+    mapRecovery = recovery;
     return (
       <div data-testid="tianditu-map">
         {fields.map((field) => (
@@ -52,6 +58,7 @@ const fields = [
 beforeEach(() => {
   vi.clearAllMocks();
   mapFieldNames = [];
+  mapRecovery = undefined;
   authUser = { userId: 'admin-1', tenantId: 't1', role: 'system_admin', agentId: null, ownerId: null };
   listFieldsMock.mockResolvedValue(fields);
   createFieldMock.mockResolvedValue(fields[0]);
@@ -133,5 +140,24 @@ describe('FarmFields Fluent workspace', () => {
     expect(view.container.contains(dialog)).toBe(false);
     expect(dialog.closest('[data-modal-layer="true"]')).toBeTruthy();
     expect(detail.className).not.toContain('z-[400]');
+  });
+
+  it('offers map configuration only to the system administrator role', async () => {
+    const onNavigate = vi.fn();
+    render(<FarmFields onNavigate={onNavigate} />);
+    await screen.findByText('North Field');
+
+    expect(mapRecovery?.message).toBe('尚未配置天地图，地块仍可使用列表与手动经纬度。');
+    expect(mapRecovery?.actionLabel).toBe('前往第三方集成');
+    mapRecovery?.onAction?.();
+    expect(onNavigate).toHaveBeenCalledWith('integrations');
+  });
+
+  it('tells merchants who can fix the map without exposing an inaccessible route', async () => {
+    authUser = { userId: 'merchant-user', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'merchant-owner' };
+    render(<FarmFields />);
+    await screen.findByText('North Field');
+
+    expect(mapRecovery).toEqual({ message: '请联系租户系统管理员配置天地图；当前仍可使用列表与手动经纬度。' });
   });
 });

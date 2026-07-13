@@ -16,12 +16,20 @@ import { BatchDeleteDialog, type DeleteTarget } from './batch-admin/BatchDeleteD
 import { CreateBatchModal } from './batch-admin/CreateBatchModal';
 import { BatchAnalysisDialogs, type PendingAction } from './batch-admin/BatchAnalysisDialogs';
 import { useBatchAdminFilters } from './batch-admin/useBatchAdminFilters';
+import { buildIdentityMap } from '../ui/identity';
 
 // 生成真实溯源码 · 导出溯源报告 · 数据来源于批次、农事记录、溯源事件与扫码统计接口
 export default function BatchAdmin() {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches, { cacheKey: 'batches' });
   const { data: fields } = useApi(listFields, { cacheKey: 'fields' });
-  const batches = useMemo(() => (rawBatches ?? []).map(toViewBatch), [rawBatches]);
+  const fieldNames = useMemo(
+    () => buildIdentityMap(fields ?? [], field => field.id, field => field.name),
+    [fields],
+  );
+  const batches = useMemo(
+    () => (rawBatches ?? []).map(batch => toViewBatch(batch, fieldNames)),
+    [rawBatches, fieldNames],
+  );
   const filters = useBatchAdminFilters(batches);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);

@@ -20,7 +20,7 @@ const field = {
 };
 const record = {
   id: 'record-1', tenantId: 'tenant-1', batchId: 'batch-1', fieldId: 'field-1', operatorId: 'user-1',
-  ownerName: null, action: 'Fertilize', detail: { amount: 2 }, images: null, location: null,
+  ownerName: null, operatorName: 'Operator A', action: 'Fertilize', detail: { amount: 2 }, images: null, location: null,
   recordedAt: now, source: FarmRecordSource.WEB, status: 'completed', supplyId: null, supplyAmount: 2.5, createdAt: now,
 };
 const code = {
@@ -65,6 +65,7 @@ describe('resource response schemas', () => {
     const parsed = farmRecordViewSchema.parse({
       ...record,
       ownerName: undefined,
+      operatorName: undefined,
       detail: undefined,
       images: undefined,
       location: undefined,
@@ -73,6 +74,7 @@ describe('resource response schemas', () => {
     });
     expect(parsed).toMatchObject({
       ownerName: null,
+      operatorName: null,
       detail: null,
       images: null,
       location: null,

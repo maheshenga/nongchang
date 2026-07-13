@@ -51,6 +51,7 @@ export const farmRecordViewSchema = z.object({
   fieldId: id,
   operatorId: id,
   ownerName: z.string().nullable().default(null),
+  operatorName: z.string().nullable().default(null),
   action: z.string().min(1),
   detail: jsonRecord.nullable().default(null),
   images: z.array(z.string()).nullable().default(null),

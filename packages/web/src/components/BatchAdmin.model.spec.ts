@@ -39,10 +39,11 @@ const rawBatch = (overrides: Partial<Batch> = {}): Batch => ({
 
 const viewBatch = (overrides: Partial<ViewBatch> = {}): ViewBatch => ({
   id: 'batch-1',
+  fieldId: 'field-alpha-001',
   code: 'B20240520001',
   type: '阳光玫瑰',
   date: '2024-05-20',
-  house: 'field-al',
+  house: '东区一号田',
   owner: '张三农场',
   stage: BatchStatus.GROWING,
   color: 'emerald',
@@ -56,12 +57,13 @@ const viewBatch = (overrides: Partial<ViewBatch> = {}): ViewBatch => ({
 
 describe('BatchAdmin model helpers', () => {
   it('maps API batches into the exact view model consumed by the table', () => {
-    expect(toViewBatch(rawBatch())).toEqual({
+    expect(toViewBatch(rawBatch(), new Map([['field-alpha-001', '东区一号田']]))).toEqual({
       id: 'batch-1',
+      fieldId: 'field-alpha-001',
       code: 'B20240520001',
       type: '阳光玫瑰',
       date: '2024-05-20',
-      house: 'field-al',
+      house: '东区一号田',
       owner: '—',
       stage: BatchStatus.GROWING,
       color: 'emerald',
@@ -73,17 +75,17 @@ describe('BatchAdmin model helpers', () => {
     });
   });
 
-  it('filters by batch code case-insensitively plus type, field short code, and year', () => {
+  it('filters by batch code case-insensitively plus type, full field id, and year', () => {
     const batches = [
-      viewBatch({ id: 'batch-1', code: 'B20240520001', type: '阳光玫瑰', house: 'field-al', date: '2024-05-20' }),
-      viewBatch({ id: 'batch-2', code: 'B20230518003', type: '美早', house: 'field-br', date: '2023-05-18' }),
-      viewBatch({ id: 'batch-3', code: 'C20240518003', type: '美早', house: 'field-al', date: '2024-05-18' }),
+      viewBatch({ id: 'batch-1', fieldId: 'field-alpha-001', code: 'B20240520001', type: '阳光玫瑰', house: '东区一号田', date: '2024-05-20' }),
+      viewBatch({ id: 'batch-2', fieldId: 'field-bravo-002', code: 'B20230518003', type: '美早', house: '西区二号田', date: '2023-05-18' }),
+      viewBatch({ id: 'batch-3', fieldId: 'field-alpha-001', code: 'C20240518003', type: '美早', house: '东区一号田', date: '2024-05-18' }),
     ];
 
     expect(filterBatches(batches, {
       searchCode: 'b2024',
       filterType: '阳光',
-      filterHouse: 'field-al',
+      filterHouse: 'field-alpha-001',
       filterDateRange: '2024',
     }).map((batch) => batch.id)).toEqual(['batch-1']);
   });
@@ -116,7 +118,7 @@ describe('BatchAdmin model helpers', () => {
       'B20240520001',
       '阳光玫瑰',
       '2024-05-20',
-      'field-al',
+      '东区一号田',
       '张三农场',
       BatchStatus.GROWING,
       10000,

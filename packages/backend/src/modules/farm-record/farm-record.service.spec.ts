@@ -111,15 +111,22 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
   function makeListService(overrides: any = {}) {
     let findManyArgs: any;
     let countArgs: any;
-    const batchFindMany = vi.fn(async () => []);
+    const batchFindMany = vi.fn(async () => overrides.batches ?? []);
+    const userFindMany = vi.fn(async ({ where }: any) => {
+      const ids = where?.id?.in ?? [];
+      return (overrides.users ?? []).filter((user: { id: string }) => ids.includes(user.id));
+    });
     const prisma = {
       batch: {
         findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }),
         findMany: batchFindMany,
       },
-      user: { findMany: async () => [] },
+      user: { findMany: userFindMany },
       farmRecord: {
-        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1', batchId: 'b1' }]; },
+        findMany: async (a: any) => {
+          findManyArgs = a;
+          return overrides.rows ?? [{ id: 'fr1', batchId: 'b1', operatorId: 'op1', supplyAmount: null }];
+        },
         count: async (a: any) => { countArgs = a; return overrides.total ?? 1; },
       },
       $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
@@ -129,6 +136,7 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
       get findManyArgs() { return findManyArgs; },
       get countArgs() { return countArgs; },
       batchFindMany,
+      userFindMany,
     };
   }
 
@@ -164,5 +172,21 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
     await expect(h.svc.list(merchant, { batchId: BATCH, page: 1, pageSize: 20 }))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(h.findManyArgs).toBeUndefined();
+  });
+
+  it('返回归属商户与执行人的友好名称', async () => {
+    const h = makeListService({
+      rows: [{ id: 'fr1', batchId: 'b1', operatorId: 'op1', supplyAmount: null }],
+      batches: [{ id: 'b1', ownerId: 'm1' }],
+      users: [
+        { id: 'm1', displayName: 'Merchant A' },
+        { id: 'op1', displayName: 'Operator A' },
+      ],
+    });
+
+    const result = await h.svc.list(merchant, { page: 1, pageSize: 20 });
+
+    expect(result.items[0]).toMatchObject({ ownerName: 'Merchant A', operatorName: 'Operator A' });
+    expect(h.userFindMany).toHaveBeenCalledTimes(2);
   });
 });
