@@ -9,7 +9,7 @@
     "typecheck:web": "pnpm --filter web lint",
     "build:web": "pnpm --filter web build",
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
-    "audit:prod": "pnpm audit --prod --audit-level high",
+    "audit:prod": "pnpm audit --prod --audit-level high && node scripts/release/check-advisory-budget.mjs",
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:shared && pnpm --filter @nongchang/shared test && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
     "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e",
