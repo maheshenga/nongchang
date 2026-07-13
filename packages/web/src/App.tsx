@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
+import { Leaf, LogOut, Menu, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import AppWorkspaceViews from './components/AppWorkspaceViews';
 import type { AiWorkspaceContext } from './components/AiAssistant.model';
@@ -55,7 +55,6 @@ export default function App() {
   );
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
-  const canOpenBilling = allowedTabs.includes('billing');
   const requestTabChange = async (tab: AppTab, beforeChange?: () => void): Promise<boolean> => {
     if (!allowedTabs.includes(tab)) return false;
     if (tab !== activeTab && !(await confirmUnsavedNavigation())) return false;
@@ -200,14 +199,14 @@ export default function App() {
         <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
-            aria-label="Close navigation backdrop"
+            aria-label="关闭导航遮罩"
             className="absolute inset-0 bg-black/30"
             onClick={() => setMobileNavOpen(false)}
           />
           <aside
             role="dialog"
             aria-modal="true"
-            aria-label="Mobile navigation"
+            aria-label="移动导航"
             className="relative flex h-full w-[280px] flex-col border-r border-[#E1DFDD] bg-[#FAFAFA] shadow-xl"
           >
             <div className="flex h-12 items-center gap-3 border-b border-[#E1DFDD] px-4">
@@ -215,30 +214,13 @@ export default function App() {
                 <Leaf className="h-4 w-4" />
               </div>
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">农场溯源管理</span>
-              <button type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} className={fluentButton('icon')}>
+              <button type="button" aria-label="关闭导航" onClick={() => setMobileNavOpen(false)} className={fluentButton('icon')}>
                 <X className="h-4 w-4" />
               </button>
             </div>
             <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">
               {renderNavSections(true)}
             </nav>
-            {canOpenBilling && (
-              <div className="border-t border-[#E1DFDD] p-3">
-                <button
-                  type="button"
-                  aria-label="Open billing resources"
-                  onClick={() => {
-                    void requestTabChange('billing').then(changed => {
-                      if (changed) setMobileNavOpen(false);
-                    });
-                  }}
-                  className={`${fluentButton('secondary')} w-full justify-start`}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  打开计费资源
-                </button>
-              </div>
-            )}
           </aside>
         </div>
       )}
@@ -256,31 +238,18 @@ export default function App() {
             {renderNavSections(false)}
           </nav>
 
-          {canOpenBilling && (
-            <div className="border-t border-[#E1DFDD] p-3">
-              <button
-                type="button"
-                aria-label="Open billing resources"
-                onClick={() => void requestTabChange('billing')}
-                className={`${fluentButton('secondary')} w-full justify-start`}
-              >
-                <Sparkles className="h-4 w-4" />
-                打开计费资源
-              </button>
-            </div>
-          )}
         </aside>
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
         {!isPresentationMode && (
           <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#E1DFDD] bg-white px-4">
-            <button type="button" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
+            <button type="button" aria-label="打开导航" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
               <Menu className="h-4 w-4" />
             </button>
             <GlobalSearch items={searchItems} onOpen={tab => void requestTabChange(tab)} />
             <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-[#605E5C]">
-              <span className="hidden truncate sm:inline">{profile?.displayName ?? user?.userId ?? '已登录用户'}</span>
+              <span className="hidden truncate sm:inline">{profile?.displayName ?? '账户加载中'}</span>
               <span className="hidden rounded-[4px] bg-[#F3F2F1] px-2 py-1 font-semibold text-[#323130] sm:inline">{roleInfo.badge}</span>
               <button type="button" onClick={() => setProfileOpen(true)} className={fluentButton('subtle')}>账户</button>
               <button type="button" onClick={handleLogout} className={fluentButton('secondary')}>

@@ -146,15 +146,15 @@ describe('MerchantManagement Fluent table', () => {
     }));
 
     renderWithDialog();
-    await screen.findByText('Page 1 / 3');
+    await screen.findByText('第 1 / 3 页');
 
     expect(listMerchantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
       expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
     });
-    expect(await screen.findByText('Page 2 / 3')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
   });
 });

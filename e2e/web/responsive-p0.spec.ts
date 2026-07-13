@@ -29,7 +29,7 @@ test('field create dialog stays above the map detail card', async ({ page }) => 
 test('all batch actions are reachable at 390 pixels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await loginByApi(page);
-  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('button', { name: '打开导航' }).click();
   await page.getByRole('button', { name: '批次管理', exact: true }).click();
 
   const list = page.getByRole('list', { name: '批次列表' });

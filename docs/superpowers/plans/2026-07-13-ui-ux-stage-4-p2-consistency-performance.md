@@ -33,21 +33,21 @@
 - Modify: `packages/web/src/App.spec.tsx`
 - Modify: `e2e/web/responsive-p0.spec.ts`
 
-- [ ] **Step 1: Add failing localization and shell tests**
+- [x] **Step 1: Add failing localization and shell tests**
 
 Require `第 1 / 3 页`, `共 201 条`, `上一页`, `下一页`, Chinese navigation aria labels, no `Open billing resources` shortcut, and `账户加载中` when `profile` is null. Keep the ordinary billing navigation item reachable for allowed roles.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/pagination.spec.tsx src/App.spec.tsx src/components/AgentManagement.spec.tsx src/components/BillingAdmin.spec.tsx src/components/BillingPlans.spec.tsx src/components/MerchantManagement.spec.tsx src/components/TenantManagement.spec.tsx
 ```
 
-- [ ] **Step 3: Implement Chinese controls and neutral identity**
+- [x] **Step 3: Implement Chinese controls and neutral identity**
 
 Translate pagination copy and labels. Translate mobile navigation aria labels. Remove both bottom billing shortcut blocks and their unused icon/state. Render `profile?.displayName ?? '账户加载中'`; never use `user.userId` as visible fallback.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/ui/pagination.spec.tsx src/App.spec.tsx src/components/AgentManagement.spec.tsx src/components/BillingAdmin.spec.tsx src/components/BillingPlans.spec.tsx src/components/MerchantManagement.spec.tsx src/components/TenantManagement.spec.tsx

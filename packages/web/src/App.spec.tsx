@@ -1,12 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const authMock = vi.hoisted(() => ({ role: 'platform_admin', isAuthenticated: true, isReady: true }));
+const authMock = vi.hoisted(() => ({
+  role: 'platform_admin',
+  isAuthenticated: true,
+  isReady: true,
+  profile: { displayName: 'Mock User' } as { displayName: string } | null,
+}));
 
 vi.mock('./auth/auth-context', () => ({
   useAuth: () => ({
     user: { userId: 'mock-user', tenantId: 'mock-tenant', role: authMock.role, agentId: null, ownerId: null },
-    profile: { displayName: 'Mock User' },
+    profile: authMock.profile,
     isAuthenticated: authMock.isAuthenticated,
     isReady: authMock.isReady,
     logout: vi.fn(),
@@ -59,6 +64,7 @@ beforeEach(() => {
   authMock.role = 'platform_admin';
   authMock.isAuthenticated = true;
   authMock.isReady = true;
+  authMock.profile = { displayName: 'Mock User' };
 });
 
 describe('App role wiring', () => {
@@ -103,7 +109,7 @@ describe('App role wiring', () => {
     expect(screen.queryByText('Merchant Management View')).toBeNull();
     expect(screen.queryByText('Farm Fields View')).toBeNull();
     expect(screen.queryByText('12K')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Open billing resources' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '计费中心' })).toBeNull();
   });
 
   it('starts tenant business roles on the production overview', async () => {
@@ -187,15 +193,25 @@ describe('App role wiring', () => {
     expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
   });
 
-  it('opens billing resources only for roles with billing access', async () => {
+  it('keeps billing reachable through one normal navigation item', async () => {
     authMock.role = 'agent_admin';
 
     render(<App />);
 
-    const billingShortcut = await screen.findByRole('button', { name: 'Open billing resources' });
-    fireEvent.click(billingShortcut);
+    const billingItems = await screen.findAllByRole('button', { name: /计费中心/ });
+    expect(billingItems).toHaveLength(1);
+    fireEvent.click(billingItems[0]);
 
     expect(await screen.findByText('Billing Admin View')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open billing resources' })).toBeNull();
+  });
+
+  it('shows a neutral account label while profile data loads', async () => {
+    authMock.profile = null;
+    render(<App />);
+
+    expect(await screen.findByText('账户加载中')).toBeTruthy();
+    expect(screen.queryByText('mock-user')).toBeNull();
   });
 
   it('removes unavailable notifications from the primary header actions', async () => {
@@ -263,9 +279,9 @@ describe('App role wiring', () => {
     authMock.role = 'agent_admin';
     render(<App />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Open navigation' }));
+    fireEvent.click(await screen.findByRole('button', { name: '打开导航' }));
 
-    const mobileNav = await screen.findByRole('dialog', { name: 'Mobile navigation' });
+    const mobileNav = await screen.findByRole('dialog', { name: '移动导航' });
     expect(mobileNav.textContent).toContain('批次管理');
   });
 });

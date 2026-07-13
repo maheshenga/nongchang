@@ -45,28 +45,28 @@ export function PaginationControls({
   return (
     <div className={`flex flex-wrap items-center justify-between gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-4 py-3 text-sm text-[#605E5C] ${className}`}>
       <div className="font-semibold text-[#323130]">
-        Page {current} / {pages}
-        <span className="ml-2 font-normal text-[#605E5C]">{total} total</span>
+        第 {current} / {pages} 页
+        <span className="ml-2 font-normal text-[#605E5C]">共 {total} 条</span>
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
-          aria-label="Previous page"
+          aria-label="上一页"
           disabled={loading || current <= 1}
           onClick={() => onPageChange(current - 1)}
           className={fluentButton('secondary')}
         >
           <ChevronLeft className="h-4 w-4" />
-          Prev
+          上一页
         </button>
         <button
           type="button"
-          aria-label="Next page"
+          aria-label="下一页"
           disabled={loading || current >= pages}
           onClick={() => onPageChange(current + 1)}
           className={fluentButton('secondary')}
         >
-          Next
+          下一页
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
