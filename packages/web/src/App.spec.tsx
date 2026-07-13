@@ -17,7 +17,14 @@ vi.mock('./components/FarmFields', () => ({ default: () => <div>Farm Fields View
 vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant Management View</div> }));
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
 vi.mock('./components/MemberCenter', () => ({ default: () => <div>Member Center View</div> }));
-vi.mock('./components/PublicLanding', () => ({ default: ({ onLogin }: { onLogin: () => void }) => <button type="button" onClick={onLogin}>Landing CTA</button> }));
+vi.mock('./components/PublicLanding', () => ({
+  default: ({ onLogin, onTraceLookup }: { onLogin: () => void; onTraceLookup?: (code: string) => void }) => (
+    <div>
+      <button type="button" onClick={onLogin}>Landing CTA</button>
+      <button type="button" onClick={() => onTraceLookup?.('ORC-ABC')}>Landing trace lookup</button>
+    </div>
+  ),
+}));
 vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
@@ -30,6 +37,7 @@ vi.mock('./components/Dashboard', () => ({
     </div>
   ),
 }));
+vi.mock('./components/TraceabilityPage', () => ({ default: ({ code }: { code: string }) => <div>Trace View {code}</div> }));
 
 import App from './App';
 
@@ -92,6 +100,16 @@ describe('App role wiring', () => {
 
     expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
     expect(screen.queryByText('Tenant Management View')).toBeNull();
+  });
+
+  it('routes public trace lookup through the encoded hash route', async () => {
+    authMock.isAuthenticated = false;
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Landing trace lookup' }));
+
+    expect(window.location.hash).toBe('#/trace/ORC-ABC');
+    expect(await screen.findByText('Trace View ORC-ABC')).toBeTruthy();
   });
 
   it('passes the normalized role and navigation callback into the production dashboard', async () => {

@@ -42,6 +42,7 @@ describe('public trace response model', () => {
         expectedHarvest: new Date('2026-05-10T00:00:00.000Z'),
         status: 'Harvested',
       },
+      owner: { displayName: '大理基地' },
       field: { id: 'field-hidden', name: 'A区露地', ownerId: 'owner-hidden' },
       agent: { id: 'agent-hidden', region: '云南' },
       fieldLng: 100.25,
@@ -59,6 +60,7 @@ describe('public trace response model', () => {
           payload: { desc: '起苗', internalNote: 'hide-me' },
         },
       ],
+      eventTotal: 1,
       credentials: [
         {
           id: 'credential-hidden',
@@ -73,6 +75,7 @@ describe('public trace response model', () => {
           createdAt: new Date('2026-06-02T00:00:00.000Z'),
         },
       ],
+      credentialTotal: 1,
     });
 
     expect(response).toEqual({
@@ -83,6 +86,7 @@ describe('public trace response model', () => {
       batch: {
         cropName: '白芍',
         batchNo: 'PA-1',
+        merchantName: '大理基地',
         plantDate: '2023-10-15T00:00:00.000Z',
         expectedHarvest: '2026-05-10T00:00:00.000Z',
         status: 'Harvested',
@@ -101,6 +105,7 @@ describe('public trace response model', () => {
           payload: { desc: '起苗' },
         },
       ],
+      eventTotal: 1,
       credentials: [
         {
           type: 'certificate',
@@ -110,6 +115,7 @@ describe('public trace response model', () => {
           fileUrl: 'https://oss.example/cert.pdf',
         },
       ],
+      credentialTotal: 1,
     });
     const json = JSON.stringify(response);
     expect(json).not.toContain('tenant-hidden');
@@ -133,12 +139,15 @@ describe('public trace response model', () => {
         expectedHarvest: new Date('2026-05-10T00:00:00.000Z'),
         status: 'Harvested',
       },
+      owner: { displayName: '未知商户' },
       field: null,
       agent: null,
       fieldLng: null,
       fieldLat: null,
       events: [],
+      eventTotal: 0,
       credentials: [{ type: 'report', title: '检测报告', issuer: '检测中心', issuedAt: null, fileUrl: 'https://oss.example/report.pdf' }],
+      credentialTotal: 1,
     });
 
     expect(response.batch.fieldName).toBe('');

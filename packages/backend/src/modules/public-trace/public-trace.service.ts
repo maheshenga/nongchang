@@ -35,7 +35,10 @@ export class PublicTraceService {
           FROM fields
           WHERE id = ${batch.fieldId}
         `,
-        this.prisma.user.findUnique({ where: { id: batch.ownerId } }),
+        this.prisma.user.findUnique({
+          where: { id: batch.ownerId },
+          select: { displayName: true, agent: { select: { region: true } } },
+        }),
         this.prisma.traceEvent.findMany({
           where, orderBy: { occurredAt: 'asc' }, take: PUBLIC_TRACE_EVENT_LIMIT,
         }),
@@ -48,12 +51,8 @@ export class PublicTraceService {
 
       const fieldLng = coordinateRows[0]?.lng ?? null;
       const fieldLat = coordinateRows[0]?.lat ?? null;
-      const [agent, mapConfig] = await Promise.all([
-        owner?.agentId
-          ? this.prisma.agent.findUnique({ where: { id: owner.agentId } })
-          : Promise.resolve(null),
-        fieldLng != null && fieldLat != null
-          ? this.prisma.integrationConfig.findUnique({
+      const mapConfig = fieldLng != null && fieldLat != null
+        ? await this.prisma.integrationConfig.findUnique({
               where: {
                 tenantId_provider: {
                   tenantId: traceCode.tenantId,
@@ -61,16 +60,16 @@ export class PublicTraceService {
                 },
               },
             })
-          : Promise.resolve(null),
-      ]);
+        : null;
       const tiandituKey = mapConfig?.enabled && mapConfig.appId ? mapConfig.appId : null;
       response = buildPublicTraceResponse({
         code: traceCode.code,
         scanCount: traceCode.scanCount,
         tiandituKey,
         batch,
+        owner,
         field,
-        agent,
+        agent: owner?.agent ?? null,
         fieldLng,
         fieldLat,
         events,

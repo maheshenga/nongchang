@@ -1,4 +1,6 @@
 import {
+  frozenTraceResponseSchema,
+  publicTraceResponseSchema,
   traceCodeViewSchema,
   traceEventViewSchema,
   type CreateTraceEventDto,
@@ -8,13 +10,25 @@ import {
 } from '@nongchang/shared';
 import { request } from './request';
 
-export class TraceNotFoundError extends Error {}
+export class TraceLookupError extends Error {
+  constructor(public kind: 'not-found' | 'network', message: string) {
+    super(message);
+    this.name = 'TraceLookupError';
+  }
+}
 
 export async function fetchPublicTrace(code: string): Promise<PublicTraceResult> {
-  const res = await fetch(`/api/public/trace/${encodeURIComponent(code)}`);
-  if (res.status === 404) throw new TraceNotFoundError('溯源码无效或不存在');
-  if (!res.ok) throw new Error(`溯源查询失败 (${res.status})`);
-  return res.json() as Promise<PublicTraceResult>;
+  const normalized = code.trim();
+  try {
+    const res = await fetch(`/api/public/trace/${encodeURIComponent(normalized)}`);
+    if (res.status === 404) throw new TraceLookupError('not-found', '溯源码无效或不存在');
+    if (!res.ok) throw new TraceLookupError('network', `溯源查询服务暂不可用 (${res.status})`);
+    const payload = await res.json();
+    return publicTraceResponseSchema.or(frozenTraceResponseSchema).parse(payload);
+  } catch (cause) {
+    if (cause instanceof TraceLookupError) throw cause;
+    throw new TraceLookupError('network', '网络连接失败，请检查网络后重试');
+  }
 }
 
 export type TraceCode = TraceCodeView;

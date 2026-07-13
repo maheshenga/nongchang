@@ -22,6 +22,16 @@ describe('PublicLanding', () => {
     expect(onLogin).toHaveBeenCalledTimes(1);
   });
 
+  it('normalizes public trace lookup input before routing', () => {
+    const onTraceLookup = vi.fn();
+    render(<PublicLanding onLogin={vi.fn()} onTraceLookup={onTraceLookup} />);
+
+    fireEvent.change(screen.getByLabelText('溯源码'), { target: { value: ' ORC-ABC ' } });
+    fireEvent.click(screen.getByRole('button', { name: '查询溯源' }));
+
+    expect(onTraceLookup).toHaveBeenCalledWith('ORC-ABC');
+  });
+
   it('separates existing-account login from assisted opening', () => {
     render(<PublicLanding onLogin={vi.fn()} />);
 
@@ -42,7 +52,8 @@ describe('PublicLanding', () => {
   it('renders configured sales contact without collecting lead data locally', () => {
     render(<PublicLanding onLogin={vi.fn()} salesContact="sales@example.com / 400-000-0000" />);
     expect(screen.getByText('sales@example.com / 400-000-0000')).toBeTruthy();
-    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: '溯源码' })).toBeTruthy();
   });
 
   it('shows a safe operator-contact fallback when sales contact is not configured', () => {

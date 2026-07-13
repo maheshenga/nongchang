@@ -25,6 +25,7 @@ export interface PublicTraceResponseInput {
     expectedHarvest: Date;
     status: string;
   };
+  owner: { displayName: string } | null;
   field: { name: string } | null;
   agent: { region: string | null } | null;
   fieldLng: number | null;
@@ -57,6 +58,7 @@ export function buildPublicTraceResponse(input: PublicTraceResponseInput): Publi
     batch: {
       cropName: input.batch.cropName,
       batchNo: input.batch.batchNo,
+      merchantName: input.owner?.displayName.trim() || '未知商户',
       plantDate: input.batch.plantDate.toISOString(),
       expectedHarvest: input.batch.expectedHarvest.toISOString(),
       status: input.batch.status as PublicTraceOpenResult['batch']['status'],

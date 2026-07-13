@@ -1,8 +1,10 @@
-import { ArrowRight, CheckCircle2, ClipboardList, FileText, Layers, Mail, ShieldCheck, Sparkles, Users } from 'lucide-react';
-import { fluentButton, fluentStatusTag } from '../ui/fluent';
+import { useState, type FormEvent } from 'react';
+import { ArrowRight, CheckCircle2, ClipboardList, FileText, Layers, Mail, Search, ShieldCheck, Sparkles, Users } from 'lucide-react';
+import { fluentButton, fluentInput, fluentStatusTag } from '../ui/fluent';
 
-interface PublicLandingProps {
+export interface PublicLandingProps {
   onLogin: () => void;
+  onTraceLookup?: (code: string) => void;
   salesContact?: string | null;
 }
 
@@ -47,7 +49,16 @@ export function resolveSalesContact(env: SalesContactEnv | undefined = (import.m
   return value && value !== 'undefined' ? value : null;
 }
 
-export default function PublicLanding({ onLogin, salesContact = resolveSalesContact() }: PublicLandingProps) {
+export default function PublicLanding({ onLogin, onTraceLookup, salesContact = resolveSalesContact() }: PublicLandingProps) {
+  const [traceCode, setTraceCode] = useState('');
+  const submitTraceLookup = (event: FormEvent) => {
+    event.preventDefault();
+    const normalized = traceCode.trim();
+    if (!normalized) return;
+    if (onTraceLookup) onTraceLookup(normalized);
+    else window.location.hash = `#/trace/${encodeURIComponent(normalized)}`;
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-[#242424]">
       <header className="border-b border-[#E1DFDD] bg-white">
@@ -86,6 +97,22 @@ export default function PublicLanding({ onLogin, salesContact = resolveSalesCont
                   查看开通方式
                 </a>
               </div>
+              <form onSubmit={submitTraceLookup} aria-label="公开溯源查询" className="mt-7 max-w-xl border border-[#E1DFDD] bg-[#FAFAFA] p-4">
+                <label htmlFor="public-trace-code" className="block text-sm font-semibold text-[#242424]">溯源码</label>
+                <p className="mt-1 text-xs leading-5 text-[#605E5C]">输入包装或标签上的完整溯源码，查询已公开的批次记录。</p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    id="public-trace-code"
+                    value={traceCode}
+                    onChange={event => setTraceCode(event.target.value)}
+                    placeholder="例如 ORC-ABC123"
+                    className={`${fluentInput} min-w-0 flex-1`}
+                  />
+                  <button type="submit" disabled={!traceCode.trim()} className={fluentButton('primary')}>
+                    <Search className="h-4 w-4" />查询溯源
+                  </button>
+                </div>
+              </form>
             </div>
 
             <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-5">

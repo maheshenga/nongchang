@@ -22,6 +22,7 @@ export type PublicTraceEvent = z.infer<typeof publicTraceEventSchema>;
 export const publicTraceBatchSchema = z.object({
   cropName: z.string(),
   batchNo: z.string(),
+  merchantName: z.string().min(1),
   plantDate: z.string(),
   expectedHarvest: z.string(),
   status: z.enum([

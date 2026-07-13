@@ -1,12 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TraceabilityPage from './TraceabilityPage';
 
 const traceMocks = vi.hoisted(() => ({
   fetchPublicTrace: vi.fn(),
-  TraceNotFoundError: class TraceNotFoundError extends Error {},
+  TraceLookupError: class TraceLookupError extends Error {
+    constructor(public kind: 'not-found' | 'network', message: string) {
+      super(message);
+      this.name = 'TraceLookupError';
+    }
+  },
 }));
 
 vi.mock('../api/trace', () => traceMocks);
@@ -22,6 +27,7 @@ const publicTrace = {
   batch: {
     batchNo: 'B-TRACE-1',
     cropName: 'Peony',
+    merchantName: '大理基地',
     plantDate: '2026-06-01T00:00:00.000Z',
     expectedHarvest: '2026-08-01T00:00:00.000Z',
     status: 'growing',
@@ -40,6 +46,7 @@ const publicTrace = {
       payload: { desc: 'Seedling record', tag: 'farm-record' },
     },
   ],
+  eventTotal: 1,
   credentials: [
     {
       type: 'certificate',
@@ -50,6 +57,7 @@ const publicTrace = {
       fileUrl: 'https://cdn.example.test/cert.pdf',
     },
   ],
+  credentialTotal: 1,
 };
 
 describe('TraceabilityPage Fluent trust boundary', () => {
@@ -83,7 +91,15 @@ describe('TraceabilityPage Fluent trust boundary', () => {
     expect(await screen.findByText('Peony')).toBeTruthy();
     expect(traceMocks.fetchPublicTrace).toHaveBeenCalledWith('TRACE-1');
     expect(screen.getByText('B-TRACE-1')).toBeTruthy();
+    expect(screen.getByText('大理基地')).toBeTruthy();
+    expect(screen.getByText('本次查询时间')).toBeTruthy();
+    expect(screen.getByText(/累计扫码次数会随每次公开查询增加/)).toBeTruthy();
     expect(screen.getByText('Planting')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '报告异常' }));
+    const summary = screen.getByLabelText('异常报告摘要') as HTMLTextAreaElement;
+    expect(summary.value).toContain('TRACE-1');
+    expect(summary.value).toContain('大理基地');
 
     fireEvent.click(screen.getByRole('button', { name: '凭证' }));
     expect(await screen.findByText('Organic Cert')).toBeTruthy();
@@ -97,5 +113,39 @@ describe('TraceabilityPage Fluent trust boundary', () => {
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByText(/TRACE-FROZEN/)).toBeTruthy();
+    expect(screen.getByLabelText('重新输入溯源码')).toBeTruthy();
+  });
+
+  it('renders distinct missing and network recovery states', async () => {
+    traceMocks.fetchPublicTrace.mockRejectedValueOnce(new traceMocks.TraceLookupError('not-found', '溯源码无效或不存在'));
+    const { unmount } = render(<TraceabilityPage code="MISSING" />);
+
+    expect(await screen.findByRole('heading', { name: '未找到该溯源码' })).toBeTruthy();
+    expect(screen.getByLabelText('重新输入溯源码')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '重新查询' })).toBeNull();
+
+    unmount();
+    traceMocks.fetchPublicTrace.mockRejectedValueOnce(new traceMocks.TraceLookupError('network', '网络连接失败'));
+    render(<TraceabilityPage code="NETWORK" />);
+
+    expect(await screen.findByRole('heading', { name: '网络连接异常' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '重新查询' }));
+    await waitFor(() => expect(traceMocks.fetchPublicTrace).toHaveBeenCalledTimes(3));
+  });
+
+  it('keeps empty evidence states factual without authenticity overclaims', async () => {
+    traceMocks.fetchPublicTrace.mockResolvedValue({
+      ...publicTrace,
+      events: [],
+      eventTotal: 0,
+      credentials: [],
+      credentialTotal: 0,
+    });
+    render(<TraceabilityPage code="TRACE-EMPTY" />);
+
+    expect(await screen.findByText('暂无公开生产记录')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '凭证' }));
+    expect(await screen.findByText('暂无公开资质或检测文件')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/正品认证通过|真实有效/);
   });
 });

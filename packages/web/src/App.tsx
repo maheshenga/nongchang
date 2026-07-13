@@ -153,7 +153,12 @@ export default function App() {
       <Suspense fallback={<ViewSkeleton />}>
         {authView === 'login'
           ? <AppLogin onBackToLanding={() => setAuthView('landing')} />
-          : <PublicLanding onLogin={() => setAuthView('login')} />}
+          : (
+              <PublicLanding
+                onLogin={() => setAuthView('login')}
+                onTraceLookup={code => { window.location.hash = `#/trace/${encodeURIComponent(code)}`; }}
+              />
+            )}
       </Suspense>
     );
   }

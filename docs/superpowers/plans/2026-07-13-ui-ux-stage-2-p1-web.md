@@ -370,19 +370,19 @@ export interface PublicLandingProps {
 
 - Extends `PublicTraceBatch` with `merchantName: string` only; no public owner ID or username.
 
-- [ ] **Step 1: Add failing shared/backend tests**
+- [x] **Step 1: Add failing shared/backend tests**
 
 Require `merchantName` in the open public response schema. Update model tests so `buildPublicTraceResponse` receives `owner: { displayName: '大理基地' }` and returns `batch.merchantName === '大理基地'`. Update service tests to expect a scoped user lookup by the batch owner ID.
 
-- [ ] **Step 2: Add failing Web workflow tests**
+- [x] **Step 2: Add failing Web workflow tests**
 
 Test landing form normalization (`' ORC-ABC '` -> `ORC-ABC`) and hash routing. Test distinct not-found and network states, frozen state, merchant identity, query timestamp, scan-count explanation, lookup-again form, `报告异常` guidance, and empty events/credentials without authenticity overclaims.
 
-- [ ] **Step 3: Implement the safe public contract**
+- [x] **Step 3: Implement the safe public contract**
 
 Fetch only `{ displayName: true }` for the batch owner in `PublicTraceService`. Serialize `merchantName` and keep existing cache/event/credential limits intact.
 
-- [ ] **Step 4: Implement lookup and recovery UI**
+- [x] **Step 4: Implement lookup and recovery UI**
 
 Add a labelled trace-code form to the landing hero. In `App`, pass:
 
@@ -392,7 +392,7 @@ onTraceLookup={code => { window.location.hash = `#/trace/${encodeURIComponent(co
 
 In `TraceabilityPage`, capture the successful response time locally and label it `本次查询时间`. Explain that scan count is cumulative and unusually high counts warrant contacting the displayed merchant. Add a `报告异常` disclosure that shows the trace code, merchant name, and a copyable support summary without transmitting data. Error/frozen views always include a lookup-again input; network errors also include `重新查询`. Do not use browser-history-only recovery.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/shared test -- public-trace.dto.spec.ts

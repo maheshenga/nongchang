@@ -17,8 +17,7 @@ function makePrisma(overrides: any = {}) {
       }),
     },
     field: { findUnique: vi.fn().mockResolvedValue({ id: 'f1', name: 'A区露地', ownerId: 'm1' }) },
-    user: { findUnique: vi.fn().mockResolvedValue({ id: 'm1', agentId: 'a1' }) },
-    agent: { findUnique: vi.fn().mockResolvedValue({ id: 'a1', region: '云南' }) },
+    user: { findUnique: vi.fn().mockResolvedValue({ displayName: '大理基地', agent: { region: '云南' } }) },
     // 经纬度通过 ST_X/ST_Y 原生查询提取,默认无坐标。
     $queryRawUnsafe: vi.fn(),
     $queryRaw: vi.fn().mockResolvedValue(coords ?? [{ lng: null, lat: null }]),
@@ -58,6 +57,7 @@ describe('PublicTraceService.getByCode', () => {
     expect(res.code).toBe('ORC-X');
     expect(res.batch.cropName).toBe('白芍');
     expect(res.batch.fieldName).toBe('A区露地');
+    expect(res.batch.merchantName).toBe('大理基地');
     expect(res.batch.region).toBe('云南');
     expect(res.batch.status).toBe('Harvested');
     expect(res.events).toHaveLength(2);
@@ -70,6 +70,10 @@ describe('PublicTraceService.getByCode', () => {
     // 脱敏:不应暴露内部 id/serialNo
     expect(res.credentials[0]).not.toHaveProperty('id');
     expect(res.credentials[0]).not.toHaveProperty('serialNo');
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'm1' },
+      select: { displayName: true, agent: { select: { region: true } } },
+    });
   });
 
   it('scanCount 原子自增并透传新值', async () => {
