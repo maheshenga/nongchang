@@ -584,7 +584,7 @@ git commit -m "feat(web): protect integration setting changes"
 - Consumes seeded `merchantA`, `agentA`, `sysadmin`, and public trace code `ORC-DEMO0001`.
 - Produces browser proof for role dashboards, friendly identities, reversible completion, public lookup, quota preview, and integration dirty-state recovery.
 
-- [ ] **Step 1: Write browser tests**
+- [x] **Step 1: Write browser tests**
 
 Cover:
 
@@ -597,11 +597,11 @@ Cover:
 7. system-admin integration edits prompt before leaving;
 8. 390px and 768px viewports have no document-level horizontal overflow.
 
-- [ ] **Step 2: Add Axe tests**
+- [x] **Step 2: Add Axe tests**
 
 Add serious/critical Axe checks for merchant dashboard, public lookup form/result, AI task tabs, and integration unsaved-change dialog.
 
-- [ ] **Step 3: Run focused browser tests**
+- [x] **Step 3: Run focused browser tests**
 
 ```powershell
 $env:CI='true'; $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5545/nongchang?schema=public'; $env:REDIS_URL='redis://127.0.0.1:56379'; $env:E2E_TENANT_CODE='DEMO'; $env:E2E_USERNAME='merchantA'; $env:E2E_PASSWORD='password123'; $env:E2E_BILLING_USERNAME='agentA'; corepack.cmd pnpm@10.33.2 test:browser:prepare
@@ -609,7 +609,7 @@ $env:CI='true'; corepack.cmd pnpm@10.33.2 exec playwright test e2e/web/p1-web-wo
 $env:CI='true'; corepack.cmd pnpm@10.33.2 exec playwright test e2e/web/accessibility.spec.ts --grep "P1 Web"
 ```
 
-- [ ] **Step 4: Run the Stage 2 completion gate**
+- [x] **Step 4: Run the Stage 2 completion gate**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web test
@@ -621,7 +621,7 @@ git diff --check
 git status --short
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add e2e/web/p1-web-workflows.spec.ts e2e/web/accessibility.spec.ts e2e/web/critical-flows.spec.ts
