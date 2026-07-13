@@ -3,56 +3,56 @@ import { View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import type { QuickTemplateView } from '@nongchang/shared';
 import Icon from '../../../components/Icon';
+import { runWorkQuickAction, type WorkQuickAction } from '../quick-actions.model';
 import '../index.scss';
 
 interface Props {
   templates: QuickTemplateView[];
   aiBalance: number | null;
+  isOffline: boolean;
   onOpenAi: (mode: 'chat' | 'diagnose') => void;
-  onOpenForm: (tpl: QuickTemplateView | null) => void;
+  onOpenManual: () => void;
+  onOpenLocation: () => void;
+  onApplyTemplate: (template: QuickTemplateView) => void;
 }
 
-function WorkQuickActions({ templates, aiBalance, onOpenAi, onOpenForm }: Props) {
+function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenManual, onOpenLocation, onApplyTemplate }: Props) {
   const isAiDisabled = aiBalance !== null && aiBalance <= 0;
+  const run = (action: WorkQuickAction) => runWorkQuickAction(action, {
+    offline: isOffline,
+    aiBalance,
+    openAi: onOpenAi,
+    openManual: onOpenManual,
+    openLocation: onOpenLocation,
+    notify: title => Taro.showToast({ title, icon: 'none' }),
+  });
 
   return (
     <ScrollView scrollX className="work__quick">
       <View
         className={`work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
-        onClick={() => {
-          if (isAiDisabled) {
-            Taro.showToast({ title: 'AI 算力不足,请联系代理商充值', icon: 'none' });
-            return;
-          }
-          onOpenAi('chat');
-        }}
+        onClick={() => run('chat')}
       >
         <Icon name="message-square" color="#10b981" size={28} />
         <Text className="work__quick-text">智能问答</Text>
       </View>
       <View
         className={`work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
-        onClick={() => {
-          if (isAiDisabled) {
-            Taro.showToast({ title: 'AI 算力不足,请联系代理商充值', icon: 'none' });
-            return;
-          }
-          onOpenAi('diagnose');
-        }}
+        onClick={() => run('diagnose')}
       >
         <Icon name="camera" color="#059669" size={28} />
         <Text className="work__quick-text">拍照诊断</Text>
       </View>
-      <View className="work__quick-item" onClick={() => Taro.showToast({ title: '请在下方填写农事记录', icon: 'none' })}>
+      <View className="work__quick-item" onClick={() => run('manual')}>
         <Icon name="plus" color="#0ea5e9" size={28} />
         <Text className="work__quick-text">手写农事</Text>
       </View>
-      <View className="work__quick-item work__quick-item--reserved" onClick={() => Taro.showToast({ title: '位置记录请在农事表单中保存', icon: 'none' })}>
-        <Icon name="trace" color="#94a3b8" size={28} />
+      <View className="work__quick-item" onClick={() => run('location')}>
+        <Icon name="trace" color="#0ea5e9" size={28} />
         <Text className="work__quick-text">地块定位</Text>
       </View>
       {templates.map((t) => (
-        <View className="work__quick-item" key={t.id} onClick={() => onOpenForm(t)}>
+        <View className="work__quick-item" key={t.id} onClick={() => onApplyTemplate(t)}>
           <Icon name="zap" color="#f59e0b" size={28} />
           <Text className="work__quick-text">{t.name}</Text>
         </View>

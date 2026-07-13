@@ -51,25 +51,25 @@ export interface RecordFormHandle {
 }
 ```
 
-- [ ] **Step 1: Add failing quick-action tests**
+- [x] **Step 1: Add failing quick-action tests**
 
 Assert manual calls `openManual`, location calls `openLocation`, offline AI calls only `notify('离线状态下无法使用 AI，请恢复网络后重试')`, zero AI balance keeps the existing recharge guidance, and online AI calls `openAi`.
 
-- [ ] **Step 2: Run the focused tests to verify red**
+- [x] **Step 2: Run the focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/pages/work/quick-actions.model.spec.ts src/pages/work/components/truthfulness.spec.ts
 ```
 
-- [ ] **Step 3: Implement real quick-action routing**
+- [x] **Step 3: Implement real quick-action routing**
 
 `WorkQuickActions` delegates named actions to `runWorkQuickAction`. `Work` passes `isOffline`, `formRef.current?.openManual()`, and `formRef.current?.openLocation()`. Templates still call `applyTemplate`, and every form-opening action scrolls to the changed section.
 
-- [ ] **Step 4: Add truthful offline and generic workspace copy**
+- [x] **Step 4: Add truthful offline and generic workspace copy**
 
 Change `芍药工作台` to `田间工作台` and the hard-coded fallback group to `基地生产组`. Render `离线：草稿会保存在本机，提交、上传、语音转写与 AI 需要网络` when disconnected. Pass `isOffline` into `RecordForm` and block AI advice, image upload, voice transcription, and final submission with visible guidance.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/pages/work/quick-actions.model.spec.ts src/pages/work/components/truthfulness.spec.ts

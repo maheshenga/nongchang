@@ -12,14 +12,17 @@ import './index.scss';
 
 interface Props {
   batches: Batch[];
+  isOffline: boolean;
   onSaved: () => void;
 }
 
 export interface RecordFormHandle {
   applyTemplate: (t: QuickTemplateView) => void;
+  openManual: () => void;
+  openLocation: () => void;
 }
 
-const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ batches, onSaved }, ref) {
+const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ batches, isOffline, onSaved }, ref) {
   const [batchId, setBatchId] = useState('');
   const [action, setAction] = useState('');
   const [note, setNote] = useState('');
@@ -38,9 +41,15 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   // 作业地点经纬度(可选):提交时写入 location 字段供溯源核验。
   const [location, setLocation] = useState('');
   const [locating, setLocating] = useState(false);
+  const [noteFocused, setNoteFocused] = useState(false);
   // 扫码定位到、但 props.batches 未包含的批次(范围内补充)。
   const [scannedBatches, setScannedBatches] = useState<Batch[]>([]);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
+  const offlineRef = useRef(isOffline);
+
+  useEffect(() => {
+    offlineRef.current = isOffline;
+  }, [isOffline]);
 
   // 父组件(工作台)点击快捷模板时回填表单。
   useImperativeHandle(ref, () => ({
@@ -50,6 +59,16 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       setCost(t.cost != null ? String(t.cost) : '');
       setLabor(t.labor != null ? String(t.labor) : '');
       Taro.showToast({ title: `已套用:${t.name}`, icon: 'none' });
+      void Taro.pageScrollTo({ selector: '#record-form-actions', duration: 250 });
+      setNoteFocused(true);
+    },
+    openManual() {
+      void Taro.pageScrollTo({ selector: '#record-form-actions', duration: 250 });
+      setNoteFocused(true);
+    },
+    openLocation() {
+      void Taro.pageScrollTo({ selector: '#record-form-location', duration: 250 });
+      void captureLocation();
     },
   }));
 
@@ -82,6 +101,10 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     rec.onStop(async (res: { tempFilePath: string }) => {
       setRecording(false);
       if (!res?.tempFilePath) return;
+      if (offlineRef.current) {
+        Taro.showToast({ title: '离线状态下无法转写语音，请恢复网络后重试', icon: 'none' });
+        return;
+      }
       setTranscribing(true);
       try {
         const text = await transcribeVoice(res.tempFilePath);
@@ -102,6 +125,10 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     if (recording) {
       rec.stop();
     } else {
+      if (isOffline) {
+        Taro.showToast({ title: '离线状态下无法转写语音，请恢复网络后重试', icon: 'none' });
+        return;
+      }
       rec.start({ format: 'PCM', sampleRate: 16000, numberOfChannels: 1, duration: 60000 });
     }
   }
@@ -127,6 +154,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
 
   async function getAdvice() {
     if (!selectedBatch) { Taro.showToast({ title: '请先选择批次', icon: 'none' }); return; }
+    if (isOffline) { Taro.showToast({ title: '离线状态下无法使用 AI，请恢复网络后重试', icon: 'none' }); return; }
     setAdvising(true);
     try {
       const text = await aiAdvice({ batchId: selectedBatch.id });
@@ -164,6 +192,10 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
 
   async function chooseAndUpload() {
     if (uploading) return;
+    if (isOffline) {
+      Taro.showToast({ title: '离线状态下无法上传图片，请恢复网络后重试', icon: 'none' });
+      return;
+    }
     let tempPath: string;
     try {
       const r = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] });
@@ -199,6 +231,10 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   }
 
   async function submit() {
+    if (isOffline) {
+      Taro.showToast({ title: '离线状态下无法提交，草稿已保存在本机', icon: 'none' });
+      return;
+    }
     if (!selectedBatch) {
       Taro.showToast({ title: '请选择批次', icon: 'none' });
       return;
@@ -239,7 +275,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   }
 
   return (
-    <View className="rec-form">
+    <View id="record-form" className="rec-form">
       <View className="rec-form__head">
         <View>
           <Text className="rec-form__eyebrow">田间作业</Text>
@@ -274,7 +310,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
             <Icon name="sparkles" size={20} /><Text className="rec-form__action-text">{advising ? 'AI 分析中…' : 'AI 农事建议'}</Text>
           </View>
         </View>
-        <View className={`rec-form__action-row rec-form__action-row--wide ${location ? 'rec-form__action-row--on' : ''}`} onClick={captureLocation}>
+        <View id="record-form-location" className={`rec-form__action-row rec-form__action-row--wide ${location ? 'rec-form__action-row--on' : ''}`} onClick={captureLocation}>
           <Icon name="trace" size={20} />
           <Text className="rec-form__action-text">
             {locating ? '定位中…' : location ? `已记录位置:${location}(点击清除)` : '记录作业地点'}
@@ -282,7 +318,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         </View>
       </View>
 
-      <View className="rec-form__section">
+      <View id="record-form-actions" className="rec-form__section">
         <View className="rec-form__section-head">
           <Text className="rec-form__section-title">投入与物料</Text>
           <Text className="rec-form__section-sub">可选填,用于核算</Text>
@@ -337,7 +373,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
             </View>
           ))}
         </View>
-        <Textarea className="rec-form__textarea" value={note} onInput={(e) => setNote(e.detail.value)} placeholder="记录本次农事操作…" />
+        <Textarea className="rec-form__textarea" value={note} focus={noteFocused} onBlur={() => setNoteFocused(false)} onInput={(e) => setNote(e.detail.value)} placeholder="记录本次农事操作…" />
         <View className={`rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`} onClick={toggleVoice}>
           <Icon name="mic" size={20} color={recording ? '#ef4444' : '#94a3b8'} />
           <Text className="rec-form__voice-text">

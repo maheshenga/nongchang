@@ -81,11 +81,10 @@ export default function Work() {
 
   const subtitle = batches[0]?.cropName
     ? `基地 · ${batches[0].cropName}种植组`
-    : '基地 A区 · 白芍种植组';
+    : '基地生产组';
   const balanceLow = !!summary && (summary.aiBalance < LOW_BALANCE || summary.codeBalance < LOW_BALANCE);
 
-  const handleOpenForm = useCallback((tpl: QuickTemplateView | null) => {
-    if (!tpl) return;
+  const handleOpenForm = useCallback((tpl: QuickTemplateView) => {
     formRef.current?.applyTemplate(tpl);
   }, []);
 
@@ -95,7 +94,7 @@ export default function Work() {
         <View className="work__header-row">
           <View>
             <Text className="work__eyebrow">FIELD OPS</Text>
-            <Text className="work__title">芍药工作台</Text>
+            <Text className="work__title">田间工作台</Text>
             <Text className="work__subtitle">{subtitle}</Text>
           </View>
           <View className={`work__net ${isOffline ? 'work__net--off' : ''}`}>
@@ -120,6 +119,11 @@ export default function Work() {
       </View>
 
       <View className="work__body">
+        {isOffline && (
+          <View className="work__offline" role="status">
+            <Text className="work__offline-text">离线：草稿会保存在本机，提交、上传、语音转写与 AI 需要网络</Text>
+          </View>
+        )}
         {loading && batches.length === 0 ? (
           <WorkSkeleton />
         ) : (
@@ -129,13 +133,16 @@ export default function Work() {
             <WorkQuickActions
               templates={templates}
               aiBalance={summary?.aiBalance ?? null}
+              isOffline={isOffline}
               onOpenAi={setAiMode}
-              onOpenForm={handleOpenForm}
+              onOpenManual={() => formRef.current?.openManual()}
+              onOpenLocation={() => formRef.current?.openLocation()}
+              onApplyTemplate={handleOpenForm}
             />
           </>
         )}
 
-        <RecordForm ref={formRef} batches={batches} onSaved={() => void load()} />
+        <RecordForm ref={formRef} batches={batches} isOffline={isOffline} onSaved={() => void load()} />
       </View>
 
       <AiPanel mode={aiMode} onClose={() => setAiMode(null)} />
