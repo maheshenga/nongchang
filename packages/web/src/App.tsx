@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Leaf, LogOut, Menu, Sparkles, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import AppWorkspaceViews from './components/AppWorkspaceViews';
+import type { AiWorkspaceContext } from './components/AiAssistant.model';
 import GlobalSearch from './components/GlobalSearch';
 import { useAuth } from './auth/auth-context';
 import { DialogHost } from './hooks/useDialog';
@@ -70,6 +71,7 @@ export default function App() {
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [aiContext, setAiContext] = useState<AiWorkspaceContext>();
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
@@ -81,6 +83,11 @@ export default function App() {
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
   const canOpenBilling = allowedTabs.includes('billing');
+  const openAiWorkspace = (context: AiWorkspaceContext) => {
+    if (!allowedTabs.includes('aiAssistant')) return;
+    setAiContext(context);
+    setActiveTab('aiAssistant');
+  };
 
   useEffect(() => {
     const allowedTab = firstAllowedTab(navRole, activeTab);
@@ -318,6 +325,8 @@ export default function App() {
             allowedTabs={allowedTabs}
             role={navRole}
             onNavigate={setActiveTab}
+            aiContext={aiContext}
+            onOpenAi={openAiWorkspace}
             fallback={<ViewSkeleton />}
           />
         </section>

@@ -25,6 +25,7 @@ interface Props {
   onPage(page: number): void;
   onDetail(id: string): void;
   onGenerate(id: string): void;
+  onAnalyze?: (batch: ViewBatch) => void;
   onCodes(id: string): void;
   onCompliance(id: string): void;
   onCredentials(batch: ViewBatch): void;
@@ -119,6 +120,7 @@ export function BatchTable(props: Props) {
                           onOpenChange={setDesktopOpenMenuBatchId}
                           exportingReportId={props.exportingReportId}
                           scanningCompliance={props.scanningCompliance}
+                          onAnalyze={props.onAnalyze}
                           onCodes={props.onCodes}
                           onCompliance={props.onCompliance}
                           onCredentials={props.onCredentials}
@@ -215,6 +217,7 @@ export function BatchTable(props: Props) {
                       onOpenChange={setMobileOpenMenuBatchId}
                       exportingReportId={props.exportingReportId}
                       scanningCompliance={props.scanningCompliance}
+                      onAnalyze={props.onAnalyze}
                       onCodes={props.onCodes}
                       onCompliance={props.onCompliance}
                       onCredentials={props.onCredentials}

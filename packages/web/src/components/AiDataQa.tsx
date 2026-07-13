@@ -10,7 +10,7 @@ function errMsg(e: unknown): string {
 }
 
 // AI 数据问答:基于当前用户可见的批次数据进行自然语言问答。
-export default function AiDataQa() {
+export default function AiDataQa({ onResult }: { onResult?: (question: string, answer: string) => void }) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +25,7 @@ export default function AiDataQa() {
     try {
       const res = await aiAsk({ question: q });
       setAnswer(res.answer);
+      onResult?.(q, res.answer);
     } catch (e) {
       setErr(errMsg(e));
     } finally {

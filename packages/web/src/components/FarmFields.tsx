@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Layers, Map, MapPin, Maximize2, Plus, Search } from 'lucide-react';
+import { Layers, Map, MapPin, Maximize2, Plus, Search, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { AuthUser, CreateFieldDto } from '@nongchang/shared';
 import { useApi } from '../hooks/useApi';
@@ -11,8 +11,12 @@ import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput, fluentSelect } from '../ui/fluent';
 import { ModalSurface } from '../ui/ModalSurface';
 import type { AppTab } from '../navigation';
+import type { AiWorkspaceContext } from './AiAssistant.model';
 
-export default function FarmFields({ onNavigate }: { onNavigate?: (tab: AppTab) => void }) {
+export default function FarmFields({ onNavigate, onOpenAi }: {
+  onNavigate?: (tab: AppTab) => void;
+  onOpenAi?: (context: AiWorkspaceContext) => void;
+}) {
   const { user } = useAuth();
   const { data: rawFields, loading, error, reload } = useApi(listFields, { cacheKey: 'fields' });
   const fields: Field[] = rawFields ?? [];
@@ -67,6 +71,17 @@ export default function FarmFields({ onNavigate }: { onNavigate?: (tab: AppTab) 
           <button type="button" onClick={() => setShowCreate(true)} className={fluentButton('primary')}>
             <Plus className="h-4 w-4" /> 绘制新地块
           </button>
+          {onOpenAi && (
+            <button
+              type="button"
+              onClick={() => activeField && onOpenAi({ fieldId: activeField.id })}
+              disabled={!activeField}
+              className={fluentButton('secondary')}
+            >
+              <Sparkles className="h-4 w-4" />
+              用 AI 分析
+            </button>
+          )}
         </div>
       </header>
 

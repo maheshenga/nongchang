@@ -160,4 +160,13 @@ describe('FarmFields Fluent workspace', () => {
 
     expect(mapRecovery).toEqual({ message: '请联系租户系统管理员配置天地图；当前仍可使用列表与手动经纬度。' });
   });
+
+  it('opens AI advice with the active field context', async () => {
+    const onOpenAi = vi.fn();
+    render(<FarmFields onOpenAi={onOpenAi} />);
+    await screen.findByText('North Field');
+
+    fireEvent.click(screen.getByRole('button', { name: '用 AI 分析' }));
+    expect(onOpenAi).toHaveBeenCalledWith({ fieldId: 'field-1' });
+  });
 });

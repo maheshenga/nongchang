@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   ScanLine,
   ShieldCheck,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
@@ -12,6 +13,7 @@ import { fluentButton } from '../../ui/fluent';
 import type { ViewBatch } from '../BatchAdmin.model';
 
 export interface BatchActionCallbacks {
+  onAnalyze?: (batch: ViewBatch) => void;
   onCodes(id: string): void;
   onCompliance(id: string): void;
   onCredentials(batch: ViewBatch): void;
@@ -97,6 +99,11 @@ export function BatchActionMenu({
           <button role="menuitem" type="button" className={itemClass} onClick={() => run(() => actions.onCodes(batch.id))}>
             <ScanLine className="h-4 w-4" />已生成码
           </button>
+          {actions.onAnalyze && (
+            <button role="menuitem" type="button" className={itemClass} onClick={() => run(() => actions.onAnalyze?.(batch))}>
+              <Sparkles className="h-4 w-4" />用 AI 分析
+            </button>
+          )}
           <button role="menuitem" type="button" className={itemClass} onClick={() => run(() => actions.onCompliance(batch.id))}>
             {scanningCompliance ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}合规
           </button>

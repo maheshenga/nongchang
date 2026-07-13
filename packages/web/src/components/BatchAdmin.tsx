@@ -18,14 +18,20 @@ import { CreateBatchModal } from './batch-admin/CreateBatchModal';
 import { BatchAnalysisDialogs, type PendingAction } from './batch-admin/BatchAnalysisDialogs';
 import { useBatchAdminFilters } from './batch-admin/useBatchAdminFilters';
 import { buildIdentityMap } from '../ui/identity';
+import type { AiWorkspaceContext } from './AiAssistant.model';
 
 export interface BatchAdminProps {
   billingAvailable?: boolean;
   onOpenBilling?: () => void;
+  onOpenAi?: (context: AiWorkspaceContext) => void;
 }
 
 // 生成真实溯源码 · 导出溯源报告 · 数据来源于批次、农事记录、溯源事件与扫码统计接口
-export default function BatchAdmin({ billingAvailable = false, onOpenBilling = () => undefined }: BatchAdminProps) {
+export default function BatchAdmin({
+  billingAvailable = false,
+  onOpenBilling = () => undefined,
+  onOpenAi,
+}: BatchAdminProps) {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches, { cacheKey: 'batches' });
   const { data: fields } = useApi(listFields, { cacheKey: 'fields' });
   const billing = useApi(getBillingSummary, { cacheKey: 'billing-summary' });
@@ -195,6 +201,7 @@ export default function BatchAdmin({ billingAvailable = false, onOpenBilling = (
       exportingReportId={isExportingReport} scanningCompliance={scanningCompliance}
       onReload={() => void reload()} onToggleAll={toggleAll} onToggleOne={toggleOne} onPage={filters.setPage}
       onDetail={id => void openDetail(id)} onGenerate={setLabelBatchId} onCodes={id => void openCodes(id)}
+      onAnalyze={onOpenAi ? batch => onOpenAi({ batchId: batch.id, task: 'batch' }) : undefined}
       onCompliance={id => void handleCompliance(id)} onCredentials={batch => setCredentialBatch({ id: batch.id, label: batch.code })}
       onProfit={setProfitBatchId} onReport={handleExportBatchReport}
       onDelete={batch => setDeleteTarget({ id: batch.id, label: batch.code, generated: batch.generated })}

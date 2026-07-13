@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import type { AppTab, SystemRole } from '../navigation';
+import type { AiWorkspaceContext } from './AiAssistant.model';
 
 const MerchantAdmin = lazy(() => import('./MerchantAdmin'));
 const Dashboard = lazy(() => import('./Dashboard'));
@@ -43,6 +44,8 @@ export default function AppWorkspaceViews({
   allowedTabs,
   role,
   onNavigate,
+  aiContext,
+  onOpenAi,
   fallback,
 }: {
   activeTab: AppTab;
@@ -50,6 +53,8 @@ export default function AppWorkspaceViews({
   allowedTabs: AppTab[];
   role: SystemRole;
   onNavigate: (tab: AppTab) => void;
+  aiContext?: AiWorkspaceContext;
+  onOpenAi: (context: AiWorkspaceContext) => void;
   fallback: ReactNode;
 }) {
   const slot = (tab: AppTab, content: ReactNode) => (
@@ -57,12 +62,13 @@ export default function AppWorkspaceViews({
       {content}
     </ViewSlot>
   );
+  const aiAvailable = allowedTabs.includes('aiAssistant');
 
   return (
     <Suspense fallback={fallback}>
       <div className="relative h-full">
         {slot('overview', <Dashboard role={role} onNavigate={onNavigate} />)}
-        {slot('fields', <FarmFields onNavigate={onNavigate} />)}
+        {slot('fields', <FarmFields onNavigate={onNavigate} onOpenAi={aiAvailable ? onOpenAi : undefined} />)}
         {slot('tenants', <TenantManagement />)}
         {slot('agents', <AgentManagement />)}
         {slot('merchant', <MerchantAdmin onNavigate={onNavigate} />)}
@@ -70,6 +76,7 @@ export default function AppWorkspaceViews({
           <BatchAdmin
             billingAvailable={allowedTabs.includes('billing')}
             onOpenBilling={() => onNavigate('billing')}
+            onOpenAi={aiAvailable ? onOpenAi : undefined}
           />
         ))}
         {slot('records', <FarmRecords />)}
@@ -83,7 +90,7 @@ export default function AppWorkspaceViews({
         {slot('userGroups', <UserGroups />)}
         {slot('pendingUsers', <PendingUsers />)}
         {slot('quickTemplates', <QuickTemplates />)}
-        {slot('aiAssistant', <AiAssistant />)}
+        {slot('aiAssistant', <AiAssistant role={role} context={aiContext} />)}
         {slot('phenology', <PhenologyAdmin />)}
         {slot('billing', <BillingAdmin />)}
       </div>

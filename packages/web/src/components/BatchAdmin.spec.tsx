@@ -96,6 +96,7 @@ describe('BatchAdmin Fluent console', () => {
     for (const label of ['已生成码', '合规', '资质', '利润', '报告', '删除']) {
       expect(within(menu).getByRole('menuitem', { name: label })).toBeTruthy();
     }
+    expect(within(menu).queryByRole('menuitem', { name: '用 AI 分析' })).toBeNull();
   });
 
   it('filters visible rows by batch code', async () => {
@@ -116,6 +117,16 @@ describe('BatchAdmin Fluent console', () => {
 
     expect(await screen.findByText('当前额度 50')).toBeTruthy();
     expect(billingApiMock.getBillingSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens AI batch diagnosis with the selected business context', async () => {
+    const onOpenAi = vi.fn();
+    render(<BatchAdmin onOpenAi={onOpenAi} />);
+    const table = await screen.findByRole('table');
+    fireEvent.click(within(table).getAllByRole('button', { name: /更多操作/ })[0]);
+    fireEvent.click(screen.getByRole('menuitem', { name: '用 AI 分析' }));
+
+    expect(onOpenAi).toHaveBeenCalledWith({ batchId: 'batch-1', task: 'batch' });
   });
 
   it('locks create batch form and ignores duplicate submits while creation is pending', async () => {

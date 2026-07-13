@@ -13,7 +13,14 @@ vi.mock('./auth/auth-context', () => ({
   }),
 }));
 
-vi.mock('./components/FarmFields', () => ({ default: () => <div>Farm Fields View</div> }));
+vi.mock('./components/FarmFields', () => ({
+  default: ({ onOpenAi }: { onOpenAi?: (context: { fieldId: string }) => void }) => (
+    <div>
+      Farm Fields View
+      <button type="button" onClick={() => onOpenAi?.({ fieldId: 'field-1' })}>Field AI shortcut</button>
+    </div>
+  ),
+}));
 vi.mock('./components/MerchantManagement', () => ({ default: () => <div>Merchant Management View</div> }));
 vi.mock('./components/Settings', () => ({ default: () => <div>Settings View</div> }));
 vi.mock('./components/MemberCenter', () => ({ default: () => <div>Member Center View</div> }));
@@ -28,6 +35,11 @@ vi.mock('./components/PublicLanding', () => ({
 vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
+vi.mock('./components/AiAssistant', () => ({
+  default: ({ role, context }: { role: string; context?: { fieldId?: string } }) => (
+    <div>AI Assistant View {role} {context?.fieldId ?? '-'}</div>
+  ),
+}));
 vi.mock('./components/FarmRecords', () => ({ default: () => <div>Farm Records View</div> }));
 vi.mock('./components/Dashboard', () => ({
   default: ({ role, onNavigate }: { role: string; onNavigate: (tab: string) => void }) => (
@@ -119,6 +131,16 @@ describe('App role wiring', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Dashboard records shortcut' }));
 
     expect(await screen.findByText('Farm Records View')).toBeTruthy();
+  });
+
+  it('keeps AI field context while navigating into the retained task workspace', async () => {
+    authMock.role = 'merchant';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /地块管理/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Field AI shortcut' }));
+
+    expect(await screen.findByText('AI Assistant View merchant_admin field-1')).toBeTruthy();
   });
 
   it('opens production overview from global search for system admins', async () => {

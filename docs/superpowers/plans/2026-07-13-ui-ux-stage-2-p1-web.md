@@ -487,25 +487,25 @@ export interface AiHistoryEntry { id: string; task: AiTaskId; title: string; res
 export function appendAiHistory(history: readonly AiHistoryEntry[], entry: AiHistoryEntry, limit?: number): AiHistoryEntry[];
 ```
 
-- [ ] **Step 1: Add failing model and component tests**
+- [x] **Step 1: Add failing model and component tests**
 
 Assert task switching retains prior answers, history is newest-first and capped at 20, incoming batch context preselects the batch/advice task, provider readiness is `已配置` only when the current role can read a real enabled provider, and unavailable readiness is labelled `执行时验证` rather than invented. Assert AI balance and charging/privacy copy come from `getBillingSummary()` and static truthful wording.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/AiAssistant.model.spec.ts src/components/AiAssistant.spec.tsx src/App.spec.tsx
 ```
 
-- [ ] **Step 3: Implement task tabs and retained results**
+- [x] **Step 3: Implement task tabs and retained results**
 
 Render one task panel at a time with tabs: `知识问答`, `视觉诊断`, `数据问答`, `农事建议`, `批次诊断`. Do not clear another task's answer when switching. On success, append a history entry. Keep batch image diagnosis sequential so quota failures stop honestly at the completed count.
 
-- [ ] **Step 4: Add readiness/context wiring**
+- [x] **Step 4: Add readiness/context wiring**
 
 Pass `role` and optional `context` from `App`. System admins may read the existing AI-provider list; other roles show provider readiness as `执行时验证`. All roles may read their own billing summary. Add `用 AI 分析` callbacks from field/batch surfaces that set `{ fieldId }` or `{ batchId, task: 'batch' }` and navigate to `aiAssistant` only if that tab is allowed.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/AiAssistant.model.spec.ts src/components/AiAssistant.spec.tsx src/components/BatchAdmin.spec.tsx src/components/FarmFields.spec.tsx src/App.spec.tsx
