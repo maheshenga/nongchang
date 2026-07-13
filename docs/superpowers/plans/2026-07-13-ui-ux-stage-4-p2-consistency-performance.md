@@ -122,25 +122,25 @@ export function updateRetainedTabs(previous: readonly AppTab[], active: AppTab, 
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean;
 ```
 
-- [ ] **Step 1: Add failing retention and retry tests**
+- [x] **Step 1: Add failing retention and retry tests**
 
 Assert active plus two recent eligible pages, oldest eviction, removal of unauthorized pages, active-only pages disappearing after navigation, one retry for `TypeError`, HTTP 408/429/5xx, and zero retries for 4xx validation/auth failures or a second failure. Assert mutation retry remains `false`.
 
-- [ ] **Step 2: Add lazy-boundary source tests**
+- [x] **Step 2: Add lazy-boundary source tests**
 
 Require `AppWorkspaceViews` to lazy-import `FarmFields`, `AiAssistant`, `BatchAdmin`, and `BillingAdmin`; require dashboard html2canvas to remain a dynamic import.
 
-- [ ] **Step 3: Run focused tests to verify red**
+- [x] **Step 3: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/page-retention.spec.ts src/query-client.spec.ts src/hooks/useApi.spec.tsx src/components/AppWorkspaceViews.lazy.spec.ts src/App.spec.tsx
 ```
 
-- [ ] **Step 4: Implement retention and retries**
+- [x] **Step 4: Implement retention and retries**
 
 Replace the unbounded mounted-tab set with ordered retained tabs from `updateRetainedTabs`. Query defaults use `shouldRetryQuery`; `useApi` keeps GET/read orchestration only, and mutations remain untouched.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/page-retention.spec.ts src/query-client.spec.ts src/hooks/useApi.spec.tsx src/components/AppWorkspaceViews.lazy.spec.ts src/App.spec.tsx

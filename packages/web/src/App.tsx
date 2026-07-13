@@ -15,6 +15,7 @@ import {
   serializeOpenNavigationCategories,
   toggleNavigationCategory,
 } from './navigation-preferences';
+import { updateRetainedTabs } from './page-retention';
 import { fluentButton } from './ui/fluent';
 import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 
@@ -44,7 +45,7 @@ export default function App() {
   const { user, profile, isAuthenticated, isReady, logout } = useAuth();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
-  const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
+  const [retainedTabs, setRetainedTabs] = useState<AppTab[]>([]);
   const [isPresentationMode, setIsPresentationMode] = useState(false);
   const [traceCode, setTraceCode] = useState<string | null>(null);
   const [payResultOrderId, setPayResultOrderId] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function App() {
   );
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
+  const mountedTabs = useMemo(() => new Set(retainedTabs), [retainedTabs]);
   const requestTabChange = async (tab: AppTab, beforeChange?: () => void): Promise<boolean> => {
     if (!allowedTabs.includes(tab)) return false;
     if (tab !== activeTab && !(await confirmUnsavedNavigation())) return false;
@@ -98,14 +100,7 @@ export default function App() {
 
   useEffect(() => {
     const allowedTab = firstAllowedTab(navRole, activeTab);
-    setMountedTabs(prev => {
-      const next = new Set<AppTab>();
-      for (const tab of prev) {
-        if (allowedTabs.includes(tab)) next.add(tab);
-      }
-      next.add(allowedTab);
-      return next;
-    });
+    setRetainedTabs(previous => updateRetainedTabs(previous, allowedTab, allowedTabs));
   }, [navRole, activeTab, allowedTabs]);
 
   useEffect(() => {

@@ -151,6 +151,18 @@ describe('App role wiring', () => {
     expect(await screen.findByText('AI Assistant View merchant_admin field-1')).toBeTruthy();
   });
 
+  it('unmounts active-only heavy pages after leaving them', async () => {
+    authMock.role = 'merchant';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /地块管理/ }));
+    expect(await screen.findByText('Farm Fields View')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /农事实操/ }));
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Farm Fields View')).toBeNull());
+  });
+
   it('opens production overview from global search for system admins', async () => {
     authMock.role = 'system_admin';
     render(<App />);

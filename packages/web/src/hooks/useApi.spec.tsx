@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useApi } from './useApi';
 import { queryClient } from '../query-client';
+import { ApiError } from '../api/request';
 
 function createWrapper(client: QueryClient = queryClient) {
   return {
@@ -95,5 +96,29 @@ describe('useApi', () => {
     expect(first.result.current.data).toEqual([{ id: 'one-call' }]);
     expect(second.result.current.data).toEqual([{ id: 'one-call' }]);
     expect(client.getQueryData(['api', 'shared-list'])).toEqual([{ id: 'one-call' }]);
+  });
+
+  it('retries a transient read failure once', async () => {
+    const fetcher = vi.fn()
+      .mockRejectedValueOnce(new TypeError('network unavailable'))
+      .mockResolvedValueOnce([{ id: 'recovered' }]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useApi(fetcher), { wrapper });
+
+    await waitFor(() => expect(result.current.data).toEqual([{ id: 'recovered' }]), { timeout: 3_000 });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not retry a non-transient API failure', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new ApiError(422, 'invalid request'));
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useApi(fetcher), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBe('invalid request');
   });
 });
