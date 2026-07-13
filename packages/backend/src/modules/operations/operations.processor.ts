@@ -41,7 +41,8 @@ export class OperationsProcessor {
           dryRun: options.dryRun,
         });
         if (Array.isArray((result as { errors?: unknown[] }).errors)) {
-          for (const _error of (result as { errors: unknown[] }).errors) this.metrics?.recordReconciliationError('ai');
+          const errorCount = (result as { errors: unknown[] }).errors.length;
+          for (let index = 0; index < errorCount; index += 1) this.metrics?.recordReconciliationError('ai');
         }
         return result;
       } catch (error) {
