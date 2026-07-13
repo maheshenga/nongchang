@@ -73,6 +73,35 @@ test('mobile navigation exposes localized accessible labels', async ({ page }) =
   await expect(page.getByRole('button', { name: '关闭导航遮罩' })).toBeVisible();
 });
 
+test('workspace route survives reload and browser history navigation', async ({ page }) => {
+  await loginByApi(page);
+
+  await page.getByRole('button', { name: '农事操作', exact: true }).click();
+  await expect(page).toHaveURL(/#\/app\/records$/);
+  await page.reload();
+  await expect(page).toHaveURL(/#\/app\/records$/);
+  await expect(page.getByRole('heading', { name: '农事操作', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: '生产总览', exact: true }).click();
+  await expect(page).toHaveURL(/#\/app\/overview$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/app\/records$/);
+  await expect(page.getByRole('heading', { name: '农事操作', exact: true })).toBeVisible();
+});
+
+test('menu trigger is mobile-only and desktop navigation stays persistent', async ({ page }) => {
+  await loginByApi(page);
+
+  for (const width of [1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('button', { name: '打开导航' })).toBeHidden();
+    await expect(page.getByRole('navigation').first()).toBeVisible();
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: '打开导航' })).toBeVisible();
+});
+
 test('expanded and collapsed navigation do not create horizontal overflow at 390 or 768 pixels', async ({ page }) => {
   await loginByApi(page);
 

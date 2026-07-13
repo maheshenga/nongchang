@@ -6,6 +6,7 @@ const authMock = vi.hoisted(() => ({
   isAuthenticated: true,
   isReady: true,
   profile: { displayName: 'Mock User' } as { displayName: string } | null,
+  dashboardError: null as Error | null,
 }));
 
 vi.mock('./auth/auth-context', () => ({
@@ -48,10 +49,14 @@ vi.mock('./components/AiAssistant', () => ({
 vi.mock('./components/FarmRecords', () => ({ default: () => <div>Farm Records View</div> }));
 vi.mock('./components/Dashboard', () => ({
   default: ({ role, onNavigate }: { role: string; onNavigate: (tab: string) => void }) => (
-    <div>
-      <div>Production Overview View {role}</div>
-      <button type="button" onClick={() => onNavigate('records')}>Dashboard records shortcut</button>
-    </div>
+    authMock.dashboardError
+      ? (() => { throw authMock.dashboardError; })()
+      : (
+          <div>
+            <div>Production Overview View {role}</div>
+            <button type="button" onClick={() => onNavigate('records')}>Dashboard records shortcut</button>
+          </div>
+        )
   ),
 }));
 vi.mock('./components/TraceabilityPage', () => ({ default: ({ code }: { code: string }) => <div>Trace View {code}</div> }));
@@ -66,6 +71,7 @@ beforeEach(() => {
   authMock.isAuthenticated = true;
   authMock.isReady = true;
   authMock.profile = { displayName: 'Mock User' };
+  authMock.dashboardError = null;
 });
 
 describe('App role wiring', () => {
@@ -325,5 +331,84 @@ describe('App role wiring', () => {
     const restored = await screen.findByRole('button', { name: '平台组织管理' });
     expect(restored.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('button', { name: /代理商管理/ })).toBeNull();
+  });
+
+  it('restores an authenticated workspace directly from its hash', async () => {
+    authMock.role = 'merchant';
+    window.location.hash = '#/app/records';
+
+    render(<App />);
+
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
+    expect(window.location.hash).toBe('#/app/records');
+  });
+
+  it('updates the authenticated hash for internal workspace navigation', async () => {
+    authMock.role = 'merchant';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dashboard records shortcut' }));
+
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
+    expect(window.location.hash).toBe('#/app/records');
+  });
+
+  it('follows browser history events inside the authenticated workspace', async () => {
+    authMock.role = 'merchant';
+    window.location.hash = '#/app/records';
+    render(<App />);
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
+
+    window.history.pushState(null, '', '#/app/overview');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
+  });
+
+  it('replaces an unavailable workspace hash with the role default', async () => {
+    authMock.role = 'merchant';
+    window.location.hash = '#/app/tenants';
+
+    render(<App />);
+
+    expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
+    await waitFor(() => expect(window.location.hash).toBe('#/app/overview'));
+  });
+
+  it('restores the accepted hash when browser navigation is canceled', async () => {
+    authMock.role = 'system_admin';
+    window.location.hash = '#/app/overview';
+    const unregister = registerUnsavedChangesGuard(() => true);
+
+    try {
+      render(<App />);
+      expect(await screen.findByText('Production Overview View system_admin')).toBeTruthy();
+
+      window.history.pushState(null, '', '#/app/fields');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      expect(await screen.findByRole('dialog', { name: '放弃未保存更改' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+
+      await waitFor(() => expect(window.location.hash).toBe('#/app/overview'));
+      expect(screen.getByText('Production Overview View system_admin')).toBeTruthy();
+      expect(screen.queryByText('Farm Fields View')).toBeNull();
+    } finally {
+      unregister();
+    }
+  });
+
+  it('contains authenticated workspace render failures inside the application boundary', async () => {
+    authMock.role = 'merchant';
+    authMock.dashboardError = new Error('dashboard render failed');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      render(<App />);
+
+      expect((await screen.findByRole('alert')).textContent).toContain('当前页面暂时无法显示');
+      expect(screen.getByRole('button', { name: '重试当前页面' })).toBeTruthy();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

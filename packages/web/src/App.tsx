@@ -18,6 +18,8 @@ import {
 import { updateRetainedTabs } from './page-retention';
 import { fluentButton } from './ui/fluent';
 import { confirmUnsavedNavigation } from './ui/unsaved-changes';
+import AppErrorBoundary from './ui/AppErrorBoundary';
+import { useAppLocation } from './useAppLocation';
 
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
@@ -71,11 +73,20 @@ export default function App() {
   const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
   const mountedTabs = useMemo(() => new Set(retainedTabs), [retainedTabs]);
+  const { clearAuthenticatedRoute, pushWorkspaceTab, replaceWorkspaceTab } = useAppLocation({
+    activeTab,
+    isAuthenticated,
+    isReady,
+    navRole,
+    setActiveTab,
+    setPayResultOrderId,
+    setTraceCode,
+  });
   const requestTabChange = async (tab: AppTab, beforeChange?: () => void): Promise<boolean> => {
     if (!allowedTabs.includes(tab)) return false;
     if (tab !== activeTab && !(await confirmUnsavedNavigation())) return false;
     beforeChange?.();
-    setActiveTab(tab);
+    pushWorkspaceTab(tab);
     return true;
   };
   const openAiWorkspace = (context: AiWorkspaceContext) => {
@@ -104,32 +115,6 @@ export default function App() {
   }, [navRole, activeTab, allowedTabs]);
 
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash.startsWith('#/trace/')) {
-        const raw = hash.slice('#/trace/'.length).split(/[/?#]/)[0];
-        let code = raw;
-        try { code = decodeURIComponent(raw); } catch { /* keep raw code */ }
-        setTraceCode(code);
-        setPayResultOrderId(null);
-      } else if (hash.startsWith('#/billing/pay-result')) {
-        const qs = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '';
-        const orderId = new URLSearchParams(qs).get('orderId');
-        setPayResultOrderId(orderId);
-        setTraceCode(null);
-      } else {
-        setTraceCode(null);
-        setPayResultOrderId(null);
-      }
-    };
-
-    handleHashChange();
-
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
-
-  useEffect(() => {
     const handleTogglePresentation = (e: Event) => {
       const customEvent = e as CustomEvent;
       setIsPresentationMode(customEvent.detail?.mode ?? !isPresentationMode);
@@ -140,46 +125,53 @@ export default function App() {
 
   const handleLogout = () => {
     void logout();
+    clearAuthenticatedRoute();
     setActiveTab('overview');
     setAuthView('landing');
   };
 
-  useEffect(() => {
-    const fallbackTab = firstAllowedTab(navRole, activeTab);
-    if (fallbackTab !== activeTab) {
-      setActiveTab(fallbackTab);
-    }
-  }, [navRole, activeTab]);
-
   if (!isReady) return <ViewSkeleton />;
 
   if (traceCode) {
-    return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;
+    return (
+      <AppErrorBoundary resetKey={`trace:${traceCode}`} onSessionExpired={handleLogout}>
+        <Suspense fallback={<ViewSkeleton />}>
+          <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />
+        </Suspense>
+      </AppErrorBoundary>
+    );
   }
 
   if (!isAuthenticated) {
     return (
-      <Suspense fallback={<ViewSkeleton />}>
-        {authView === 'login'
-          ? <AppLogin onBackToLanding={() => setAuthView('landing')} />
-          : (
-              <PublicLanding
-                onLogin={() => setAuthView('login')}
-                onTraceLookup={code => { window.location.hash = `#/trace/${encodeURIComponent(code)}`; }}
-              />
-            )}
-      </Suspense>
+      <AppErrorBoundary resetKey={`public:${authView}`} onSessionExpired={handleLogout}>
+        <Suspense fallback={<ViewSkeleton />}>
+          {authView === 'login'
+            ? <AppLogin onBackToLanding={() => setAuthView('landing')} />
+            : (
+                <PublicLanding
+                  onLogin={() => setAuthView('login')}
+                  onTraceLookup={code => { window.location.hash = `#/trace/${encodeURIComponent(code)}`; }}
+                />
+              )}
+        </Suspense>
+      </AppErrorBoundary>
     );
   }
 
   if (payResultOrderId) {
     return (
-      <Suspense fallback={<ViewSkeleton />}>
-        <PayResult
-          orderId={payResultOrderId}
-          onBack={() => { window.location.hash = ''; setPayResultOrderId(null); setActiveTab('billing'); }}
-        />
-      </Suspense>
+      <AppErrorBoundary resetKey={`pay-result:${payResultOrderId}`} onSessionExpired={handleLogout}>
+        <Suspense fallback={<ViewSkeleton />}>
+          <PayResult
+            orderId={payResultOrderId}
+            onBack={() => {
+              replaceWorkspaceTab('billing');
+              setPayResultOrderId(null);
+            }}
+          />
+        </Suspense>
+      </AppErrorBoundary>
     );
   }
 
@@ -232,7 +224,8 @@ export default function App() {
   )});
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F5F5F5] text-[#242424]">
+    <AppErrorBoundary resetKey={`${navRole}:${activeTab}`} onSessionExpired={handleLogout}>
+      <div className="flex h-screen overflow-hidden bg-[#F5F5F5] text-[#242424]">
       {mobileNavOpen && !isPresentationMode && (
         <div className="fixed inset-0 z-50 md:hidden">
           <button
@@ -282,7 +275,7 @@ export default function App() {
       <main className="flex min-w-0 flex-1 flex-col">
         {!isPresentationMode && (
           <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#E1DFDD] bg-white px-4">
-            <button type="button" aria-label="打开导航" onClick={() => setMobileNavOpen(true)} className={fluentButton('icon')}>
+            <button type="button" aria-label="打开导航" onClick={() => setMobileNavOpen(true)} className={`${fluentButton('icon')} md:hidden`}>
               <Menu className="h-4 w-4" />
             </button>
             <GlobalSearch items={searchItems} onOpen={tab => void requestTabChange(tab)} />
@@ -327,6 +320,7 @@ export default function App() {
       )}
       <DialogHost />
       <ToastBanner />
-    </div>
+      </div>
+    </AppErrorBoundary>
   );
 }
