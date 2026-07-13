@@ -170,9 +170,15 @@
 
   &__poster-btn {
     @include primary-action;
+    width: 100%;
     margin-top: 24px;
     padding: 22px 0;
     text-align: center;
+
+    &[disabled] {
+      opacity: 0.55;
+      box-shadow: none;
+    }
   }
 
   &__poster-text { font-size: 30px; font-weight: bold; color: #fff; }

@@ -93,9 +93,9 @@ export default function Register() {
             <Button className="register__lookup" loading={statusLoading} onClick={() => void refreshStatus()}>
               查询已有申请
             </Button>
-            <View className="register__back" onClick={() => Taro.navigateBack()}>
+            <Button className="nc-button-reset register__back" onClick={() => Taro.navigateBack()}>
               <Text className="register__back-text">已有账号? 返回登录</Text>
-            </View>
+            </Button>
           </>
         )}
       </View>

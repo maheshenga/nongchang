@@ -406,30 +406,37 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         <View className="rec-form__chips">
           {allBatches.length === 0 && <Text className="rec-form__empty">暂无批次</Text>}
           {allBatches.map((b) => (
-            <View
+            <Button
               key={b.id}
-              className={`rec-form__chip ${batchId === b.id ? 'rec-form__chip--on' : ''}`}
+              className={`nc-button-reset rec-form__chip ${batchId === b.id ? 'rec-form__chip--on' : ''}`}
+              aria-pressed={batchId === b.id}
               onClick={() => setBatchId(b.id)}
             >
               <Text className="rec-form__chip-main">{b.batchNo}</Text>
               <Text className="rec-form__chip-sub">{b.cropName}</Text>
-            </View>
+            </Button>
           ))}
         </View>
         <View className="rec-form__action-grid">
-          <View className="rec-form__action-row" onClick={scan}>
+          <Button className="nc-button-reset rec-form__action-row" onClick={() => void scan()}>
             <Icon name="trace" size={20} /><Text className="rec-form__action-text">扫描批次码</Text>
-          </View>
-          <View className="rec-form__action-row" onClick={getAdvice}>
+          </Button>
+          <Button className="nc-button-reset rec-form__action-row" disabled={advising} onClick={() => void getAdvice()}>
             <Icon name="sparkles" size={20} /><Text className="rec-form__action-text">{advising ? 'AI 分析中…' : 'AI 农事建议'}</Text>
-          </View>
+          </Button>
         </View>
-        <View id="record-form-location" className={`rec-form__action-row rec-form__action-row--wide ${location ? 'rec-form__action-row--on' : ''}`} onClick={captureLocation}>
+        <Button
+          id="record-form-location"
+          className={`nc-button-reset rec-form__action-row rec-form__action-row--wide ${location ? 'rec-form__action-row--on' : ''}`}
+          aria-pressed={Boolean(location)}
+          disabled={locating}
+          onClick={() => void captureLocation()}
+        >
           <Icon name="trace" size={20} />
           <Text className="rec-form__action-text">
             {locating ? '定位中…' : location ? `已记录位置:${location}(点击清除)` : '记录作业地点'}
           </Text>
-        </View>
+        </Button>
       </View>
 
       <View className="rec-form__section">
@@ -452,14 +459,15 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         <View className="rec-form__chips rec-form__chips--supply">
           {supplyHint && <Text className={`rec-form__empty ${suppliesStatus === 'error' ? 'rec-form__empty--err' : ''}`}>{supplyHint}</Text>}
           {supplies.map((s) => (
-            <View
+            <Button
               key={s.id}
-              className={`rec-form__chip rec-form__supply-chip ${supplyId === s.id ? 'rec-form__chip--on' : ''}`}
+              className={`nc-button-reset rec-form__chip rec-form__supply-chip ${supplyId === s.id ? 'rec-form__chip--on' : ''}`}
+              aria-pressed={supplyId === s.id}
               onClick={() => toggleSupply(s.id)}
             >
               <Text className="rec-form__supply-name">{s.name}</Text>
               <Text className="rec-form__supply-meta">余 {s.remaining}{s.unit}</Text>
-            </View>
+            </Button>
           ))}
         </View>
         <View className="rec-form__supply-row">
@@ -482,18 +490,28 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         </View>
         <View className="rec-form__tags">
           {FARM_ACTIONS.map((a) => (
-            <View key={a} className={`rec-form__tag ${action === a ? 'rec-form__tag--on' : ''}`} onClick={() => setAction(a)}>
+            <Button
+              key={a}
+              className={`nc-button-reset rec-form__tag ${action === a ? 'rec-form__tag--on' : ''}`}
+              aria-pressed={action === a}
+              onClick={() => setAction(a)}
+            >
               <Text>{a}</Text>
-            </View>
+            </Button>
           ))}
         </View>
         <Textarea className="rec-form__textarea" value={note} focus={noteFocused} onBlur={() => setNoteFocused(false)} onInput={(e) => setNote(e.detail.value)} placeholder="记录本次农事操作…" />
-        <View className={`rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`} onClick={toggleVoice}>
+        <Button
+          className={`nc-button-reset rec-form__voice ${recording ? 'rec-form__voice--on' : ''}`}
+          aria-pressed={recording}
+          disabled={transcribing}
+          onClick={toggleVoice}
+        >
           <Icon name="mic" size={20} color={recording ? '#ef4444' : '#94a3b8'} />
           <Text className="rec-form__voice-text">
             {transcribing ? '识别中…' : recording ? '点击结束录音' : '语音录入'}
           </Text>
-        </View>
+        </Button>
       </View>
 
       <View className="rec-form__section">
@@ -505,13 +523,18 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
           {images.map((url) => (
             <Image key={url} className="rec-form__img" src={url} mode="aspectFill" />
           ))}
-          <View className="rec-form__add" onClick={chooseAndUpload}>
+          <Button
+            className="nc-button-reset rec-form__add"
+            aria-label="添加现场图片"
+            disabled={uploading}
+            onClick={() => void chooseAndUpload()}
+          >
             {uploading ? <Text className="rec-form__add-loading">上传中…</Text> : <Icon name="camera" size={28} />}
-          </View>
+          </Button>
         </View>
       </View>
 
-      <Button className="rec-form__submit" loading={submitting} onClick={prepareSubmit}>
+      <Button className="rec-form__submit" loading={submitting} disabled={submitting} onClick={prepareSubmit}>
         核对并提交
       </Button>
     </View>

@@ -76,17 +76,17 @@ test('mobile navigation exposes localized accessible labels', async ({ page }) =
 test('workspace route survives reload and browser history navigation', async ({ page }) => {
   await loginByApi(page);
 
-  await page.getByRole('button', { name: '农事操作', exact: true }).click();
+  await page.getByRole('button', { name: '农事实操', exact: true }).click();
   await expect(page).toHaveURL(/#\/app\/records$/);
   await page.reload();
   await expect(page).toHaveURL(/#\/app\/records$/);
-  await expect(page.getByRole('heading', { name: '农事操作', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '农事实操', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '生产总览', exact: true }).click();
   await expect(page).toHaveURL(/#\/app\/overview$/);
   await page.goBack();
   await expect(page).toHaveURL(/#\/app\/records$/);
-  await expect(page.getByRole('heading', { name: '农事操作', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '农事实操', exact: true })).toBeVisible();
 });
 
 test('menu trigger is mobile-only and desktop navigation stays persistent', async ({ page }) => {

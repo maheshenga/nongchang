@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { Button, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import type { QuickTemplateView } from '@nongchang/shared';
 import Icon from '../../../components/Icon';
@@ -44,34 +44,34 @@ function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenMan
         compact
       />
       <ScrollView scrollX className="work__quick">
-      <View
-        className={`work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
-        onClick={() => run('chat')}
-      >
-        <Icon name="message-square" color="#10b981" size={28} />
-        <Text className="work__quick-text">智能问答</Text>
-      </View>
-      <View
-        className={`work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
-        onClick={() => run('diagnose')}
-      >
-        <Icon name="camera" color="#059669" size={28} />
-        <Text className="work__quick-text">拍照诊断</Text>
-      </View>
-      <View className="work__quick-item" onClick={() => run('manual')}>
-        <Icon name="plus" color="#0ea5e9" size={28} />
-        <Text className="work__quick-text">手写农事</Text>
-      </View>
-      <View className="work__quick-item" onClick={() => run('location')}>
-        <Icon name="trace" color="#0ea5e9" size={28} />
-        <Text className="work__quick-text">地块定位</Text>
-      </View>
-      {templates.map((t) => (
-        <View className="work__quick-item" key={t.id} onClick={() => onApplyTemplate(t)}>
-          <Icon name="zap" color="#f59e0b" size={28} />
-          <Text className="work__quick-text">{t.name}</Text>
-        </View>
-      ))}
+        <Button
+          className={`nc-button-reset work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
+          onClick={() => run('chat')}
+        >
+          <Icon name="message-square" color="#10b981" size={28} />
+          <Text className="work__quick-text">智能问答</Text>
+        </Button>
+        <Button
+          className={`nc-button-reset work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
+          onClick={() => run('diagnose')}
+        >
+          <Icon name="camera" color="#059669" size={28} />
+          <Text className="work__quick-text">拍照诊断</Text>
+        </Button>
+        <Button className="nc-button-reset work__quick-item" onClick={() => run('manual')}>
+          <Icon name="plus" color="#0ea5e9" size={28} />
+          <Text className="work__quick-text">手写农事</Text>
+        </Button>
+        <Button className="nc-button-reset work__quick-item" onClick={() => run('location')}>
+          <Icon name="trace" color="#0ea5e9" size={28} />
+          <Text className="work__quick-text">地块定位</Text>
+        </Button>
+        {templates.map((t) => (
+          <Button className="nc-button-reset work__quick-item" key={t.id} onClick={() => onApplyTemplate(t)}>
+            <Icon name="zap" color="#f59e0b" size={28} />
+            <Text className="work__quick-text">{t.name}</Text>
+          </Button>
+        ))}
       </ScrollView>
     </>
   );

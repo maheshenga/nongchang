@@ -179,35 +179,35 @@ export default function Me() {
 
       <View className="me__menu-section">
         <Text className="me__section-title">账号设置</Text>
-        <View className="me__item" onClick={openEdit}>
+        <Button className="nc-button-reset me__item" onClick={openEdit}>
           <Text className="me__item-text">修改个人资料</Text>
           <Text className="me__item-arrow">›</Text>
-        </View>
-        <View className="me__item" onClick={openPwd}>
+        </Button>
+        <Button className="nc-button-reset me__item" onClick={openPwd}>
           <Text className="me__item-text">修改登录密码</Text>
           <Text className="me__item-arrow">›</Text>
-        </View>
-        <View className="me__item me__item--reserved" onClick={comingSoon}>
+        </Button>
+        <Button className="nc-button-reset me__item me__item--reserved" onClick={comingSoon}>
           <Text className="me__item-text">蓝牙传感设备配置</Text>
           <Text className="me__item-badge">即将开放</Text>
-        </View>
+        </Button>
       </View>
 
       <View className="me__menu-section">
         <Text className="me__section-title">农场服务</Text>
         <MeFieldSection fields={fields} onToggle={() => void toggleFields()} />
-        <View className="me__item" onClick={() => Taro.navigateTo({ url: '/pages/usage/index' })}>
+        <Button className="nc-button-reset me__item" onClick={() => Taro.navigateTo({ url: '/pages/usage/index' })}>
           <Text className="me__item-text">算力与额度用量</Text>
           <Text className="me__item-arrow">›</Text>
-        </View>
-        <View className="me__item" onClick={() => Taro.switchTab({ url: '/pages/trace/index' })}>
+        </Button>
+        <Button className="nc-button-reset me__item" onClick={() => Taro.switchTab({ url: '/pages/trace/index' })}>
           <Text className="me__item-text">溯源记录</Text>
           <Text className="me__item-arrow">›</Text>
-        </View>
-        <View className="me__item" onClick={showHelp}>
+        </Button>
+        <Button className="nc-button-reset me__item" onClick={showHelp}>
           <Text className="me__item-text">系统帮助与客服</Text>
           <Text className="me__item-arrow">›</Text>
-        </View>
+        </Button>
       </View>
 
       {editing && (
@@ -240,9 +240,9 @@ export default function Me() {
         </View>
       )}
 
-      <View className="me__logout" onClick={logout}>
+      <Button className="nc-button-reset me__logout" onClick={logout}>
         <Text className="me__logout-text">退出登录</Text>
-      </View>
+      </Button>
     </View>
   );
 }

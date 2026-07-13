@@ -164,14 +164,18 @@ export default function Usage() {
             range={RESOURCE_OPTIONS.map((option) => option.label)}
             onChange={(event) => changeResource(Number(event.detail.value))}
           >
-            <View className="usage__filter">{RESOURCE_OPTIONS.find((option) => option.value === resourceFilter)?.label}</View>
+            <Button className="nc-button-reset usage__filter">
+              {RESOURCE_OPTIONS.find((option) => option.value === resourceFilter)?.label}
+            </Button>
           </Picker>
           <Picker
             mode="selector"
             range={REASON_OPTIONS.map((option) => option.label)}
             onChange={(event) => changeReason(Number(event.detail.value))}
           >
-            <View className="usage__filter">{REASON_OPTIONS.find((option) => option.value === reasonFilter)?.label}</View>
+            <Button className="nc-button-reset usage__filter">
+              {REASON_OPTIONS.find((option) => option.value === reasonFilter)?.label}
+            </Button>
           </Picker>
         </View>
 

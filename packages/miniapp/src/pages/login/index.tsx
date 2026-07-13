@@ -150,9 +150,9 @@ export default function Login() {
           <Icon name="user" size={20} color="#07c160" />
           <Text className="login__wechat-text">{wxLoading ? '登录中…' : '微信一键登录'}</Text>
         </Button>
-        <View className="login__apply" onClick={goRegister}>
+        <Button className="nc-button-reset login__apply" onClick={goRegister}>
           <Text className="login__apply-text">没有账号? 申请入驻</Text>
-        </View>
+        </Button>
       </View>
     </View>
   );

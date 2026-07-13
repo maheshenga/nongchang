@@ -2,3 +2,19 @@ page {
   background: #f5f5f5;
   font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
 }
+
+.nc-button-reset {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  line-height: inherit;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  text-align: inherit;
+
+  &::after {
+    border: 0;
+  }
+}

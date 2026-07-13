@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, Canvas } from '@tarojs/components';
+import { Button, View, Text, ScrollView, Canvas } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
 import { listBatches, type Batch } from '../../api/farm';
@@ -103,14 +103,15 @@ export default function Trace() {
         <ScrollView scrollX className="trace__chips">
           {batches.length === 0 && <Text className="trace__empty">暂无批次</Text>}
           {batches.map((b) => (
-            <View
+            <Button
               key={b.id}
-              className={`trace__chip ${traceState.selectedBatchId === b.id ? 'trace__chip--on' : ''}`}
+              className={`nc-button-reset trace__chip ${traceState.selectedBatchId === b.id ? 'trace__chip--on' : ''}`}
+              aria-pressed={traceState.selectedBatchId === b.id}
               onClick={() => void loadEvents(b.id)}
             >
               <Text className="trace__chip-no">{b.batchNo}</Text>
               <Text className="trace__chip-crop">{b.cropName}</Text>
-            </View>
+            </Button>
           ))}
         </ScrollView>
 
@@ -143,9 +144,13 @@ export default function Trace() {
           </View>
         </View>}
 
-        <View className="trace__poster-btn" onClick={genPoster}>
+        <Button
+          className="nc-button-reset trace__poster-btn"
+          disabled={!resultVisible}
+          onClick={() => void genPoster()}
+        >
           <Text className="trace__poster-text">生成溯源海报</Text>
-        </View>
+        </Button>
         <Canvas canvasId="poster" className="trace__canvas" />
       </View>
     </View>

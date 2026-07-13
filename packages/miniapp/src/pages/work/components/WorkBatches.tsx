@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { Button, View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import type { Batch } from '../../../api/farm';
 import DataState from '../../../components/DataState';
@@ -38,12 +38,12 @@ function WorkBatches({ batches, status, error, onRetry }: Props) {
       {batches.length > 0 && (
         <ScrollView scrollX className="work__batches">
           {batches.map((b) => (
-            <View className="work__batch" key={b.id} onClick={() => openBatch(b)}>
+            <Button className="nc-button-reset work__batch" key={b.id} onClick={() => openBatch(b)}>
               <Text className="work__batch-no">{b.batchNo}</Text>
               <Text className="work__batch-crop">{b.cropName}</Text>
               <Text className="work__batch-meta">点击查看农事明细</Text>
               <Text className="work__batch-arrow">查看详情 ›</Text>
-            </View>
+            </Button>
           ))}
         </ScrollView>
       )}

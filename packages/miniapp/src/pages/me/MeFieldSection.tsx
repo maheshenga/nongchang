@@ -1,4 +1,4 @@
-import { Map, Text, View } from '@tarojs/components';
+import { Button, Map, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import type { Field } from '../../api/farm';
 import { wgs84ToGcj02 } from '../../utils/geo';
@@ -23,10 +23,14 @@ export default function MeFieldSection({ fields, onToggle }: {
 
   return (
     <>
-      <View className="me__item" onClick={onToggle}>
+      <Button
+        className="nc-button-reset me__item"
+        aria-expanded={fields !== null}
+        onClick={onToggle}
+      >
         <Text className="me__item-text">承包地块管理</Text>
         <Text className="me__item-arrow">{fields ? '收起' : '展开'}</Text>
-      </View>
+      </Button>
       {fields && (
         <View className="me__fields">
           {fields.length === 0 && <Text className="me__field-empty">暂无地块</Text>}

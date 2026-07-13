@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 
 export default defineConfig({
@@ -7,5 +7,8 @@ export default defineConfig({
       '@tarojs/taro': resolve(__dirname, 'test/taro-mock.ts'),
     },
   },
-  test: { environment: 'node' },
+  test: {
+    environment: 'node',
+    exclude: [...configDefaults.exclude, 'test/e2e/**'],
+  },
 });

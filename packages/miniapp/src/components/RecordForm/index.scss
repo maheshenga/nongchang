@@ -80,6 +80,9 @@
   }
 
   &__chip, &__tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-width: 0;
     padding: 12px 20px;
     border-radius: 18px;
@@ -210,6 +213,10 @@
     justify-content: center;
     background: #fff;
 
+    &[disabled] {
+      opacity: 0.55;
+    }
+
     &--on {
       border-style: solid;
       border-color: $c-primary;
@@ -265,6 +272,8 @@
   &__voice {
     display: flex;
     align-items: center;
+    width: 100%;
+    box-sizing: border-box;
     gap: 10px;
     margin-top: 16px;
     padding: 16px 18px;
@@ -299,6 +308,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+
+    &[disabled] {
+      opacity: 0.55;
+    }
   }
 
   &__add-loading {
@@ -312,6 +325,10 @@
     font-size: 30px;
     font-weight: bold;
     padding: 4px 0;
+
+    &[disabled] {
+      opacity: 0.55;
+    }
   }
 
   &__review,

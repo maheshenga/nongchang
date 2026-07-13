@@ -208,6 +208,8 @@
     border-radius: 20px;
     background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
     border: 1px solid $c-border;
+    text-align: center;
+    vertical-align: top;
 
     &--disabled { opacity: 0.45; }
   }
@@ -233,6 +235,8 @@
     border-radius: 20px;
     background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
     border: 1px solid $c-border;
+    text-align: left;
+    vertical-align: top;
   }
 
   &__batch-no {

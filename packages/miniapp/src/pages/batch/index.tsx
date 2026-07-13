@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Image } from '@tarojs/components';
+import { Button, View, Text, Image } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { listFarmRecords, type FarmRecord } from '../../api/farm';
 import { writePendingRecordIntent } from '../work/record-intent';
@@ -62,9 +62,9 @@ export default function Batch() {
         ))}
       </View>
 
-      <View className="batch__fab" onClick={addRecord}>
+      <Button className="nc-button-reset batch__fab" onClick={addRecord}>
         <Text className="batch__fab-text">记一笔</Text>
-      </View>
+      </Button>
     </View>
   );
 }
