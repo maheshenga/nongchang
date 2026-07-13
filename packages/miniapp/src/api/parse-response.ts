@@ -4,6 +4,8 @@ export function parseResponse<T>(schema: RuntimeSchema<T>, value: unknown, label
   try {
     return schema.parse(value);
   } catch (cause) {
-    throw new Error(`Invalid ${label} response`, { cause });
+    const error = new Error(`Invalid ${label} response`) as Error & { cause?: unknown };
+    error.cause = cause;
+    throw error;
   }
 }

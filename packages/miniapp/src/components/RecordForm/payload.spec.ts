@@ -5,13 +5,21 @@ import type { Batch } from '../../api/farm';
 
 const batch: Batch = {
   id: '11111111-1111-4111-8111-111111111111',
+  tenantId: 'tenant-1',
   ownerId: '22222222-2222-4222-8222-222222222222',
+  ownerName: '大理基地',
   fieldId: '33333333-3333-4333-8333-333333333333',
   batchNo: 'B-001',
   cropName: '白芍',
   plantDate: '2026-01-01T00:00:00.000Z',
   expectedHarvest: '2026-06-01T00:00:00.000Z',
   status: 'Growing',
+  laborCost: 0,
+  sellPrice: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  codeCount: 0,
+  scanTotal: 0,
+  inputCost: 0,
 };
 
 describe('RecordForm payload', () => {

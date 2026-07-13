@@ -7,7 +7,9 @@ export default function MeFieldSection({ fields, onToggle }: {
   fields: Field[] | null;
   onToggle: () => void;
 }) {
-  const located = (fields ?? []).filter((field) => field.lng != null && field.lat != null);
+  const located = (fields ?? []).filter((field): field is Field & { lng: number; lat: number } => (
+    field.lng != null && field.lat != null
+  ));
   const points = located.map((field) => ({ field, coordinate: wgs84ToGcj02(field.lng, field.lat) }));
   const markers = points.map(({ field, coordinate }, index) => ({
     id: index,
