@@ -66,7 +66,12 @@ export default function AppWorkspaceViews({
         {slot('tenants', <TenantManagement />)}
         {slot('agents', <AgentManagement />)}
         {slot('merchant', <MerchantAdmin onNavigate={onNavigate} />)}
-        {slot('batches', <BatchAdmin />)}
+        {slot('batches', (
+          <BatchAdmin
+            billingAvailable={allowedTabs.includes('billing')}
+            onOpenBilling={() => onNavigate('billing')}
+          />
+        ))}
         {slot('records', <FarmRecords />)}
         {slot('logistics', <LogisticsTracker />)}
         {slot('memberHome', <MemberCenter />)}

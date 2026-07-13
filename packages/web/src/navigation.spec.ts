@@ -81,4 +81,15 @@ describe('production navigation', () => {
     expect(firstAllowedTab('member', 'fields')).toBe('memberHome');
     expect(firstAllowedTab('member', 'settings')).toBe('settings');
   });
+
+  it('uses generic product wording for merchant navigation and workspaces', () => {
+    const merchantItem = flattenNavItems(getNavItems('merchant_admin')).find(item => item.id === 'merchant');
+    const merchantSource = readFileSync(resolve(__dirname, 'components/MerchantAdmin.tsx'), 'utf8');
+    const recordsSource = readFileSync(resolve(__dirname, 'components/FarmRecords.tsx'), 'utf8');
+
+    expect(merchantItem?.label).toBe('产品档案');
+    expect(merchantSource).not.toContain('芍药');
+    expect(recordsSource).not.toContain('芍药');
+    expect(recordsSource).toContain('田间工作台');
+  });
 });

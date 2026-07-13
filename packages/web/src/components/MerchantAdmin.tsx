@@ -148,8 +148,8 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
               <input
                 type="text"
-                placeholder="搜索批次或芍药品种..."
-                aria-label="搜索批次或芍药品种"
+                placeholder="搜索批次或作物名称..."
+                aria-label="搜索批次或作物名称"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`${fluentInput} w-full pl-8 sm:w-72`}
@@ -173,7 +173,7 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
             className={fluentButton('primary')}
           >
             <Plus className="h-4 w-4" />
-            新增芍药繁育生产批次
+            新增生产批次
           </button>
         </div>
 
@@ -196,7 +196,7 @@ export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
                         checked={selectedCropIds.size === filteredCrops.length && filteredCrops.length > 0}
                       />
                     </th>
-                    <th className={fluentTable.th}>芍药商品品种/名称</th>
+                    <th className={fluentTable.th}>作物品种/名称</th>
                     <th className={fluentTable.th}>源头繁育批次号</th>
                     <th className={fluentTable.th}>当前生命周期状态</th>
                     <th className={fluentTable.th}>已生成赋码数量</th>

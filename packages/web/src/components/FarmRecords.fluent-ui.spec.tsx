@@ -125,6 +125,8 @@ describe('FarmRecords Fluent UI', () => {
     expect(source).toContain('EmptyState');
     expect(source).toContain('fluentStatusTag');
     expect(source).toContain('ModalSurface');
+    expect(source).toContain('田间工作台');
+    expect(source).not.toContain('芍药');
     const forbiddenClassTokens = [
       'text-slate-',
       'bg-slate-',

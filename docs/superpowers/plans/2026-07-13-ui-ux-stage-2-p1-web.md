@@ -433,29 +433,29 @@ interface BatchLabelWorkspaceProps {
 }
 ```
 
-- [ ] **Step 1: Add failing balance and wording tests**
+- [x] **Step 1: Add failing balance and wording tests**
 
 Assert current balance, requested count, expected remaining balance, batch number/crop/field, and `每生成 1 枚溯源码扣减 1 个二维码额度`. With balance 50 and amount 100, assert generation is disabled and the role-permitted `前往计费中心` action is shown. Assert navigation uses `产品档案`, not `我的芍药档案`, and default record/template copy does not claim every crop is peony.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/batch-admin/BatchLabelWorkspace.spec.tsx src/components/BatchAdmin.spec.tsx src/navigation.spec.ts
 ```
 
-- [ ] **Step 3: Fetch and present real quota**
+- [x] **Step 3: Fetch and present real quota**
 
 In `BatchAdmin`, load `getBillingSummary()` and pass `codeBalance`. Preserve the current trace-generation idempotency key and do not retry generation. Compute remaining balance as `codeBalance - amount` only when the summary is available; otherwise label quota `暂不可用` and let the backend remain authoritative.
 
-- [ ] **Step 4: Portal and restyle the workspace**
+- [x] **Step 4: Portal and restyle the workspace**
 
 Render the configuration screen through `ModalSurface` with `maxWidthClassName="max-w-6xl"`, Fluent tokens, a responsive single-column mobile layout, and a nested `ModalSurface` for print preview. `closeDisabled={generating}`. Replace internal batch IDs in copy with batch number and field label.
 
-- [ ] **Step 5: Apply generic product wording**
+- [x] **Step 5: Apply generic product wording**
 
 Use `产品档案` and `田间工作台` as defaults. Keep actual `batch.cropName` where data supplies it. Replace crop-specific template sentences with neutral examples without changing saved API values.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/batch-admin/BatchLabelWorkspace.spec.tsx src/components/BatchAdmin.spec.tsx src/navigation.spec.ts src/components/FarmRecords.fluent-ui.spec.tsx

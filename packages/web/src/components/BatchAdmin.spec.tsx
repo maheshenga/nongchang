@@ -18,10 +18,12 @@ const traceApiMock = vi.hoisted(() => ({
   generateCodes: vi.fn(),
   listCodes: vi.fn(),
 }));
+const billingApiMock = vi.hoisted(() => ({ getBillingSummary: vi.fn() }));
 
 vi.mock('../api/batches', () => batchApiMock);
 vi.mock('../api/fields', () => fieldApiMock);
 vi.mock('../api/trace', () => traceApiMock);
+vi.mock('../api/billing', () => billingApiMock);
 vi.mock('./BatchCredentialModal', () => ({ default: () => null }));
 
 const batches = [
@@ -65,11 +67,13 @@ const batches = [
 
 describe('BatchAdmin Fluent console', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     batchApiMock.listBatches.mockResolvedValue(batches);
     batchApiMock.getBatchLifecycle.mockResolvedValue({ farmRecords: [], traceEvents: [], codeCount: 0, scanTotal: 0 });
     fieldApiMock.listFields.mockResolvedValue([]);
     traceApiMock.generateCodes.mockResolvedValue([]);
     traceApiMock.listCodes.mockResolvedValue([]);
+    billingApiMock.getBillingSummary.mockResolvedValue({ ownerType: 'MERCHANT', ownerId: 'owner-1', aiBalance: 100, codeBalance: 50 });
   });
 
   it('renders Fluent batch command bar and table columns', async () => {
@@ -103,6 +107,15 @@ describe('BatchAdmin Fluent console', () => {
 
     await waitFor(() => expect(within(table).queryByText('B20240520001')).toBeNull());
     expect(within(table).getByText('B20240518003')).toBeTruthy();
+  });
+
+  it('passes the real code balance into label generation', async () => {
+    render(<BatchAdmin />);
+    const table = await screen.findByRole('table');
+    fireEvent.click(within(table).getAllByRole('button', { name: '生码' })[0]);
+
+    expect(await screen.findByText('当前额度 50')).toBeTruthy();
+    expect(billingApiMock.getBillingSummary).toHaveBeenCalledTimes(1);
   });
 
   it('locks create batch form and ignores duplicate submits while creation is pending', async () => {

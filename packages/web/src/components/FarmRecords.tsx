@@ -45,7 +45,7 @@ type RecordTask = {
 };
 
 const QUICK_TEMPLATES = [
-  { title: '基肥施加', type: '施缓释肥', desc: '追施芍药专用缓释肥，补充微量元素。', material: '缓释肥 50kg', labor: 1.5 },
+  { title: '基肥施加', type: '施缓释肥', desc: '按当前作物的施肥方案追施缓释肥，并记录微量元素补充情况。', material: '缓释肥 50kg', labor: 1.5 },
   { title: '滴灌管护', type: '温室浇水', desc: '完成A区常规温室喷洒浇水，控水控湿正常。', material: '水 2T', labor: 1 },
   { title: '抽芽修剪', type: '修剪整形', desc: '清理枯枝烂叶，修剪交叉枝以及过密处枝条，保持通风。', material: '无', labor: 2 },
 ];
@@ -294,7 +294,7 @@ export default function FarmRecords() {
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-xl font-semibold text-[#242424]">
             <FileSpreadsheet className="h-5 w-5 text-[#0078D4]" />
-            农事实操与质检记录看板
+            田间工作台
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[#605E5C]">
             记录由农户端与后台填报，已完成农事自动归档。

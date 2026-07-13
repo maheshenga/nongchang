@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useApi } from '../hooks/useApi';
 import { showToast } from '../hooks/useToast';
 import { deleteBatch, getBatchLifecycle, listBatches } from '../api/batches';
+import { getBillingSummary } from '../api/billing';
 import { listFields } from '../api/fields';
 import { createTraceGenerationRequestKey, generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
@@ -18,10 +19,16 @@ import { BatchAnalysisDialogs, type PendingAction } from './batch-admin/BatchAna
 import { useBatchAdminFilters } from './batch-admin/useBatchAdminFilters';
 import { buildIdentityMap } from '../ui/identity';
 
+export interface BatchAdminProps {
+  billingAvailable?: boolean;
+  onOpenBilling?: () => void;
+}
+
 // 生成真实溯源码 · 导出溯源报告 · 数据来源于批次、农事记录、溯源事件与扫码统计接口
-export default function BatchAdmin() {
+export default function BatchAdmin({ billingAvailable = false, onOpenBilling = () => undefined }: BatchAdminProps) {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches, { cacheKey: 'batches' });
   const { data: fields } = useApi(listFields, { cacheKey: 'fields' });
+  const billing = useApi(getBillingSummary, { cacheKey: 'billing-summary' });
   const fieldNames = useMemo(
     () => buildIdentityMap(fields ?? [], field => field.id, field => field.name),
     [fields],
@@ -125,6 +132,7 @@ export default function BatchAdmin() {
       const codes = await generateCodes(labelBatchId, count, generationRequestKeys.current[operation]);
       delete generationRequestKeys.current[operation];
       void reload();
+      void billing.reload();
       return codes.map(code => code.code);
     } catch (cause) {
       showToast(cause instanceof Error ? `生成真实溯源码失败:${cause.message}` : '生成真实溯源码失败');
@@ -195,7 +203,18 @@ export default function BatchAdmin() {
     {credentialBatch && <BatchCredentialModal batchId={credentialBatch.id} batchLabel={credentialBatch.label} onClose={() => setCredentialBatch(null)} />}
     {detailBatchId && <BatchLifecycleDialog batch={detailBatch} data={detailData} loading={detailLoading} onClose={() => setDetailBatchId(null)} />}
     {codesBatchId && <BatchCodesDialog batch={codesBatch} codes={codesList} loading={codesLoading} traceUrl={traceUrl} onCopy={code => void copyLink(code)} onClose={() => setCodesBatchId(null)} />}
-    {labelBatch && <BatchLabelWorkspace batch={labelBatch} generating={generating} onGenerate={handleGenerateCodes} requestConfirmation={requestConfirmation} onClose={() => setLabelBatchId(null)} />}
+    {labelBatch && (
+      <BatchLabelWorkspace
+        batch={labelBatch}
+        codeBalance={billing.data?.codeBalance ?? null}
+        billingAvailable={billingAvailable}
+        generating={generating}
+        onGenerate={handleGenerateCodes}
+        requestConfirmation={requestConfirmation}
+        onOpenBilling={onOpenBilling}
+        onClose={() => setLabelBatchId(null)}
+      />
+    )}
     {deleteTarget && <BatchDeleteDialog target={deleteTarget} forceConfirm={forceConfirm} deleting={deleting} onForceConfirm={setForceConfirm} onClose={() => { setDeleteTarget(null); setForceConfirm(false); }} onDelete={() => void handleDelete()} />}
     <BatchAnalysisDialogs
       batches={batches} profitBatchId={profitBatchId} complianceBatchId={complianceBatchId}

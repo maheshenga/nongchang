@@ -113,7 +113,7 @@ const MERCHANT_ADMIN_NAV: NavCategory[] = [
     items: [
       { id: 'overview', label: '生产总览', icon: LayoutDashboard },
       { id: 'fields', label: '我的地块管理', icon: Map },
-      { id: 'merchant', label: '我的芍药档案', icon: QrCode },
+      { id: 'merchant', label: '产品档案', icon: QrCode },
       { id: 'records', label: '农事实操', icon: FileSpreadsheet },
       { id: 'batches', label: '我的批次记录', icon: Layers },
       { id: 'logistics', label: '农资投入品管理', icon: Truck },
