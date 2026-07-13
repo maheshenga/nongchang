@@ -39,6 +39,7 @@ export interface AiAssistantProps {
 export default function AiAssistant({ role, context }: AiAssistantProps) {
   const [activeTask, setActiveTask] = useState<AiTaskId>(() => initialTask(context));
   const [history, setHistory] = useState<AiHistoryEntry[]>([]);
+  const requestedTask = initialTask(context);
 
   const billing = useApi(getBillingSummary, { cacheKey: 'billing-summary' });
   const providerReadable = role === 'system_admin';
@@ -58,8 +59,8 @@ export default function AiAssistant({ role, context }: AiAssistantProps) {
         : '未配置';
 
   useEffect(() => {
-    setActiveTask(initialTask(context));
-  }, [context?.batchId, context?.fieldId, context?.task]);
+    setActiveTask(requestedTask);
+  }, [requestedTask]);
 
   const recordHistory = (task: AiTaskId, title: string, result: string) => {
     const now = new Date();
