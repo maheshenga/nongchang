@@ -10,3 +10,7 @@ export const API_BASE_URL: string =
 export const WX_APPID: string =
   (typeof process !== 'undefined' && process.env && process.env.TARO_APP_WX_APPID) || '';
 
+// 可选客服联系方式。未配置时界面只提示联系平台管理员，不提供虚构号码。
+export const SUPPORT_CONTACT: string =
+  (typeof process !== 'undefined' && process.env && process.env.TARO_APP_SUPPORT_CONTACT) || '';
+

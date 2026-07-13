@@ -11,4 +11,12 @@ describe('Me page truthful copy', () => {
     expect(source).not.toMatch(/区块链|上链|哈希|存证/);
     expect(source).toContain('溯源记录');
   });
+
+  it('uses truthful account, support, retry, and trace navigation actions', () => {
+    expect(source).not.toContain('400-000-0000');
+    expect(source).not.toContain("useState('农技员')");
+    expect(source).toContain('buildSupportMessage(SUPPORT_CONTACT)');
+    expect(source).toContain("Taro.switchTab({ url: '/pages/trace/index' })");
+    expect(source).toContain('重新加载账户');
+  });
 });

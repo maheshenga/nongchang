@@ -51,6 +51,37 @@
     margin-top: 6px;
   }
 
+  &__profile-error {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: -44px 28px 60px;
+    padding: 20px 24px;
+    border: 1px solid rgba($c-rose, 0.25);
+    border-radius: 18px;
+    background: #fff1f2;
+    position: relative;
+    z-index: 1;
+  }
+
+  &__profile-error-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 24px;
+    color: $c-rose;
+  }
+
+  &__profile-retry {
+    margin: 0;
+    padding: 0 20px;
+    min-height: 64px;
+    line-height: 64px;
+    border-radius: 12px;
+    background: $c-rose;
+    color: #fff;
+    font-size: 24px;
+  }
+
   &__stats {
     display: flex;
     margin: -44px 28px 0;

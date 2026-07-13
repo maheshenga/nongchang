@@ -7,14 +7,18 @@ import { getMe, updateMe, changePassword } from '../../api/auth';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
+import { SUPPORT_CONTACT } from '../../config/env';
+import { buildSupportMessage } from '../../utils/support';
 import MeFieldSection from './MeFieldSection';
 import './index.scss';
 
 export default function Me() {
-  const [username, setUsername] = useState('农技员');
+  const [username, setUsername] = useState('账户加载中');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState<string>('');
-  const [role, setRole] = useState('农技员');
+  const [role, setRole] = useState('身份加载中');
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [monthCount, setMonthCount] = useState<number | null>(null);
   const [batchCount, setBatchCount] = useState<number | null>(null);
   const [fieldCount, setFieldCount] = useState<number | null>(null);
@@ -48,14 +52,18 @@ export default function Me() {
 
   // 从 /auth/me 拉真实资料(displayName/phone 以服务端为准)
   async function loadProfile() {
+    setProfileLoading(true);
+    setProfileError(null);
     try {
       const me = await getMe();
       setUsername(me.username);
       setDisplayName(me.displayName);
       setPhone(me.phone ?? '');
       setRole(roleLabel(me.role));
-    } catch {
-      // 拉取失败时退回 JWT 解码的展示值,不阻断页面
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : '账户资料加载失败');
+    } finally {
+      setProfileLoading(false);
     }
   }
 
@@ -85,7 +93,7 @@ export default function Me() {
   function showHelp() {
     Taro.showModal({
       title: '系统帮助与客服',
-      content: '如需帮助请联系平台管理员，或拨打服务热线 400-000-0000。',
+      content: buildSupportMessage(SUPPORT_CONTACT),
       showCancel: false,
     });
   }
@@ -152,14 +160,23 @@ export default function Me() {
     <View className="me">
       <View className="me__header">
         <View className="me__avatar">
-          <Text className="me__avatar-text">{(displayName || username).slice(0, 1)}</Text>
+          <Text className="me__avatar-text">{(profileLoading ? '账' : displayName || username).slice(0, 1)}</Text>
         </View>
         <View>
           <Text className="me__eyebrow">当前账号</Text>
-          <Text className="me__name">{displayName || username}</Text>
-          <Text className="me__role">{role}{phone ? ` · ${phone}` : ''}</Text>
+          <Text className="me__name">{profileLoading ? '账户加载中' : displayName || username}</Text>
+          <Text className="me__role">{profileLoading ? '身份加载中' : role}{!profileLoading && phone ? ` · ${phone}` : ''}</Text>
         </View>
       </View>
+
+      {profileError && (
+        <View className="me__profile-error" role="alert">
+          <Text className="me__profile-error-text">{profileError}</Text>
+          <Button className="me__profile-retry" loading={profileLoading} onClick={() => void loadProfile()}>
+            重新加载账户
+          </Button>
+        </View>
+      )}
 
       <View className="me__stats">
         <View className="me__stat">
@@ -199,9 +216,9 @@ export default function Me() {
           <Text className="me__item-text">算力与额度用量</Text>
           <Text className="me__item-arrow">›</Text>
         </View>
-        <View className="me__item me__item--reserved" onClick={comingSoon}>
+        <View className="me__item" onClick={() => Taro.switchTab({ url: '/pages/trace/index' })}>
           <Text className="me__item-text">溯源记录</Text>
-          <Text className="me__item-badge">即将开放</Text>
+          <Text className="me__item-arrow">›</Text>
         </View>
         <View className="me__item" onClick={showHelp}>
           <Text className="me__item-text">系统帮助与客服</Text>
