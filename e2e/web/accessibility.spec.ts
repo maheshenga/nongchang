@@ -30,4 +30,12 @@ test.describe('@a11y accessibility', () => {
     await loginByApi(page);
     await expectNoSeriousViolations(page);
   });
+
+  test('field creation dialog has no serious accessibility violations', async ({ page }) => {
+    await loginByApi(page);
+    await page.getByRole('button', { name: '地块管理', exact: true }).click();
+    await page.getByRole('button', { name: '绘制新地块' }).click();
+    await expect(page.getByRole('dialog', { name: '新建地块' })).toBeVisible();
+    await expectNoSeriousViolations(page);
+  });
 });
