@@ -32,7 +32,7 @@ export const fluentInput = `h-8 rounded-[4px] border border-[#C8C6C4] bg-white p
 export const fluentSelect = `${fluentInput} pr-8`;
 
 export const fluentTable = {
-  wrapper: 'overflow-hidden border border-[#E1DFDD] bg-white',
+  wrapper: 'overflow-x-auto border border-[#E1DFDD] bg-white',
   table: 'w-full border-collapse text-sm',
   thead: 'border-b border-[#E1DFDD] bg-[#FAFAFA] text-left text-xs font-semibold uppercase tracking-normal text-[#605E5C]',
   th: 'h-9 px-3 align-middle font-semibold',

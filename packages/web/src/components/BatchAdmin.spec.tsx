@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchAdmin from './BatchAdmin';
 
@@ -84,21 +84,23 @@ describe('BatchAdmin Fluent console', () => {
     expect(screen.getAllByRole('columnheader', { name: /批次号/ })).toHaveLength(1);
     expect(screen.getByRole('columnheader', { name: /签发码数/ })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: /扫码量/ })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /已生成码/ })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /合规/ })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /资质/ })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /利润/ })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: /报告/ })).toHaveLength(2);
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByRole('button', { name: /已生成码/ })).toHaveLength(2);
+    expect(within(table).getAllByRole('button', { name: /合规/ })).toHaveLength(2);
+    expect(within(table).getAllByRole('button', { name: /资质/ })).toHaveLength(2);
+    expect(within(table).getAllByRole('button', { name: /利润/ })).toHaveLength(2);
+    expect(within(table).getAllByRole('button', { name: /报告/ })).toHaveLength(2);
   });
 
   it('filters visible rows by batch code', async () => {
     render(<BatchAdmin />);
 
-    expect(await screen.findByText('B20240520001')).toBeTruthy();
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('B20240520001')).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText('按批次号搜索'), { target: { value: '18003' } });
 
-    await waitFor(() => expect(screen.queryByText('B20240520001')).toBeNull());
-    expect(screen.getByText('B20240518003')).toBeTruthy();
+    await waitFor(() => expect(within(table).queryByText('B20240520001')).toBeNull());
+    expect(within(table).getByText('B20240518003')).toBeTruthy();
   });
 
   it('locks create batch form and ignores duplicate submits while creation is pending', async () => {
