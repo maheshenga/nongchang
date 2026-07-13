@@ -56,6 +56,21 @@ $env:TARO_APP_WX_APPID='wx0000000000000000'
 corepack pnpm@10.33.2 verify:production
 ```
 
+Run the browser and accessibility gates with credentials supplied only in the current shell:
+
+```powershell
+$env:E2E_TENANT_CODE='DEMO'
+$env:E2E_USERNAME='<seed-user>'
+$env:E2E_PASSWORD='<seed-password>'
+$env:E2E_BILLING_USERNAME='<seed-agent-user>'
+corepack pnpm@10.33.2 test:browser
+corepack pnpm@10.33.2 test:accessibility
+```
+
+These gates start the real NestJS and Vite services against seeded PostGIS. The UI login/logout test disables tracing, screenshots, and video because it types a password. Authenticated critical flows and accessibility checks also disable tracing so session cookies and access-token responses are not written into trace archives. Other screenshots and videos are retained only for failures.
+
+The browser gate covers the public landing/login entry, UI login/logout, merchant role-restricted navigation, field creation, batch creation, farm-record creation, trace-code generation, public trace scanning, and an agent billing-purchase start. The payment handoff is intentionally stopped inside Playwright after the real order is created so the test never leaves the local environment or contacts an external payment page.
+
 To check database readiness without running all e2e tests:
 
 ```powershell

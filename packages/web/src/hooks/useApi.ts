@@ -24,15 +24,16 @@ export function useApi<T>(fetcher: () => Promise<T>, opts?: UseApiOptions): UseA
   const ttl = opts?.ttl ?? DEFAULT_TTL;
   const query = useQuery({
     queryKey: cacheKey ? ['api', cacheKey] : ['api-instance', instanceId],
-    queryFn: fetcher,
+    queryFn: () => fetcher(),
     staleTime: cacheKey ? ttl : 0,
     gcTime: cacheKey ? Math.max(ttl, DEFAULT_TTL) : 0,
     refetchOnMount: 'always',
   }, queryClient);
+  const { refetch } = query;
 
   const reload = useCallback(async () => {
-    await query.refetch();
-  }, [query.refetch]);
+    await refetch();
+  }, [refetch]);
 
   return {
     data: query.data ?? null,

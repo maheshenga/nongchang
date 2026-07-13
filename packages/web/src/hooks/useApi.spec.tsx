@@ -25,6 +25,16 @@ describe('useApi', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('invokes the application fetcher without the TanStack query context', async () => {
+    const fetcher = vi.fn().mockResolvedValue([{ id: 'a' }]);
+    const { wrapper } = createWrapper();
+
+    const { result } = renderHook(() => useApi(fetcher), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetcher).toHaveBeenCalledWith();
+  });
+
   it('captures error message on rejection', async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('boom'));
     const { wrapper } = createWrapper();
