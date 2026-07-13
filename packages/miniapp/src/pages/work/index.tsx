@@ -15,6 +15,11 @@ import WorkRecords from './components/WorkRecords';
 import WorkQuickActions from './components/WorkQuickActions';
 import WorkSkeleton from './components/WorkSkeleton';
 import type { QuickTemplateView } from '@nongchang/shared';
+import {
+  findIntentBatch,
+  takePendingRecordIntent,
+  type PendingRecordIntent,
+} from './record-intent';
 import './index.scss';
 
 type AiMode = 'chat' | 'diagnose' | null;
@@ -30,6 +35,7 @@ export default function Work() {
   const [isOffline, setIsOffline] = useState(false);
   const [aiMode, setAiMode] = useState<AiMode>(null);
   const [summary, setSummary] = useState<{ aiBalance: number; codeBalance: number } | null>(null);
+  const [pendingRecordIntent, setPendingRecordIntent] = useState<PendingRecordIntent | null>(null);
   const formRef = useRef<RecordFormHandle>(null);
   // 上次成功加载时间戳:切 tab 回来若在节流窗口内则跳过全量重载。
   const lastLoadRef = useRef(0);
@@ -40,9 +46,25 @@ export default function Work() {
       Taro.redirectTo({ url: '/pages/login/index' });
       return;
     }
+    const intent = takePendingRecordIntent();
+    if (intent) setPendingRecordIntent(intent);
     if (Date.now() - lastLoadRef.current < LOAD_TTL) return;
     void load();
   });
+
+  useEffect(() => {
+    if (!pendingRecordIntent) return;
+    const intent = pendingRecordIntent;
+    if (findIntentBatch(intent, batches)) {
+      formRef.current?.openForBatch(intent.batchId);
+      setPendingRecordIntent(null);
+      return;
+    }
+    if (!loading) {
+      setPendingRecordIntent(null);
+      Taro.showToast({ title: `批次 ${intent.batchNo} 当前不可用，请手动选择`, icon: 'none' });
+    }
+  }, [batches, loading, pendingRecordIntent]);
 
   // 真实网络状态:初始查询 + 订阅变化,只读展示(离线仅提示,不伪造请求行为)。
   useEffect(() => {

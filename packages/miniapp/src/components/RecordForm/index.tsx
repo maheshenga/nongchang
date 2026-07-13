@@ -30,6 +30,7 @@ export interface RecordFormHandle {
   applyTemplate: (t: QuickTemplateView) => void;
   openManual: () => void;
   openLocation: () => void;
+  openForBatch: (batchId: string) => void;
 }
 
 const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ batches, isOffline, onSaved }, ref) {
@@ -120,6 +121,13 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       setReviewPayload(null);
       void Taro.pageScrollTo({ selector: '#record-form-location', duration: 250 });
       void captureLocation();
+    },
+    openForBatch(batchId: string) {
+      setReceipt(null);
+      setReviewPayload(null);
+      setBatchId(batchId);
+      void Taro.pageScrollTo({ selector: '#record-form', duration: 250 });
+      setNoteFocused(true);
     },
   }));
 

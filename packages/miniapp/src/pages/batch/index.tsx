@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { listFarmRecords, type FarmRecord } from '../../api/farm';
+import { writePendingRecordIntent } from '../work/record-intent';
 import './index.scss';
 
 export default function Batch() {
@@ -10,6 +11,8 @@ export default function Batch() {
   const [records, setRecords] = useState<FarmRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const decodedCropName = decodeURIComponent(cropName || '');
+  const decodedBatchNo = decodeURIComponent(batchNo || '');
 
   useDidShow(() => {
     setLoading(true);
@@ -21,14 +24,19 @@ export default function Batch() {
   });
 
   function addRecord() {
+    if (!id || !decodedBatchNo || !decodedCropName) {
+      Taro.showToast({ title: '批次信息不完整，无法记一笔', icon: 'none' });
+      return;
+    }
+    writePendingRecordIntent({ id, batchNo: decodedBatchNo, cropName: decodedCropName });
     Taro.switchTab({ url: '/pages/work/index' });
   }
 
   return (
     <View className="batch">
       <View className="batch__header">
-        <Text className="batch__crop">{decodeURIComponent(cropName || '')}</Text>
-        <Text className="batch__no">批次 {decodeURIComponent(batchNo || '')}</Text>
+        <Text className="batch__crop">{decodedCropName}</Text>
+        <Text className="batch__no">批次 {decodedBatchNo}</Text>
       </View>
 
       <View className="batch__body">

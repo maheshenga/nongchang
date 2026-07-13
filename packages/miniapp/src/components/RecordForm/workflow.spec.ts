@@ -7,6 +7,8 @@ const directory = dirname(fileURLToPath(import.meta.url));
 const formSource = readFileSync(join(directory, 'index.tsx'), 'utf8');
 const reviewSource = readFileSync(join(directory, 'RecordSubmissionReview.tsx'), 'utf8');
 const receiptSource = readFileSync(join(directory, 'RecordReceipt.tsx'), 'utf8');
+const batchPageSource = readFileSync(join(directory, '../../pages/batch/index.tsx'), 'utf8');
+const workPageSource = readFileSync(join(directory, '../../pages/work/index.tsx'), 'utf8');
 
 describe('RecordForm recovery workflow boundary', () => {
   it('persists a safe draft and reviews before the real mutation', () => {
@@ -23,5 +25,12 @@ describe('RecordForm recovery workflow boundary', () => {
     expect(receiptSource).toContain('记录编号 {receipt.recordId}');
     expect(receiptSource).toContain('查看记录');
     expect(receiptSource).toContain('再记一笔');
+  });
+
+  it('consumes the selected batch intent and opens the form for that batch', () => {
+    expect(batchPageSource).toContain('writePendingRecordIntent');
+    expect(workPageSource).toContain('takePendingRecordIntent');
+    expect(workPageSource).toContain('openForBatch(intent.batchId)');
+    expect(formSource).toContain('openForBatch(batchId: string)');
   });
 });
