@@ -36,6 +36,7 @@ import { RuntimeStateModule } from './common/runtime/runtime-state.module';
 import { RUNTIME_STATE, type RuntimeStateStore } from './common/runtime/runtime-state.types';
 import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage';
 import { OperationsModule } from './modules/operations/operations.module';
+import { TelemetryModule } from './telemetry/telemetry.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { OperationsModule } from './modules/operations/operations.module';
     // read JWT secrets from .env at runtime.
     ConfigModule.forRoot({ isGlobal: true }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
+    TelemetryModule,
     RuntimeStateModule,
     // 全局限流:默认每 IP 60s 内最多 120 次请求,挡撞库/刷量/低成本 DoS。
     // 测试环境(NODE_ENV=test)放到极高阈值,避免 e2e 中密集请求误触限流导致脆弱失败。

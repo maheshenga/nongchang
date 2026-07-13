@@ -8,6 +8,7 @@ const KEYS = [
   'TRUST_PROXY_HOPS', 'UPLOAD_DAILY_BYTES_LIMIT', 'UPLOAD_ACTIVE_BYTES_LIMIT',
   'UPLOAD_PENDING_MAX_AGE_MINUTES', 'RUNTIME_STATE_DRIVER', 'REDIS_URL',
   'OPERATIONS_WORKER_CONCURRENCY',
+  'OTEL_SERVICE_NAME', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'METRICS_BEARER_TOKEN',
 ];
 
 let snapshot: Record<string, string | undefined>;
@@ -127,5 +128,13 @@ describe('validateEnv runtime safety limits', () => {
   it.each(['0', '33', '1.5', 'x'])('rejects invalid OPERATIONS_WORKER_CONCURRENCY=%s', (value) => {
     process.env.OPERATIONS_WORKER_CONCURRENCY = value;
     expect(() => validateEnv()).toThrow(/OPERATIONS_WORKER_CONCURRENCY/);
+  });
+
+  it('rejects unsafe telemetry endpoint and metrics credential configuration', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'file:///tmp/traces';
+    expect(() => validateEnv()).toThrow(/OTEL_EXPORTER_OTLP_ENDPOINT/);
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    process.env.METRICS_BEARER_TOKEN = 'short';
+    expect(() => validateEnv()).toThrow(/METRICS_BEARER_TOKEN/);
   });
 });

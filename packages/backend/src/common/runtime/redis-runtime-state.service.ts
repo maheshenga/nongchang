@@ -1,6 +1,7 @@
-import { Injectable, OnApplicationShutdown } from '@nestjs/common';
+import { Injectable, OnApplicationShutdown, Optional } from '@nestjs/common';
 import Redis from 'ioredis';
 import type { RuntimeStateStore } from './runtime-state.types';
+import { MetricsService } from '../../telemetry/metrics.service';
 
 const PREFIX = 'nongchang:';
 const RELEASE_LOCK_SCRIPT = `
@@ -19,7 +20,7 @@ return value
 export class RedisRuntimeStateService implements RuntimeStateStore, OnApplicationShutdown {
   private readonly client: Redis;
 
-  constructor(url: string) {
+  constructor(url: string, @Optional() private readonly metrics?: MetricsService) {
     this.client = new Redis(url, {
       lazyConnect: true,
       enableReadyCheck: true,
@@ -35,9 +36,15 @@ export class RedisRuntimeStateService implements RuntimeStateStore, OnApplicatio
   }
 
   async connect(): Promise<void> {
-    if (this.client.status === 'wait') await this.client.connect();
-    const pong = await this.client.ping();
-    if (pong !== 'PONG') throw new Error('Redis ping failed');
+    try {
+      if (this.client.status === 'wait') await this.client.connect();
+      const pong = await this.client.ping();
+      if (pong !== 'PONG') throw new Error('Redis ping failed');
+      this.metrics?.setRuntimeStateAvailable(true);
+    } catch (error) {
+      this.metrics?.setRuntimeStateAvailable(false);
+      throw error;
+    }
   }
 
   async getJson<T>(key: string): Promise<T | null> {
@@ -84,8 +91,11 @@ export class RedisRuntimeStateService implements RuntimeStateStore, OnApplicatio
 
   async ping(): Promise<boolean> {
     try {
-      return (await this.client.ping()) === 'PONG';
+      const available = (await this.client.ping()) === 'PONG';
+      this.metrics?.setRuntimeStateAvailable(available);
+      return available;
     } catch {
+      this.metrics?.setRuntimeStateAvailable(false);
       return false;
     }
   }

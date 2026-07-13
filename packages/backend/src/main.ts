@@ -1,3 +1,4 @@
+import './telemetry/telemetry.bootstrap';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';

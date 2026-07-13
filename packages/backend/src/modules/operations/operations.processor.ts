@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { AiBillingCoordinator } from '../billing/ai-billing-coordinator';
 import { UploadQuotaService } from '../upload/upload-quota.service';
 import { OssService } from '../upload/oss.service';
 import { OperationsAuditService } from './operations-audit.service';
 import type { OperationsJobName, OperationsJobPayload } from './operations.constants';
+import { MetricsService } from '../../telemetry/metrics.service';
 
 @Injectable()
 export class OperationsProcessor {
@@ -12,6 +13,7 @@ export class OperationsProcessor {
     private readonly quota: UploadQuotaService,
     private readonly oss: OssService,
     private readonly audit: OperationsAuditService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   private normalize(payload: OperationsJobPayload) {
@@ -32,11 +34,20 @@ export class OperationsProcessor {
   async process(name: OperationsJobName, payload: OperationsJobPayload): Promise<unknown> {
     const options = this.normalize(payload);
     if (name === 'ai-reconcile') {
-      return this.ai.reconcileStale({
-        cutoff: options.cutoff,
-        take: options.limit,
-        dryRun: options.dryRun,
-      });
+      try {
+        const result = await this.ai.reconcileStale({
+          cutoff: options.cutoff,
+          take: options.limit,
+          dryRun: options.dryRun,
+        });
+        if (Array.isArray((result as { errors?: unknown[] }).errors)) {
+          for (const _error of (result as { errors: unknown[] }).errors) this.metrics?.recordReconciliationError('ai');
+        }
+        return result;
+      } catch (error) {
+        this.metrics?.recordReconciliationError('ai');
+        throw error;
+      }
     }
     if (name === 'operational-audit') return this.audit.run(options.cutoff);
     if (name !== 'upload-cleanup') throw new Error(`unsupported operations job: ${String(name)}`);
@@ -51,6 +62,7 @@ export class OperationsProcessor {
         summary.deleted += 1;
       } catch {
         summary.failed += 1;
+        this.metrics?.recordReconciliationError('upload');
       }
     }
     return summary;

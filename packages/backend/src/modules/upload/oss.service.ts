@@ -1,12 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import OSS from 'ali-oss';
 import { OssConfigService } from '../oss-config/oss-config.service';
+import { MetricsService } from '../../telemetry/metrics.service';
+import { withOutboundSpan } from '../../telemetry/outbound-span';
 
 @Injectable()
 export class OssService {
   private _client?: OSS;
 
-  constructor(private ossConfig: OssConfigService) {}
+  constructor(
+    private ossConfig: OssConfigService,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {}
 
   // env 路径懒缓存的默认 client
   private envClient(): OSS {
@@ -34,12 +39,20 @@ export class OssService {
           accessKeyId: cred.accessKeyId,
           accessKeySecret: cred.accessKeySecret,
         });
-        const res = await client.put(key, buffer);
+        const res = await withOutboundSpan(
+          { provider: 'aliyun-oss', operation: 'upload' },
+          () => client.put(key, buffer),
+          this.metrics,
+        );
         return cred.baseUrl ? `${cred.baseUrl.replace(/\/$/, '')}/${key}` : res.url;
       }
     }
     // 回退 env
-    const res = await this.envClient().put(key, buffer);
+    const res = await withOutboundSpan(
+      { provider: 'aliyun-oss', operation: 'upload' },
+      () => this.envClient().put(key, buffer),
+      this.metrics,
+    );
     const base = process.env.OSS_BASE_URL;
     return base ? `${base.replace(/\/$/, '')}/${key}` : res.url;
   }
@@ -54,10 +67,18 @@ export class OssService {
           accessKeyId: cred.accessKeyId,
           accessKeySecret: cred.accessKeySecret,
         });
-        await client.delete(key);
+        await withOutboundSpan(
+          { provider: 'aliyun-oss', operation: 'delete' },
+          () => client.delete(key).then(() => undefined),
+          this.metrics,
+        );
         return;
       }
     }
-    await this.envClient().delete(key);
+    await withOutboundSpan(
+      { provider: 'aliyun-oss', operation: 'delete' },
+      () => this.envClient().delete(key).then(() => undefined),
+      this.metrics,
+    );
   }
 }

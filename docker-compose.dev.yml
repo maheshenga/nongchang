@@ -72,7 +72,21 @@ services:
     volumes:
       - nongchang_pgadmin:/var/lib/pgadmin
 
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    container_name: ${PROMETHEUS_CONTAINER_NAME:-nongchang-prometheus}
+    profiles: [observability]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-59090}:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - nongchang_prometheus:/prometheus
+
 volumes:
   nongchang_pgdata:
   nongchang_pgadmin:
   nongchang_redis:
+  nongchang_prometheus:

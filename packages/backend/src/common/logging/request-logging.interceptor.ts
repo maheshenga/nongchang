@@ -2,17 +2,20 @@ import {
   HttpException,
   Injectable,
   Logger,
+  Optional,
   type CallHandler,
   type ExecutionContext,
   type NestInterceptor,
 } from '@nestjs/common';
 import { catchError, finalize, throwError, type Observable } from 'rxjs';
 import { requestIdFromHeader } from './request-id';
+import { MetricsService } from '../../telemetry/metrics.service';
 
 interface RequestLike {
   method?: string;
   url?: string;
   route?: { path?: string };
+  baseUrl?: string;
   headers?: Record<string, unknown>;
   user?: { tenantId?: unknown; userId?: unknown };
 }
@@ -25,6 +28,8 @@ interface ResponseLike {
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RequestLoggingInterceptor.name);
+
+  constructor(@Optional() private readonly metrics?: MetricsService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -43,15 +48,27 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       }),
       finalize(() => {
         const user = request.user;
+        const status = errorStatus ?? response.statusCode ?? 200;
+        const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
         const payload = {
           requestId,
           method: request.method ?? 'UNKNOWN',
           path: request.route?.path ?? request.url?.split('?')[0] ?? '/',
-          status: errorStatus ?? response.statusCode ?? 200,
-          durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+          status,
+          durationMs,
           ...(typeof user?.tenantId === 'string' ? { tenantId: user.tenantId } : {}),
           ...(typeof user?.userId === 'string' ? { userId: user.userId } : {}),
         };
+        const routeTemplate = request.route?.path
+          ? `${request.baseUrl ?? ''}${request.route.path}`
+          : undefined;
+        this.metrics?.observeHttp({
+          method: request.method,
+          routeTemplate,
+          rawUrl: request.url,
+          statusCode: status,
+          durationSeconds: durationMs / 1_000,
+        });
         this.logger.log(JSON.stringify(payload));
       }),
     );

@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AiChatResponse, AiDiagnoseInput, AiDiagnoseResponse, AiTranscribeResponse, AuthUser, AiAdviceInput, AiAskInput } from '@nongchang/shared';
 import { AiProviderService, EnabledAiProvider } from '../ai-provider/ai-provider.service';
@@ -16,6 +16,8 @@ import {
   buildDiagnoseChatBody,
   type AiOperationKind,
 } from './ai.model';
+import { MetricsService } from '../../telemetry/metrics.service';
+import { withOutboundSpan } from '../../telemetry/outbound-span';
 
 @Injectable()
 export class AiService {
@@ -25,6 +27,7 @@ export class AiService {
     private billing: AiBillingCoordinator,
     private prisma: PrismaService,
     private scope: ScopeService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   async chat(user: AuthUser, message: string, clientKey?: string): Promise<AiChatResponse> {
@@ -132,7 +135,7 @@ export class AiService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const res = await fetch(`${p.baseUrl}/chat/completions`, {
+      const res = await withOutboundSpan({ provider: 'openai-compatible', operation: 'chat' }, () => fetch(`${p.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${p.apiKey}`,
@@ -140,7 +143,7 @@ export class AiService {
         },
         body: JSON.stringify(body),
         signal: controller.signal,
-      });
+      }), this.metrics);
       if (!res.ok) throw new BadGatewayException('AI 服务调用失败');
       const json = (await res.json()) as { choices: { message: { content: string } }[] };
       return json.choices[0].message.content;

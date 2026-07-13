@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import AlipaySdk from 'alipay-sdk';
 import { Role } from '@nongchang/shared';
 import type { AuthUser, AlipayConfigInput, AlipayConfigView, CreatePaymentInput, PaymentView } from '@nongchang/shared';
@@ -19,6 +19,8 @@ import {
   trimTrailingSlash,
 } from './alipay.model';
 import type { AlipayRow } from './alipay.model';
+import { MetricsService } from '../../telemetry/metrics.service';
+import { withOutboundSpan } from '../../telemetry/outbound-span';
 
 @Injectable()
 export class AlipayService {
@@ -26,6 +28,7 @@ export class AlipayService {
     private prisma: PrismaService,
     private enc: EncryptionService,
     private billing: BillingService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   private async findRow(tenantId: string): Promise<AlipayRow | null> {
@@ -93,7 +96,11 @@ export class AlipayService {
       publicBaseUrl: this.publicBaseUrl(),
       webBaseUrl: this.webBaseUrl(),
     });
-    const result = sdk.pageExec(request.method, request.params as any);
+    const result = await withOutboundSpan(
+      { provider: 'alipay', operation: 'payment' },
+      async () => sdk.pageExec(request.method, request.params as any),
+      this.metrics,
+    );
     return buildAlipayPaymentView({ orderId: order.id, channel: dto.channel, result });
   }
 
@@ -120,7 +127,11 @@ export class AlipayService {
     }
     let ok: boolean;
     try {
-      ok = sdk.checkNotifySign(tenantHintBody);
+      ok = await withOutboundSpan(
+        { provider: 'alipay', operation: 'notify' },
+        async () => sdk.checkNotifySign(tenantHintBody),
+        this.metrics,
+      );
     } catch {
       ok = false;
     }
