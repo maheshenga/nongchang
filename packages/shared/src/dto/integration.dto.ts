@@ -89,9 +89,19 @@ export const wechatRegisterSchema = z.object({
 });
 export type WechatRegisterDto = z.infer<typeof wechatRegisterSchema>;
 
-export interface WechatRegisterResponse {
-  status: 'pending';
-}
+export const wechatRegisterResponseSchema = z.object({
+  applicationId: z.string().min(1),
+  status: z.literal('pending'),
+});
+export type WechatRegisterResponse = z.infer<typeof wechatRegisterResponseSchema>;
+
+export const wechatRegistrationStatusResponseSchema = z.object({
+  applicationId: z.string().min(1),
+  displayName: z.string(),
+  status: z.enum(['pending', 'approved', 'rejected_or_suspended']),
+  updatedAt: z.string().nullable(),
+});
+export type WechatRegistrationStatusResponse = z.infer<typeof wechatRegistrationStatusResponseSchema>;
 
 // ── 待审核用户(脱敏视图) ──
 export const pendingUserViewSchema = z.object({

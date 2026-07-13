@@ -69,6 +69,15 @@
     padding: 6px 0;
   }
 
+  &__lookup {
+    margin-top: 20px;
+    border: 1px solid $c-primary;
+    border-radius: 16px;
+    background: #fff;
+    color: $c-primary;
+    font-size: 28px;
+  }
+
   &__back {
     margin-top: 28px;
     text-align: center;

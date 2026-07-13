@@ -95,14 +95,36 @@ describe('api/auth loginWechat', () => {
       key === 'access_token' ? 'old-access' : key === 'refresh_token' ? 'old-refresh' : ''
     ));
     taro.login.mockResolvedValue({ code: 'jscode_register' });
-    taro.request.mockResolvedValueOnce(okResp({ status: 'pending' }));
+    taro.request.mockResolvedValueOnce(okResp({ applicationId: 'application-1', status: 'pending' }));
 
     const result = await auth.registerWechat('新用户', '13900001111');
 
-    expect(result).toEqual({ status: 'pending' });
+    expect(result).toEqual({ applicationId: 'application-1', status: 'pending' });
     expect(taro.removeStorageSync).toHaveBeenCalledWith('access_token');
     expect(taro.removeStorageSync).toHaveBeenCalledWith('refresh_token');
     expect(taro.setStorageSync).not.toHaveBeenCalled();
+  });
+
+  it('queries registration status with a fresh WeChat code and no bearer token', async () => {
+    const { taro, auth } = await loadFresh('wx_test_appid');
+    taro.getStorageSync.mockImplementation((key: string) => (
+      key === 'access_token' ? 'old-access' : key === 'refresh_token' ? 'old-refresh' : ''
+    ));
+    taro.login.mockResolvedValue({ code: 'fresh-status-code' });
+    taro.request.mockResolvedValueOnce(okResp({
+      applicationId: 'application-1',
+      displayName: '新用户',
+      status: 'approved',
+      updatedAt: null,
+    }));
+
+    await expect(auth.getWechatRegistrationStatus()).resolves.toMatchObject({
+      applicationId: 'application-1',
+      status: 'approved',
+    });
+    const arg = taro.request.mock.calls[0][0];
+    expect(arg.url).toMatch(/\/auth\/wechat\/register\/status$/);
+    expect(arg.header.Authorization).toBeUndefined();
   });
 
   it('throws when Taro.login returns no code', async () => {

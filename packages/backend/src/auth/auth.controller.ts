@@ -58,6 +58,13 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('wechat/register/status')
+  getWechatRegistrationStatus(@Body(new ZodValidationPipe(wechatLoginSchema)) dto: WechatLoginDto) {
+    return this.auth.getWechatRegistrationStatus(dto);
+  }
+
+  @Public()
   @Post('refresh')
   refresh(@Body(new ZodValidationPipe(refreshSchema)) dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);

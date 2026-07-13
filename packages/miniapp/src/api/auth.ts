@@ -2,10 +2,12 @@ import Taro from '@tarojs/taro';
 import {
   meProfileViewSchema,
   okResponseSchema,
-  pendingResponseSchema,
   tokenPairSchema,
+  wechatRegisterResponseSchema,
+  wechatRegistrationStatusResponseSchema,
   type MeProfileView,
-  type PendingResponse,
+  type WechatRegisterResponse,
+  type WechatRegistrationStatusResponse,
 } from '@nongchang/shared';
 import { WX_APPID } from '../config/env';
 import { clearToken, setTokens } from '../store/auth';
@@ -29,7 +31,7 @@ export async function loginWechat(): Promise<void> {
   setTokens(parseResponse(tokenPairSchema, value, 'auth.wechatLogin'));
 }
 
-export async function registerWechat(displayName: string, phone?: string): Promise<PendingResponse> {
+export async function registerWechat(displayName: string, phone?: string): Promise<WechatRegisterResponse> {
   if (!WX_APPID) throw new Error('未配置微信 AppID');
   const { code } = await Taro.login();
   if (!code) throw new Error('微信授权失败,请重试');
@@ -37,9 +39,26 @@ export async function registerWechat(displayName: string, phone?: string): Promi
     url: '/auth/wechat/register', method: 'POST',
     data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) }, auth: false,
   });
-  const response = parseResponse(pendingResponseSchema, value, 'auth.wechatRegister');
+  const response = parseResponse(wechatRegisterResponseSchema, value, 'auth.wechatRegister');
   clearToken();
   return response;
+}
+
+export async function getWechatRegistrationStatus(): Promise<WechatRegistrationStatusResponse> {
+  if (!WX_APPID) throw new Error('未配置微信 AppID');
+  const { code } = await Taro.login();
+  if (!code) throw new Error('微信授权失败，请重试');
+  const value = await request<unknown>({
+    url: '/auth/wechat/register/status',
+    method: 'POST',
+    data: { appId: WX_APPID, code },
+    auth: false,
+  });
+  return parseResponse(
+    wechatRegistrationStatusResponseSchema,
+    value,
+    'auth.wechatRegistrationStatus',
+  );
 }
 
 export async function getMe(): Promise<MeProfileView> {

@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, NotFoundException, ForbiddenExceptio
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
-import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
+import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto, WechatRegisterResponse, WechatRegistrationStatusResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
@@ -87,7 +87,7 @@ export class AuthService {
     // 随机密码哈希,禁止该账号走密码登录
     const randomHash = await bcrypt.hash(randomBytes(24).toString('hex'), 10);
     const username = `wx_${openid.slice(0, 12)}_${randomBytes(3).toString('hex')}`;
-    await this.prisma.user.create({
+    const created = await this.prisma.user.create({
       data: {
         tenantId: lookup.tenantId,
         role: Role.MERCHANT,
@@ -99,8 +99,33 @@ export class AuthService {
         status: 'pending',
         groupId: group.id,
       },
+      select: { id: true },
     });
-    return { status: 'pending' };
+    return { applicationId: created.id, status: 'pending' };
+  }
+
+  async getWechatRegistrationStatus(dto: WechatLoginDto): Promise<WechatRegistrationStatusResponse> {
+    const lookup = await this.integrations.findTenantByWechatAppId(dto.appId);
+    if (!lookup) throw new UnauthorizedException('该小程序未配置微信登录');
+
+    const openid = await this.exchangeWxCode(dto.appId, lookup.secret, dto.code);
+    const user = await this.prisma.user.findUnique({
+      where: { tenantId_wxOpenid: { tenantId: lookup.tenantId, wxOpenid: openid } },
+      select: { id: true, displayName: true, status: true },
+    });
+    if (!user) throw new NotFoundException('未找到入驻申请');
+
+    const status = user.status === 'pending'
+      ? 'pending'
+      : user.status === 'active'
+        ? 'approved'
+        : 'rejected_or_suspended';
+    return {
+      applicationId: user.id,
+      displayName: user.displayName,
+      status,
+      updatedAt: null,
+    };
   }
 
   private async exchangeWxCode(appId: string, secret: string, code: string): Promise<string> {

@@ -344,11 +344,11 @@ describe('AuthService.registerWechat', () => {
       .rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('新用户建为 pending/merchant/默认组,返回 pending 且不发 token', async () => {
+  it('新用户建为 pending/merchant/默认组,返回真实申请编号且不发 token', async () => {
     vi.stubGlobal('fetch', wxFetch({ openid: 'REGOPENID' }));
     const { svc, created, groups } = makeWechatService({ lookup: { tenantId: 't1', secret: 's' } });
     const res = await svc.registerWechat({ appId: 'wxX', code: 'c', displayName: '李四', phone: '13800001111' });
-    expect(res).toEqual({ status: 'pending' });
+    expect(res).toEqual({ applicationId: 'newu', status: 'pending' });
     expect((res as any).accessToken).toBeUndefined();
     expect(groups.ensureDefault).toHaveBeenCalledWith('t1');
     expect(created).toHaveLength(1);
@@ -381,7 +381,7 @@ describe('AuthService.registerWechat', () => {
     });
 
     await expect(svc.registerWechat({ appId: 'wxTenant2', code: 'c', displayName: 'Zhao Liu' }))
-      .resolves.toEqual({ status: 'pending' });
+      .resolves.toEqual({ applicationId: 'newu', status: 'pending' });
     expect(created).toHaveLength(1);
     expect(created[0].tenantId).toBe('t2');
     expect(created[0].wxOpenid).toBe('CROSS_TENANT_OPENID');
@@ -389,6 +389,64 @@ describe('AuthService.registerWechat', () => {
       where: { tenantId_wxOpenid: { tenantId: 't2', wxOpenid: 'CROSS_TENANT_OPENID' } },
     });
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.getWechatRegistrationStatus', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('looks up the current WeChat identity inside the configured tenant', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'STATUS_OPENID' }));
+    const { svc, prisma } = makeWechatService({
+      lookup: { tenantId: 't1', secret: 's' },
+      existingUser: {
+        id: 'application-1',
+        tenantId: 't1',
+        wxOpenid: 'STATUS_OPENID',
+        displayName: '张三',
+        status: 'pending',
+      },
+    });
+
+    await expect(svc.getWechatRegistrationStatus({ appId: 'wxX', code: 'fresh-code' })).resolves.toEqual({
+      applicationId: 'application-1',
+      displayName: '张三',
+      status: 'pending',
+      updatedAt: null,
+    });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { tenantId_wxOpenid: { tenantId: 't1', wxOpenid: 'STATUS_OPENID' } },
+      select: { id: true, displayName: true, status: true },
+    });
+  });
+
+  it.each([
+    ['active', 'approved'],
+    ['rejected', 'rejected_or_suspended'],
+    ['suspended', 'rejected_or_suspended'],
+  ])('maps stored status %s to truthful registration status %s', async (storedStatus, expectedStatus) => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'STATUS_OPENID' }));
+    const { svc } = makeWechatService({
+      lookup: { tenantId: 't1', secret: 's' },
+      existingUser: {
+        id: 'application-1',
+        tenantId: 't1',
+        wxOpenid: 'STATUS_OPENID',
+        displayName: '张三',
+        status: storedStatus,
+      },
+    });
+
+    await expect(svc.getWechatRegistrationStatus({ appId: 'wxX', code: 'fresh-code' }))
+      .resolves.toMatchObject({ status: expectedStatus });
+  });
+
+  it('does not disclose a status when the current WeChat identity has no application', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'MISSING_OPENID' }));
+    const { svc } = makeWechatService({ lookup: { tenantId: 't1', secret: 's' } });
+
+    await expect(svc.getWechatRegistrationStatus({ appId: 'wxX', code: 'fresh-code' }))
+      .rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

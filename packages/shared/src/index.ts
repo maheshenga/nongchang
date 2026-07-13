@@ -150,13 +150,15 @@ export {
   tiandituConfigInputSchema, tiandituPublicSchema,
   integrationConfigViewSchema, userGroupInputSchema, userGroupViewSchema,
   assignUserGroupSchema, wechatLoginSchema,
-  wechatRegisterSchema, pendingUserViewSchema, reviewUserSchema,
+  wechatRegisterSchema, wechatRegisterResponseSchema, wechatRegistrationStatusResponseSchema,
+  pendingUserViewSchema, reviewUserSchema,
 } from './dto/integration.dto';
 export type {
   IntegrationProvider, WechatConfigInput, XfyunConfigInput, IntegrationConfigView,
   TiandituConfigInput, TiandituPublicView,
   UserGroupInput, UserGroupView, AssignUserGroupInput, WechatLoginDto,
-  WechatRegisterDto, WechatRegisterResponse, PendingUserView, ReviewUserInput,
+  WechatRegisterDto, WechatRegisterResponse, WechatRegistrationStatusResponse,
+  PendingUserView, ReviewUserInput,
 } from './dto/integration.dto';
 
 export { quickTemplateInputSchema, quickTemplateViewSchema } from './dto/quick-template.dto';
