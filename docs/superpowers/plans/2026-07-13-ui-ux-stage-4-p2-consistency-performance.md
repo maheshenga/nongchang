@@ -76,21 +76,21 @@ export function serializeOpenNavigationCategories(open: ReadonlySet<string>): st
 export function toggleNavigationCategory(open: ReadonlySet<string>, category: string): Set<string>;
 ```
 
-- [ ] **Step 1: Add failing preference model and shell tests**
+- [x] **Step 1: Add failing preference model and shell tests**
 
 Assert invalid storage opens every category, serialized valid categories restore, toggling does not mutate the original set, group buttons expose `aria-expanded`, collapsing hides child items, and remounting restores the saved state for the same role.
 
-- [ ] **Step 2: Run focused tests to verify red**
+- [x] **Step 2: Run focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/navigation-preferences.spec.ts src/App.spec.tsx
 ```
 
-- [ ] **Step 3: Implement category controls and persistence**
+- [x] **Step 3: Implement category controls and persistence**
 
 Replace static category labels with buttons using `ChevronDown`/`ChevronRight`. Initialize from the role-specific localStorage key, persist after user toggles, and keep mobile and desktop navigation synchronized through the same state.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/navigation-preferences.spec.ts src/App.spec.tsx src/navigation.spec.ts

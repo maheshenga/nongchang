@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Leaf, LogOut, Menu, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Leaf, LogOut, Menu, X } from 'lucide-react';
 import AppLogin from './components/AppLogin';
 import AppWorkspaceViews from './components/AppWorkspaceViews';
 import type { AiWorkspaceContext } from './components/AiAssistant.model';
@@ -9,6 +9,12 @@ import { navLabel, roleDisplay, toSystemRole } from './AppShell.model';
 import { DialogHost } from './hooks/useDialog';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
+import {
+  loadOpenNavigationCategories,
+  navigationPreferenceKey,
+  serializeOpenNavigationCategories,
+  toggleNavigationCategory,
+} from './navigation-preferences';
 import { fluentButton } from './ui/fluent';
 import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 
@@ -48,6 +54,14 @@ export default function App() {
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
+  const navigationCategories = useMemo(() => navItems.map(category => category.category), [navItems]);
+  const navigationStorageKey = navigationPreferenceKey(navRole);
+  const [openNavigationCategories, setOpenNavigationCategories] = useState<Set<string>>(() =>
+    loadOpenNavigationCategories(
+      typeof window === 'undefined' ? null : window.localStorage.getItem(navigationStorageKey),
+      navigationCategories,
+    ),
+  );
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
   const searchItems = useMemo(
     () => flatNavItems.map(item => ({ id: item.id, label: navLabel(item.id, item.label), icon: item.icon })),
@@ -65,6 +79,21 @@ export default function App() {
   const openAiWorkspace = (context: AiWorkspaceContext) => {
     if (!allowedTabs.includes('aiAssistant')) return;
     void requestTabChange('aiAssistant', () => setAiContext(context));
+  };
+
+  useEffect(() => {
+    setOpenNavigationCategories(loadOpenNavigationCategories(
+      window.localStorage.getItem(navigationStorageKey),
+      navigationCategories,
+    ));
+  }, [navigationStorageKey, navigationCategories]);
+
+  const toggleNavigationGroup = (category: string) => {
+    setOpenNavigationCategories(previous => {
+      const next = toggleNavigationCategory(previous, category);
+      window.localStorage.setItem(navigationStorageKey, serializeOpenNavigationCategories(next));
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -160,10 +189,24 @@ export default function App() {
   }
 
   const activeItem = flatNavItems.find(i => i.id === activeTab);
-  const renderNavSections = (mobile = false) => navItems.map((category) => (
+  const renderNavSections = (mobile = false) => navItems.map((category, categoryIndex) => {
+    const open = openNavigationCategories.has(category.category);
+    const sectionId = `${mobile ? 'mobile' : 'desktop'}-navigation-group-${categoryIndex}`;
+    const CategoryIcon = open ? ChevronDown : ChevronRight;
+
+    return (
     <div key={category.category} className="py-1">
-      <div className="px-4 pb-1 pt-3 text-[11px] font-semibold text-[#605E5C]">{category.category}</div>
-      {category.items.map((item) => {
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={sectionId}
+        onClick={() => toggleNavigationGroup(category.category)}
+        className="flex w-full items-center gap-1 px-4 pb-1 pt-3 text-left text-[11px] font-semibold text-[#605E5C] hover:text-[#323130]"
+      >
+        <CategoryIcon className="h-3 w-3 shrink-0" />
+        <span className="truncate">{category.category}</span>
+      </button>
+      {open && <div id={sectionId}>{category.items.map((item) => {
         const Icon = item.icon;
         const active = activeTab === item.id;
         const label = navLabel(item.id, item.label);
@@ -189,9 +232,9 @@ export default function App() {
             <span className="truncate">{label}</span>
           </button>
         );
-      })}
+      })}</div>}
     </div>
-  ));
+  )});
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F5F5F5] text-[#242424]">

@@ -61,6 +61,7 @@ import { registerUnsavedChangesGuard } from './ui/unsaved-changes';
 
 beforeEach(() => {
   window.location.hash = '';
+  window.localStorage.clear();
   authMock.role = 'platform_admin';
   authMock.isAuthenticated = true;
   authMock.isReady = true;
@@ -283,5 +284,34 @@ describe('App role wiring', () => {
 
     const mobileNav = await screen.findByRole('dialog', { name: '移动导航' });
     expect(mobileNav.textContent).toContain('批次管理');
+  });
+
+  it('collapses navigation groups through accessible category controls', async () => {
+    authMock.role = 'system_admin';
+    render(<App />);
+
+    const category = await screen.findByRole('button', { name: '系统' });
+    expect(category.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('button', { name: /AI 助手/ })).toBeTruthy();
+
+    fireEvent.click(category);
+
+    expect(category.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: /AI 助手/ })).toBeNull();
+  });
+
+  it('restores collapsed groups for the same role after remounting', async () => {
+    authMock.role = 'system_admin';
+    const first = render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '平台组织管理' }));
+    expect(screen.queryByRole('button', { name: /代理商管理/ })).toBeNull();
+    first.unmount();
+
+    render(<App />);
+
+    const restored = await screen.findByRole('button', { name: '平台组织管理' });
+    expect(restored.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: /代理商管理/ })).toBeNull();
   });
 });
