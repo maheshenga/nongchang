@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
 import { canRefreshSession, isKnownRole, toAuthUser } from './auth.model';
+import { SessionValidationCacheService } from './session-validation-cache.service';
 
 const WX_SESSION_URL = 'https://api.weixin.qq.com/sns/jscode2session';
 const WX_TIMEOUT_MS = 8000;
@@ -26,6 +27,7 @@ export class AuthService {
     private jwt: JwtService,
     private integrations: IntegrationConfigService,
     private groups: UserGroupService,
+    @Optional() private sessions?: SessionValidationCacheService,
   ) {}
 
   async login(dto: LoginDto): Promise<TokenPair> {
@@ -175,6 +177,7 @@ export class AuthService {
       where: { id: actor.userId },
       data: { passwordHash, sessionVersion: { increment: 1 } },
     });
+    await this.sessions?.invalidateUser(actor.tenantId, actor.userId);
     return { ok: true };
   }
 

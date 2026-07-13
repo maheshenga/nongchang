@@ -1,9 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateBatchDto, ListQuery, Paginated } from '@nongchang/shared';
 import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
 import {
   DEFAULT_BATCH_LIST_CAP,
   assertBatchStatusProgression,
@@ -15,7 +16,11 @@ import {
 
 @Injectable()
 export class BatchService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private cache?: PublicTraceCacheService,
+  ) {}
 
   async create(user: AuthUser, dto: CreateBatchDto) {
     const ownerId = await this.scope.resolveOwnerId(this.prisma, user, dto.ownerId);
@@ -67,7 +72,9 @@ export class BatchService {
     const cur = await this.prisma.batch.findUnique({ where: { id } });
     if (!cur) throw new NotFoundException('批次不存在');
     assertBatchStatusProgression(cur.status, status);
-    return serializeBatch(await this.prisma.batch.update({ where: { id }, data: { status } }));
+    const updated = serializeBatch(await this.prisma.batch.update({ where: { id }, data: { status } }));
+    await this.cache?.invalidateBatch(id);
+    return updated;
   }
 
   /** 成本编辑:人工成本/售价。 */
@@ -122,6 +129,7 @@ export class BatchService {
       await tx.farmRecord.deleteMany({ where: { batchId: id } });
       await tx.batch.delete({ where: { id } });
     });
+    await this.cache?.invalidateBatch(id);
     return { id };
   }
 

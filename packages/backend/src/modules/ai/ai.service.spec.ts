@@ -111,6 +111,19 @@ describe('AiService', () => {
 });
 
 describe('AiService billing reservation', () => {
+  it('scopes a supplied client key by operation, tenant, and user', async () => {
+    const billing = billingSvc();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
+    const svc = new AiService(providerSvc({ id: 'provider-1', baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+
+    await svc.chat(user, 'hello', 'client-action-key-0001');
+
+    expect(billing.execute).toHaveBeenCalledWith(expect.objectContaining({
+      operationKey: 'ai.chat:t1:u1:client-action-key-0001',
+      ref: expect.objectContaining({ idempotencyKey: 'ai.chat:t1:u1:client-action-key-0001' }),
+    }), expect.any(Function));
+  });
+
   it('chat success reserves and confirms AI 1', async () => {
     const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
@@ -326,12 +339,12 @@ describe('AiService.advice', () => {
     expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
+      idempotencyKey: expect.stringMatching(/^ai\.advice:t1:u1:b1:[a-f0-9]{16}$/),
     });
     expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
+      idempotencyKey: expect.stringMatching(/^ai\.advice:t1:u1:b1:[a-f0-9]{16}$/),
     });
   });
 

@@ -33,6 +33,7 @@ describe('upload model helpers', () => {
     expect(resolveUploadPurpose()).toBe('farm-record');
     expect(resolveUploadPurpose('farm-record')).toBe('farm-record');
     expect(resolveUploadPurpose('credential')).toBe('credential');
+    expect(resolveUploadPurpose('ai-diagnose')).toBe('ai-diagnose');
     expect(resolveUploadPurpose('avatar')).toBeNull();
   });
 
@@ -43,6 +44,8 @@ describe('upload model helpers', () => {
     expect(getAllowedExtension('farm-record', 'application/pdf')).toBeNull();
     expect(getAllowedExtension('credential', 'application/pdf')).toBe('pdf');
     expect(getAllowedExtension('credential', 'image/jpeg')).toBe('jpg');
+    expect(getAllowedExtension('ai-diagnose', 'image/jpeg')).toBe('jpg');
+    expect(getAllowedExtension('ai-diagnose', 'application/pdf')).toBeNull();
   });
 
   it('validates upload signatures for supported binary types', () => {
@@ -90,20 +93,34 @@ describe('upload model helpers', () => {
       purpose: 'credential',
       ext: 'pdf',
     });
+    expect(validateUploadFile({ file: file('image/jpeg', jpegBytes), purpose: 'ai-diagnose' })).toEqual({
+      ok: true,
+      purpose: 'ai-diagnose',
+      ext: 'jpg',
+    });
   });
 
   it('builds object keys with stable folder and extension rules', () => {
     expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
       purpose: 'farm-record',
       yyyymm: '202607',
       id: '00000000-0000-4000-8000-000000000001',
       ext: 'jpg',
-    })).toBe('farm-records/202607/00000000-0000-4000-8000-000000000001.jpg');
+    })).toBe('tenants/tenant-1/farm-records/202607/00000000-0000-4000-8000-000000000001.jpg');
     expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
       purpose: 'credential',
       yyyymm: '202607',
       id: '00000000-0000-4000-8000-000000000002',
       ext: 'pdf',
-    })).toBe('credentials/202607/00000000-0000-4000-8000-000000000002.pdf');
+    })).toBe('tenants/tenant-1/credentials/202607/00000000-0000-4000-8000-000000000002.pdf');
+    expect(buildUploadObjectKey({
+      tenantId: 'tenant-1',
+      purpose: 'ai-diagnose',
+      yyyymm: '202607',
+      id: '00000000-0000-4000-8000-000000000003',
+      ext: 'jpg',
+    })).toBe('tenants/tenant-1/ai-diagnose/202607/00000000-0000-4000-8000-000000000003.jpg');
   });
 });

@@ -21,7 +21,9 @@ const input = {
 
 function createHarness() {
   const updates: string[] = [];
-  const prisma = {
+  const prisma: any = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    $transaction: vi.fn(async (callback: (tx: any) => Promise<unknown>) => callback(prisma)),
     aiOperation: {
       create: vi.fn().mockResolvedValue({ id: 'operation-1' }),
       update: vi.fn().mockImplementation(async ({ data }: { data: { status: string } }) => {
@@ -41,6 +43,10 @@ function createHarness() {
     },
   };
   const billing = {
+    reserveAiOperation: vi.fn().mockResolvedValue({
+      existing: false,
+      operation: { id: 'operation-1', status: 'RESERVED', resultEnvelope: null },
+    }),
     reserve: vi.fn().mockResolvedValue({ reservationId: 'reservation-1', balanceAfter: 9 }),
     confirmReservation: vi.fn().mockResolvedValue({ reservationId: 'reservation-1', balanceAfter: 9 }),
     releaseReservation: vi.fn().mockResolvedValue({ reservationId: 'reservation-1', balanceAfter: 10 }),
@@ -55,21 +61,15 @@ function createHarness() {
 
 describe('AiBillingCoordinator.execute', () => {
   it('persists RESERVED -> IN_FLIGHT -> SUCCEEDED -> CONFIRMED on success', async () => {
-    const { coordinator, prisma, billing, updates } = createHarness();
+    const { coordinator, billing, updates } = createHarness();
 
     await expect(coordinator.execute(input, async () => 'answer')).resolves.toBe('answer');
 
-    expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', 1, input.ref);
-    expect(prisma.aiOperation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        tenantId: user.tenantId,
-        userId: user.userId,
-        providerId: 'provider-1',
-        kind: 'ai.chat',
-        operationKey: 'op-key',
-        reservationId: 'reservation-1',
-        status: 'RESERVED',
-      }),
+    expect(billing.reserveAiOperation).toHaveBeenCalledWith({
+      user,
+      amount: 1,
+      ref: input.ref,
+      operation: { providerId: 'provider-1', kind: 'ai.chat', operationKey: 'op-key' },
     });
     expect(updates).toEqual(['IN_FLIGHT', 'SUCCEEDED', 'CONFIRMED']);
     expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', input.ref);
@@ -112,15 +112,37 @@ describe('AiBillingCoordinator.execute', () => {
     expect(billing.releaseReservation).not.toHaveBeenCalled();
   });
 
-  it('releases the reservation if the durable RESERVED row cannot be created', async () => {
-    const { coordinator, prisma, billing } = createHarness();
-    prisma.aiOperation.create.mockRejectedValueOnce(new Error('create unavailable'));
+  it('does not call the provider when atomic reservation creation fails', async () => {
+    const { coordinator, billing } = createHarness();
+    billing.reserveAiOperation.mockRejectedValueOnce(new Error('create unavailable'));
     const providerCall = vi.fn();
 
     await expect(coordinator.execute(input, providerCall)).rejects.toThrow('create unavailable');
 
     expect(providerCall).not.toHaveBeenCalled();
-    expect(billing.releaseReservation).toHaveBeenCalledWith(user, 'AI', 1, input.ref);
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
+  });
+
+  it('replays a confirmed sanitized result without calling the provider', async () => {
+    const { coordinator, billing } = createHarness();
+    billing.reserveAiOperation.mockResolvedValueOnce({
+      existing: true,
+      operation: { id: 'operation-1', status: 'CONFIRMED', resultEnvelope: 'cached-answer' },
+    });
+    const providerCall = vi.fn();
+
+    await expect(coordinator.execute(input, providerCall)).resolves.toBe('cached-answer');
+    expect(providerCall).not.toHaveBeenCalled();
+  });
+
+  it('returns HTTP 202 metadata while an existing operation is still in flight', async () => {
+    const { coordinator, billing } = createHarness();
+    billing.reserveAiOperation.mockResolvedValueOnce({
+      existing: true,
+      operation: { id: 'operation-1', status: 'IN_FLIGHT', resultEnvelope: null },
+    });
+
+    await expect(coordinator.execute(input, vi.fn())).rejects.toMatchObject({ status: 202 });
   });
 });
 
@@ -146,6 +168,9 @@ describe('AiBillingCoordinator.reconcileStale', () => {
           reservation: { ...reservation, idempotencyKey: `op-${index}` },
         })),
     );
+    prisma.$queryRaw
+      .mockResolvedValueOnce(Array.from({ length: 7 }, (_, index) => ({ id: `operation-${index}` })))
+      .mockResolvedValueOnce([]);
 
     const result = await coordinator.reconcileStale({
       cutoff: new Date('2026-07-13T00:00:00.000Z'),
@@ -165,5 +190,25 @@ describe('AiBillingCoordinator.reconcileStale', () => {
     expect(prisma.aiOperation.update).toHaveBeenCalledWith(expect.objectContaining({
       data: { status: 'REVIEW_REQUIRED' },
     }));
+  });
+
+  it('quarantines orphan AI reservations instead of releasing them', async () => {
+    const { coordinator, prisma, billing } = createHarness();
+    prisma.$queryRaw
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        id: 'reservation-orphan', tenantId: user.tenantId, userId: user.userId,
+        kind: 'ai.chat', operationKey: 'orphan-key',
+      }]);
+
+    const result = await coordinator.reconcileStale({ cutoff: new Date(), take: 10 });
+
+    expect(result).toMatchObject({ scanned: 1, reviewRequired: 1, released: 0, errors: [] });
+    expect(prisma.aiOperation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        reservationId: 'reservation-orphan', status: 'REVIEW_REQUIRED', errorCategory: 'ORPHAN_RESERVATION',
+      }),
+    });
+    expect(billing.releaseReservation).not.toHaveBeenCalled();
   });
 });

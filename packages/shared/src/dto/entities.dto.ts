@@ -204,17 +204,18 @@ export type CropPhenologyItem = z.infer<typeof cropPhenologyItemSchema>;
 // ---- 偏离预警:批次实际进度对比标准物候模型 ----
 // elapsedDays:自种植起累计天数;expectedTotalDays:当前批次状态对应阶段的标准累计天数。
 // deviationDays = elapsedDays - expectedTotalDays;为正且超阈值=滞后(预警)。
-export type BatchDeviation = {
-  batchId: string;
-  batchNo: string;
-  cropName: string;
-  status: string;
-  plantDate: string;
-  elapsedDays: number;
-  expectedTotalDays: number | null;
-  deviationDays: number | null;
+export const batchDeviationSchema = z.object({
+  batchId: z.string(),
+  batchNo: z.string(),
+  cropName: z.string(),
+  status: z.string(),
+  plantDate: z.string(),
+  elapsedDays: z.number(),
+  expectedTotalDays: z.number().nullable(),
+  deviationDays: z.number().nullable(),
   // 物候模型缺失(该作物未配置)时为 true,无法计算偏离。
-  noBaseline: boolean;
+  noBaseline: z.boolean(),
   // deviationDays 超过阈值(滞后),需要预警。
-  alert: boolean;
-};
+  alert: z.boolean(),
+});
+export type BatchDeviation = z.infer<typeof batchDeviationSchema>;

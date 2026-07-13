@@ -46,7 +46,7 @@ export function buildAiOperationRef(
   return {
     refType: kind,
     ...(refId ? { refId } : {}),
-    idempotencyKey: `${kind}:${user.tenantId}:${user.userId}:${digest}`,
+    idempotencyKey: [kind, user.tenantId, user.userId, refId, digest].filter(Boolean).join(':'),
   };
 }
 

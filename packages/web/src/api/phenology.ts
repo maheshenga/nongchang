@@ -1,26 +1,31 @@
-import type {
-  CropPhenologyItem, CreateCropPhenologyDto, UpdateCropPhenologyDto, BatchDeviation,
+import {
+  batchDeviationSchema,
+  cropPhenologyItemSchema,
+  idResponseSchema,
+  type BatchDeviation,
+  type CreateCropPhenologyDto,
+  type CropPhenologyItem,
+  type UpdateCropPhenologyDto,
 } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-// 标准物候模型 CRUD。
-export function listPhenologies(): Promise<CropPhenologyItem[]> {
-  return request<CropPhenologyItem[]>('/phenologies');
+export async function listPhenologies(): Promise<CropPhenologyItem[]> {
+  return parseResponse(cropPhenologyItemSchema.array(), await request<unknown>('/phenologies'), 'phenology.list');
 }
-
-export function createPhenology(dto: CreateCropPhenologyDto): Promise<CropPhenologyItem> {
-  return request<CropPhenologyItem>('/phenologies', { method: 'POST', body: JSON.stringify(dto) });
+export async function createPhenology(dto: CreateCropPhenologyDto): Promise<CropPhenologyItem> {
+  return parseResponse(cropPhenologyItemSchema, await request<unknown>('/phenologies', {
+    method: 'POST', body: JSON.stringify(dto),
+  }), 'phenology.create');
 }
-
-export function updatePhenology(id: string, dto: UpdateCropPhenologyDto): Promise<CropPhenologyItem> {
-  return request<CropPhenologyItem>(`/phenologies/${id}`, { method: 'PATCH', body: JSON.stringify(dto) });
+export async function updatePhenology(id: string, dto: UpdateCropPhenologyDto): Promise<CropPhenologyItem> {
+  return parseResponse(cropPhenologyItemSchema, await request<unknown>(`/phenologies/${id}`, {
+    method: 'PATCH', body: JSON.stringify(dto),
+  }), 'phenology.update');
 }
-
-export function deletePhenology(id: string): Promise<{ id: string }> {
-  return request<{ id: string }>(`/phenologies/${id}`, { method: 'DELETE' });
+export async function deletePhenology(id: string): Promise<{ id: string }> {
+  return parseResponse(idResponseSchema, await request<unknown>(`/phenologies/${id}`, { method: 'DELETE' }), 'phenology.delete');
 }
-
-// 偏离预警:批次实际进度对比标准物候模型。
-export function listDeviations(): Promise<BatchDeviation[]> {
-  return request<BatchDeviation[]>('/phenologies/deviations');
+export async function listDeviations(): Promise<BatchDeviation[]> {
+  return parseResponse(batchDeviationSchema.array(), await request<unknown>('/phenologies/deviations'), 'phenology.deviations');
 }

@@ -12,7 +12,7 @@ export function pickPublicPayload(payload: unknown): Record<string, unknown> | n
   return Object.keys(out).length ? out : null;
 }
 
-type PublicTraceOpenResult = Extract<PublicTraceResult, { frozen: false }>;
+export type PublicTraceOpenResult = Extract<PublicTraceResult, { frozen: false }>;
 
 export interface PublicTraceResponseInput {
   code: string;
@@ -37,6 +37,7 @@ export interface PublicTraceResponseInput {
     occurredAt: Date;
     payload: unknown;
   }>;
+  eventTotal: number;
   credentials: Array<{
     type: string;
     title: string;
@@ -44,6 +45,7 @@ export interface PublicTraceResponseInput {
     issuedAt: Date | null;
     fileUrl: string;
   }>;
+  credentialTotal: number;
 }
 
 export function buildPublicTraceResponse(input: PublicTraceResponseInput): PublicTraceOpenResult {
@@ -71,6 +73,7 @@ export function buildPublicTraceResponse(input: PublicTraceResponseInput): Publi
       occurredAt: event.occurredAt.toISOString(),
       payload: pickPublicPayload(event.payload),
     })),
+    eventTotal: input.eventTotal,
     credentials: input.credentials.map((credential) => ({
       type: credential.type as PublicTraceOpenResult['credentials'][number]['type'],
       title: credential.title,
@@ -78,5 +81,6 @@ export function buildPublicTraceResponse(input: PublicTraceResponseInput): Publi
       issuedAt: credential.issuedAt ? credential.issuedAt.toISOString() : null,
       fileUrl: credential.fileUrl,
     })),
+    credentialTotal: input.credentialTotal,
   };
 }

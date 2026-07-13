@@ -3,8 +3,10 @@ import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 let app: INestApplication;
+let prisma: PrismaService;
 
 async function login(username: string, password = 'password123'): Promise<string> {
   const res = await request(app.getHttpServer())
@@ -19,6 +21,7 @@ beforeAll(async () => {
   app = mod.createNestApplication();
   app.setGlobalPrefix('api');
   await app.init();
+  prisma = app.get(PrismaService);
 });
 
 afterAll(async () => {
@@ -33,6 +36,55 @@ afterAll(async () => {
     /* 兜底失败不影响测试结论;此处仅尽力恢复状态 */
   }
   await app.close();
+});
+
+describe('anti-fake database aggregation', () => {
+  it('applies thresholds, Top-N, and owner scope in PostgreSQL', async () => {
+    const traceCode = await prisma.traceCode.findUniqueOrThrow({ where: { code: 'ORC-DEMO0001' } });
+    const marker = `anti-fake-e2e-${Date.now()}`;
+    await prisma.traceScan.createMany({
+      data: Array.from({ length: 6 }, (_, index) => ({
+        tenantId: traceCode.tenantId,
+        batchId: traceCode.batchId,
+        code: traceCode.code,
+        ip: `198.51.100.${(index % 3) + 1}`,
+        userAgent: marker,
+        scannedAt: new Date(Date.now() - index * 1_000),
+      })),
+    });
+    try {
+      const sysToken = await login('sysadmin');
+      const sys = await request(app.getHttpServer())
+        .get('/api/anti-fake/alerts?windowMinutes=10&minScans=6&minDistinctIps=3&limit=1')
+        .set('Authorization', `Bearer ${sysToken}`)
+        .expect(200);
+      expect(sys.body).toHaveLength(1);
+      expect(sys.body[0]).toMatchObject({ code: 'ORC-DEMO0001', batchId: traceCode.batchId });
+      expect(sys.body[0].scanCount).toBeGreaterThanOrEqual(6);
+      expect(sys.body[0].distinctIps).toBeGreaterThanOrEqual(3);
+
+      const agentToken = await login('agentA');
+      const agentAlerts = await request(app.getHttpServer())
+        .get('/api/anti-fake/alerts?windowMinutes=10&minScans=6&minDistinctIps=3&limit=10')
+        .set('Authorization', `Bearer ${agentToken}`)
+        .expect(200);
+      expect(agentAlerts.body.some((alert: { code: string }) => alert.code === 'ORC-DEMO0001')).toBe(true);
+
+      const otherMerchantToken = await login('merchantB');
+      const otherAlerts = await request(app.getHttpServer())
+        .get('/api/anti-fake/alerts?windowMinutes=10&minScans=6&minDistinctIps=3&limit=10')
+        .set('Authorization', `Bearer ${otherMerchantToken}`)
+        .expect(200);
+      expect(otherAlerts.body.some((alert: { code: string }) => alert.code === 'ORC-DEMO0001')).toBe(false);
+
+      await request(app.getHttpServer())
+        .get('/api/anti-fake/alerts?limit=201')
+        .set('Authorization', `Bearer ${sysToken}`)
+        .expect(400);
+    } finally {
+      await prisma.traceScan.deleteMany({ where: { userAgent: marker } });
+    }
+  });
 });
 
 describe('防伪监控(受保护)+ 公开扫码落明细', () => {

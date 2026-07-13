@@ -20,7 +20,7 @@ interface EditState {
 const EMPTY: EditState = { id: null, name: '', action: '', note: '', cost: '', labor: '', sort: '' };
 
 export default function QuickTemplates() {
-  const { data, loading, error, reload } = useApi(listQuickTemplates);
+  const { data, loading, error, reload } = useApi(listQuickTemplates, { cacheKey: 'quick-templates' });
   const [edit, setEdit] = useState<EditState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);

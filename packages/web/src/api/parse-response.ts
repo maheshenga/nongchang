@@ -1,0 +1,9 @@
+interface RuntimeSchema<T> { parse(value: unknown): T }
+
+export function parseResponse<T>(schema: RuntimeSchema<T>, value: unknown, label: string): T {
+  try {
+    return schema.parse(value);
+  } catch (cause) {
+    throw new Error(`Invalid ${label} response`, { cause });
+  }
+}

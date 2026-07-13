@@ -52,7 +52,10 @@ async function main() {
       take: query.take,
       dryRun: query.dryRun,
     });
-    const generic = query.dryRun
+    const aiOwnedRecovery = query.resource === 'AI' || query.refType?.startsWith('ai.');
+    const generic = aiOwnedRecovery
+      ? { scanned: 0, released: 0, skipped: 0, errors: [] }
+      : query.dryRun
       ? { scanned: candidates.length, released: 0, skipped: candidates.length, errors: [] }
       : await billing.releaseStaleReservations(query);
     console.log(JSON.stringify({

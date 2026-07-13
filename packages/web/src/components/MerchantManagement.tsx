@@ -42,7 +42,7 @@ const statusOptions: Array<{ key: StatusFilter; label: string }> = [
 export default function MerchantManagement() {
   const [page, setPage] = useState(1);
   const fetchMerchants = useCallback(() => listMerchants({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants);
+  const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants, { cacheKey: `merchants-page-${page}` });
   const merchantPage = normalizePage<MerchantListItem>(rawMerchants, page);
   const merchants = merchantPage.items;
   const [searchQuery, setSearchQuery] = useState('');

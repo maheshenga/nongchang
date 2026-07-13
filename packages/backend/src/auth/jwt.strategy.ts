@@ -3,10 +3,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthUser, Role } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionValidationCacheService } from './session-validation-cache.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: SessionValidationCacheService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -14,11 +18,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
   async validate(payload: AuthUser & { sub?: string }): Promise<AuthUser> {
+    const tokenVersion = payload.sessionVersion ?? 0;
+    const cached = await this.cache.get(payload.tenantId, payload.userId, tokenVersion);
+    if (cached) return cached;
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
       include: { tenant: { select: { status: true } } },
     });
-    const tokenVersion = payload.sessionVersion ?? 0;
     if (
       !user ||
       user.status !== 'active' ||
@@ -37,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!agent || agent.status !== 'active') throw new UnauthorizedException('登录状态已失效');
     }
 
-    return {
+    const validated = {
       userId: user.id,
       tenantId: user.tenantId,
       role: user.role as Role,
@@ -45,5 +52,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ownerId: user.role === Role.MERCHANT ? user.id : null,
       sessionVersion: user.sessionVersion ?? 0,
     };
+    await this.cache.set(validated);
+    return validated;
   }
 }

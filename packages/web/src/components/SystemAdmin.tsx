@@ -22,7 +22,7 @@ function toUiAgent(a: ApiAgent): Agent {
 
 
 export default function SystemAdmin() {
-  const { data: rawAgents, loading: agentsLoading, error: agentsError, reload: reloadAgents } = useApi(listAgents);
+  const { data: rawAgents, loading: agentsLoading, error: agentsError, reload: reloadAgents } = useApi(listAgents, { cacheKey: 'agents' });
   const agents: Agent[] = useMemo(() => (rawAgents ?? []).map(toUiAgent), [rawAgents]);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());

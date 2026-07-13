@@ -173,7 +173,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     }
     setUploading(true);
     try {
-      const url = await uploadImage(tempPath);
+      const url = await uploadImage(tempPath, 'farm-record');
       setImages((prev) => [...prev, url]);
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });

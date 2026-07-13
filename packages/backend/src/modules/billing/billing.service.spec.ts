@@ -12,6 +12,7 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
   const ledgers: any[] = [];
   const reservations: any[] = [];
   const traceCodes: any[] = [];
+  const aiOperations: any[] = [];
   const accountRow = opts.account ?? { id: 'acc1', ownerType: 'MERCHANT', ownerId: 'm1', tenantId: 't1' };
   const now = opts.now ?? new Date('2026-07-06T00:00:00.000Z');
   const tx = {
@@ -33,6 +34,7 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
       },
       findFirst: async () => ({ ...accountRow, ...state }),
       findUnique: async () => ({ ...accountRow, ...state }),
+      findUniqueOrThrow: async () => ({ ...accountRow, ...state }),
     },
     creditLedger: {
       findFirst: async (a: any) => ledgers.find((l) =>
@@ -87,14 +89,47 @@ function makeService(opts: { aiBalance?: number; codeBalance?: number; account?:
         return true;
       }).length,
     },
+    aiOperation: {
+      findUnique: async (a: any) => aiOperations.find((row) =>
+        row.tenantId === a.where.tenantId_operationKey.tenantId &&
+        row.operationKey === a.where.tenantId_operationKey.operationKey,
+      ) ?? null,
+      create: async (a: any) => {
+        const row = { id: `op${aiOperations.length + 1}`, status: 'RESERVED', resultEnvelope: null, ...a.data };
+        aiOperations.push(row);
+        return row;
+      },
+    },
   };
   const prisma: any = {
     ...tx,
     $transaction: async (fn: any) => fn(tx),
   };
   const svc = new BillingService(prisma);
-  return { svc, state, ledgers, reservations, traceCodes, prisma };
+  return { svc, state, ledgers, reservations, traceCodes, aiOperations, prisma };
 }
+
+describe('BillingService.reserveAiOperation', () => {
+  it('atomically creates the debit, reservation, ledger, and operation and reuses duplicates', async () => {
+    const { svc, state, reservations, ledgers, aiOperations } = makeService({ aiBalance: 10 });
+    const input = {
+      user: merchant,
+      amount: 2,
+      ref: { refType: 'ai.chat', idempotencyKey: 'ai.chat:t1:u3:action-1' },
+      operation: { providerId: 'provider-1', kind: 'ai.chat', operationKey: 'ai.chat:t1:u3:action-1' },
+    };
+
+    const first = await svc.reserveAiOperation(input);
+    const second = await svc.reserveAiOperation(input);
+
+    expect(first.existing).toBe(false);
+    expect(second.existing).toBe(true);
+    expect(state.aiBalance).toBe(8);
+    expect(reservations).toHaveLength(1);
+    expect(ledgers.filter((row) => row.reason === 'RESERVED')).toHaveLength(1);
+    expect(aiOperations).toHaveLength(1);
+  });
+});
 
 describe('BillingService.consume', () => {
   it('余额充足:AI 扣减并写 CONSUME 流水', async () => {

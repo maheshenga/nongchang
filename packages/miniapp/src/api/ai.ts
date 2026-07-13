@@ -1,45 +1,59 @@
+import {
+  aiChatResponseSchema,
+  aiDiagnoseResponseSchema,
+  aiTranscribeResponseSchema,
+  type AiAdviceInput,
+} from '@nongchang/shared';
+import { createIdempotencyKey } from './idempotency';
+import { parseResponse } from './parse-response';
 import { request, uploadMultipart } from './request';
-import type { AiChatResponse, AiDiagnoseResponse, AiTranscribeResponse, AiAdviceInput } from '@nongchang/shared';
+
+function aiHeader() {
+  return { 'Idempotency-Key': createIdempotencyKey('ai') };
+}
 
 export async function aiChat(message: string): Promise<string> {
-  const res = await request<AiChatResponse>({
-    url: '/ai/chat', method: 'POST', data: { message },
-  });
-  return res.answer;
+  return parseResponse(aiChatResponseSchema, await request<unknown>({
+    url: '/ai/chat', method: 'POST', data: { message }, header: aiHeader(),
+  }), 'ai.chat').answer;
 }
 
 export async function aiAdvice(input: AiAdviceInput): Promise<string> {
-  const res = await request<AiChatResponse>({ url: '/ai/advice', method: 'POST', data: { batchId: input.batchId } });
-  return res.answer;
+  return parseResponse(aiChatResponseSchema, await request<unknown>({
+    url: '/ai/advice', method: 'POST', data: { batchId: input.batchId }, header: aiHeader(),
+  }), 'ai.advice').answer;
 }
 
 export async function aiDiagnose(imageUrl: string, note?: string): Promise<string> {
   const data: Record<string, unknown> = { imageUrl };
-  if (note && note.trim()) data.note = note.trim();
-  const res = await request<AiDiagnoseResponse>({
-    url: '/ai/diagnose', method: 'POST', data,
-  });
-  return res.result;
+  if (note?.trim()) data.note = note.trim();
+  return parseResponse(aiDiagnoseResponseSchema, await request<unknown>({
+    url: '/ai/diagnose', method: 'POST', data, header: aiHeader(),
+  }), 'ai.diagnose').result;
 }
 
-// 上传录音文件到后端转写(走 Taro.uploadFile,multipart)。
 export async function transcribeVoice(filePath: string): Promise<string> {
-  const res = await uploadMultipart('/ai/transcribe', filePath);
-  if (res.statusCode < 200 || res.statusCode >= 300) {
-    const msg = (() => {
-      try { return (JSON.parse(res.data) as { message?: string }).message; } catch { return undefined; }
-    })();
-    throw new Error(msg || `语音转写失败(${res.statusCode})`);
+  const response = await uploadMultipart('/ai/transcribe', filePath, aiHeader());
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    let message: string | undefined;
+    try {
+      const value: unknown = JSON.parse(response.data);
+      if (value && typeof value === 'object' && 'message' in value && typeof (value as { message?: unknown }).message === 'string') {
+        message = (value as { message: string }).message;
+      }
+    } catch {
+      // Use the stable fallback.
+    }
+    throw new Error(message || `语音转写失败(${response.statusCode})`);
   }
-  const body = JSON.parse(res.data) as AiTranscribeResponse;
-  return body.text;
+  const value: unknown = JSON.parse(response.data);
+  return parseResponse(aiTranscribeResponseSchema, value, 'ai.transcribe').text;
 }
 
-// 把后端「未配置 provider/视觉模型」类错误转成用户可读提示。
-export function normalizeAiError(e: unknown): string {
-  if (e instanceof Error) {
-    if (/未配置|provider|视觉模型/i.test(e.message)) return 'AI 服务未配置，请联系管理员';
-    return e.message;
+export function normalizeAiError(error: unknown): string {
+  if (error instanceof Error) {
+    if (/未配置|provider|视觉模型/i.test(error.message)) return 'AI 服务未配置，请联系管理员';
+    return error.message;
   }
   return 'AI 调用失败';
 }

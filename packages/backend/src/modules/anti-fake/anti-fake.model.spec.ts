@@ -10,6 +10,7 @@ import {
   buildScopedScanWhere,
   buildTraceCodeStatusWhere,
   buildTraceScanItem,
+  normalizeAntiFakeAlertQuery,
   type ScanRow,
 } from './anti-fake.model';
 
@@ -120,5 +121,15 @@ describe('anti-fake model helpers', () => {
   it('builds freeze responses from target status', () => {
     expect(buildFreezeResponse('C1', 'frozen')).toEqual({ code: 'C1', frozen: true });
     expect(buildFreezeResponse('C1', 'active')).toEqual({ code: 'C1', frozen: false });
+  });
+
+  it('normalizes bounded aggregate query controls', () => {
+    expect(normalizeAntiFakeAlertQuery({})).toMatchObject({
+      windowMinutes: 60, minScans: 5, minDistinctIps: 3, limit: 50,
+    });
+    expect(normalizeAntiFakeAlertQuery({ windowMinutes: 10, minScans: 2, minDistinctIps: 2, limit: 7 }))
+      .toMatchObject({ windowMinutes: 10, minScans: 2, minDistinctIps: 2, limit: 7 });
+    expect(() => normalizeAntiFakeAlertQuery({ limit: 201 })).toThrow();
+    expect(() => normalizeAntiFakeAlertQuery({ windowMinutes: 0 })).toThrow();
   });
 });

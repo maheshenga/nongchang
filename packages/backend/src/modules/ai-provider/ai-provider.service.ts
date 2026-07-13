@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { AuthUser, CreateAiProviderInput, UpdateAiProviderInput, AiProviderView, AiTestResponse } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
@@ -11,13 +11,19 @@ import {
   type AiProviderRow,
   type EnabledAiProvider,
 } from './ai-provider.model';
+import { MetricsService } from '../../telemetry/metrics.service';
+import { withOutboundSpan } from '../../telemetry/outbound-span';
 
 const AI_TEST_TIMEOUT_MS = 10_000;
 export type { EnabledAiProvider } from './ai-provider.model';
 
 @Injectable()
 export class AiProviderService {
-  constructor(private prisma: PrismaService, private enc: EncryptionService) {}
+  constructor(
+    private prisma: PrismaService,
+    private enc: EncryptionService,
+    @Optional() private readonly metrics?: MetricsService,
+  ) {}
 
   private toView(r: AiProviderRow): AiProviderView {
     return buildAiProviderView({
@@ -103,7 +109,7 @@ export class AiProviderService {
     const timer = setTimeout(() => controller.abort(), AI_TEST_TIMEOUT_MS);
     const start = Date.now();
     try {
-      const res = await fetch(`${row.baseUrl}/chat/completions`, {
+      const res = await withOutboundSpan({ provider: 'openai-compatible', operation: 'chat' }, () => fetch(`${row.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -114,7 +120,7 @@ export class AiProviderService {
           messages: [{ role: 'user', content: 'ping' }],
         }),
         signal: controller.signal,
-      });
+      }), this.metrics);
       const latencyMs = Date.now() - start;
       if (!res.ok) return { ok: false, error: `连接失败(HTTP ${res.status})` };
       return { ok: true, latencyMs };

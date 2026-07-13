@@ -5,7 +5,7 @@ import { JwtStrategy } from './jwt.strategy';
 
 const activeTenant = { status: 'active' };
 
-function makeStrategy(user: any, agent: any = null) {
+function makeStrategy(user: any, agent: any = null, cached: any = null) {
   const prisma = {
     user: {
       findUnique: vi.fn().mockResolvedValue(user),
@@ -14,10 +14,25 @@ function makeStrategy(user: any, agent: any = null) {
       findFirst: vi.fn().mockResolvedValue(agent),
     },
   } as any;
-  return { strategy: new JwtStrategy(prisma), prisma };
+  const cache = {
+    get: vi.fn().mockResolvedValue(cached),
+    set: vi.fn().mockResolvedValue(undefined),
+  } as any;
+  return { strategy: new JwtStrategy(prisma, cache), prisma, cache };
 }
 
 describe('JwtStrategy session revocation', () => {
+  it('uses a short-lived validated session cache without querying PostgreSQL', async () => {
+    const cached = {
+      userId: 'u1', tenantId: 't1', role: Role.MERCHANT,
+      agentId: null, ownerId: 'u1', sessionVersion: 2,
+    };
+    const { strategy, prisma } = makeStrategy(null, null, cached);
+
+    await expect(strategy.validate({ ...cached, sub: 'u1' })).resolves.toEqual(cached);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('returns current DB-backed user when token version matches', async () => {
     const { strategy, prisma } = makeStrategy({
       id: 'u1',

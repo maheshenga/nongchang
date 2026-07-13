@@ -1,0 +1,3 @@
+# Generate this file outside source control with the production SCRAM verifier.
+# Format:
+# "nongchang" "SCRAM-SHA-256$<iterations>:<salt>$<stored-key>:<server-key>"

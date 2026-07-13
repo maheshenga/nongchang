@@ -1,6 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { PublicTraceService } from './public-trace.service';
 import { PublicTraceController } from './public-trace.controller';
+import { PublicTraceCacheService } from './public-trace-cache.service';
 
-@Module({ providers: [PublicTraceService], controllers: [PublicTraceController] })
+@Global()
+@Module({
+  providers: [PublicTraceService, PublicTraceCacheService],
+  controllers: [PublicTraceController],
+  exports: [PublicTraceCacheService],
+})
 export class PublicTraceModule {}

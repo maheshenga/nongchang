@@ -14,6 +14,6 @@ export class UploadController {
     FileInterceptor('file', { limits: { ...MULTIPART_FILE_LIMITS, fileSize: 5 * 1024 * 1024 } }),
   )
   upload(@UploadedFile() file: UploadedFileShape, @CurrentUser() user: AuthUser, @Query('purpose') purpose?: string) {
-    return this.svc.upload(file, user.tenantId, { purpose });
+    return this.svc.upload(file, user, { purpose });
   }
 }

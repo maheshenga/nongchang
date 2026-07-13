@@ -98,7 +98,7 @@ function Field({
 }
 
 function WechatCard() {
-  const { data, loading, error, reload } = useApi(fetchWechat);
+  const { data, loading, error, reload } = useApi(fetchWechat, { cacheKey: 'integration-wechat' });
   const [appId, setAppId] = useState('');
   const [secret, setSecret] = useState('');
   const [enabled, setEnabled] = useState(false);
@@ -203,7 +203,7 @@ function WechatCard() {
 }
 
 function XfyunCard() {
-  const { data, loading, error, reload } = useApi(fetchXfyun);
+  const { data, loading, error, reload } = useApi(fetchXfyun, { cacheKey: 'integration-xfyun' });
   const [appId, setAppId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -320,7 +320,7 @@ function XfyunCard() {
 }
 
 function TiandituCard() {
-  const { data, loading, error, reload } = useApi(fetchTianditu);
+  const { data, loading, error, reload } = useApi(fetchTianditu, { cacheKey: 'integration-tianditu' });
   const [key, setKey] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [submitting, setSubmitting] = useState(false);
