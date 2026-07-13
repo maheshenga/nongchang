@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import type { AppTab } from '../navigation';
+import type { AppTab, SystemRole } from '../navigation';
 
 const MerchantAdmin = lazy(() => import('./MerchantAdmin'));
 const Dashboard = lazy(() => import('./Dashboard'));
@@ -41,12 +41,14 @@ export default function AppWorkspaceViews({
   activeTab,
   mountedTabs,
   allowedTabs,
+  role,
   onNavigate,
   fallback,
 }: {
   activeTab: AppTab;
   mountedTabs: Set<AppTab>;
   allowedTabs: AppTab[];
+  role: SystemRole;
   onNavigate: (tab: AppTab) => void;
   fallback: ReactNode;
 }) {
@@ -59,7 +61,7 @@ export default function AppWorkspaceViews({
   return (
     <Suspense fallback={fallback}>
       <div className="relative h-full">
-        {slot('overview', <Dashboard />)}
+        {slot('overview', <Dashboard role={role} onNavigate={onNavigate} />)}
         {slot('fields', <FarmFields onNavigate={onNavigate} />)}
         {slot('tenants', <TenantManagement />)}
         {slot('agents', <AgentManagement />)}

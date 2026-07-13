@@ -5,12 +5,22 @@ const apiMocks = vi.hoisted(() => ({
   listBatches: vi.fn(),
   listFields: vi.fn(),
   listFarmRecords: vi.fn(),
+  listMerchants: vi.fn(),
+  listPendingUsers: vi.fn(),
+  getIntegrationConfig: vi.fn(),
+  getBillingSummary: vi.fn(),
 }));
 const demoModuleMock = vi.hoisted(() => ({ imports: 0 }));
 
 vi.mock('../api/batches', () => ({ listBatches: apiMocks.listBatches }));
 vi.mock('../api/fields', () => ({ listFields: apiMocks.listFields }));
 vi.mock('../api/farm-records', () => ({ listFarmRecords: apiMocks.listFarmRecords }));
+vi.mock('../api/users', () => ({
+  listMerchants: apiMocks.listMerchants,
+  listPendingUsers: apiMocks.listPendingUsers,
+}));
+vi.mock('../api/integration', () => ({ getIntegrationConfig: apiMocks.getIntegrationConfig }));
+vi.mock('../api/billing', () => ({ getBillingSummary: apiMocks.getBillingSummary }));
 
 vi.mock('./DashboardDemo', () => {
   demoModuleMock.imports += 1;
@@ -79,6 +89,10 @@ beforeEach(() => {
   apiMocks.listBatches.mockReset();
   apiMocks.listFields.mockReset();
   apiMocks.listFarmRecords.mockReset();
+  apiMocks.listMerchants.mockReset();
+  apiMocks.listPendingUsers.mockReset();
+  apiMocks.getIntegrationConfig.mockReset();
+  apiMocks.getBillingSummary.mockReset();
   demoModuleMock.imports = 0;
 
   apiMocks.listBatches.mockResolvedValue([
@@ -91,13 +105,26 @@ beforeEach(() => {
     { id: 'r1', action: '施肥', status: 'completed', recordedAt: '2026-07-06T08:00:00.000Z' },
     { id: 'r2', action: '巡田', status: 'pending', recordedAt: '2026-07-07T08:00:00.000Z' },
   ]);
+  apiMocks.listMerchants.mockResolvedValue([{ id: 'm1', displayName: '甲商户' }]);
+  apiMocks.listPendingUsers.mockResolvedValue([
+    { id: 'p1', displayName: '待审一', phone: null, createdAt: '2026-07-07T08:00:00.000Z' },
+    { id: 'p2', displayName: '待审二', phone: null, createdAt: '2026-07-07T08:00:00.000Z' },
+  ]);
+  apiMocks.getIntegrationConfig.mockImplementation(async (provider: string) => (
+    provider === 'wechat'
+      ? { provider, appId: 'wx-app', secretMasked: '***', apiKeyMasked: null, apiSecretMasked: null, enabled: true }
+      : provider === 'tianditu'
+        ? { provider, appId: 'map-key', secretMasked: null, apiKeyMasked: null, apiSecretMasked: null, enabled: false }
+        : null
+  ));
+  apiMocks.getBillingSummary.mockResolvedValue({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 8, codeBalance: 20 });
 });
 
 describe('Dashboard truthfulness boundary', () => {
   it('defaults to a production status surface instead of showing simulated dashboard actions', async () => {
-    render(<Dashboard />);
+    render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
 
-    expect(screen.getByText('生产数据看板')).toBeTruthy();
+    expect(screen.getByText('商户生产工作台')).toBeTruthy();
     expect(await screen.findByText(/数据来源：真实业务 API/)).toBeTruthy();
     expect(screen.getByLabelText('在管批次 2')).toBeTruthy();
     expect(screen.getByLabelText('地块数量 1')).toBeTruthy();
@@ -113,9 +140,9 @@ describe('Dashboard truthfulness boundary', () => {
   });
 
   it('lazy-loads the demo dashboard only after explicit opt-in', async () => {
-    render(<Dashboard />);
+    render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
 
-    expect(await screen.findByText('Production mode')).toBeTruthy();
+    expect(await screen.findByText('生产模式')).toBeTruthy();
     expect(demoModuleMock.imports).toBe(0);
 
     fireEvent.click(screen.getByRole('button', { name: '\u8fdb\u5165\u6f14\u793a\u770b\u677f' }));
@@ -127,7 +154,7 @@ describe('Dashboard truthfulness boundary', () => {
   it('shows a retryable error when production data fails to load', async () => {
     apiMocks.listBatches.mockRejectedValueOnce(new Error('Batch API down'));
 
-    render(<Dashboard />);
+    render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('生产看板数据加载失败');
@@ -139,9 +166,9 @@ describe('Dashboard truthfulness boundary', () => {
   });
 
   it('requires explicit demo opt-in and can return to the production boundary', async () => {
-    render(<Dashboard />);
+    render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
 
-    expect(await screen.findByText('Production mode')).toBeTruthy();
+    expect(await screen.findByText('生产模式')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '\u8fdb\u5165\u6f14\u793a\u770b\u677f' }));
 
     expect(await screen.findByText('Lazy Demo Dashboard')).toBeTruthy();
@@ -149,7 +176,38 @@ describe('Dashboard truthfulness boundary', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Return from lazy demo' }));
 
-    expect(await screen.findByText('Production mode')).toBeTruthy();
+    expect(await screen.findByText('生产模式')).toBeTruthy();
     expect(screen.queryByText('Lazy Demo Dashboard')).toBeNull();
+  });
+
+  it('navigates from merchant quick actions', async () => {
+    const onNavigate = vi.fn();
+    render(<Dashboard role="merchant_admin" onNavigate={onNavigate} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '新建农事记录' }));
+    expect(onNavigate).toHaveBeenCalledWith('records');
+  });
+
+  it('uses real system-admin data for pending, integration, and credit warnings', async () => {
+    render(<Dashboard role="system_admin" onNavigate={vi.fn()} />);
+
+    expect(await screen.findByLabelText('待处理农事记录 1')).toBeTruthy();
+    expect(screen.getByLabelText('待审核入驻 2')).toBeTruthy();
+    expect(screen.getByLabelText('集成缺口 2')).toBeTruthy();
+    expect(screen.getByLabelText('额度预警 2')).toBeTruthy();
+    expect(screen.getByText('AI 8 · 生码 20')).toBeTruthy();
+  });
+
+  it('does not mount tenant production APIs for platform or member workspaces', async () => {
+    const { unmount } = render(<Dashboard role="platform_admin" onNavigate={vi.fn()} />);
+    expect(await screen.findByText('平台租户工作台')).toBeTruthy();
+    expect(apiMocks.listBatches).not.toHaveBeenCalled();
+    expect(apiMocks.listFields).not.toHaveBeenCalled();
+    expect(apiMocks.listFarmRecords).not.toHaveBeenCalled();
+
+    unmount();
+    render(<Dashboard role="member" onNavigate={vi.fn()} />);
+    expect(await screen.findByText('会员个人工作台')).toBeTruthy();
+    expect(apiMocks.listBatches).not.toHaveBeenCalled();
   });
 });

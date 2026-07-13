@@ -21,7 +21,15 @@ vi.mock('./components/PublicLanding', () => ({ default: ({ onLogin }: { onLogin:
 vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</div> }));
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
-vi.mock('./components/Dashboard', () => ({ default: () => <div>Production Overview View</div> }));
+vi.mock('./components/FarmRecords', () => ({ default: () => <div>Farm Records View</div> }));
+vi.mock('./components/Dashboard', () => ({
+  default: ({ role, onNavigate }: { role: string; onNavigate: (tab: string) => void }) => (
+    <div>
+      <div>Production Overview View {role}</div>
+      <button type="button" onClick={() => onNavigate('records')}>Dashboard records shortcut</button>
+    </div>
+  ),
+}));
 
 import App from './App';
 
@@ -82,8 +90,17 @@ describe('App role wiring', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Production Overview View')).toBeTruthy();
+    expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
     expect(screen.queryByText('Tenant Management View')).toBeNull();
+  });
+
+  it('passes the normalized role and navigation callback into the production dashboard', async () => {
+    authMock.role = 'merchant';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Dashboard records shortcut' }));
+
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
   });
 
   it('opens production overview from global search for system admins', async () => {
@@ -97,12 +114,12 @@ describe('App role wiring', () => {
     fireEvent.change(await screen.findByPlaceholderText('\u641c\u7d22\u8d44\u6e90\u3001\u83dc\u5355\u548c\u529f\u80fd'), { target: { value: overviewLabel } });
     fireEvent.click(await screen.findByRole('button', { name: `\u6253\u5f00 ${overviewLabel}` }));
 
-    expect(await screen.findByText('Production Overview View')).toBeTruthy();
+    expect(await screen.findByText('Production Overview View system_admin')).toBeTruthy();
   });
 
   it('does not expose production overview to platform admins or ordinary members', async () => {
     render(<App />);
-    expect(screen.queryByText('Production Overview View')).toBeNull();
+    expect(screen.queryByText(/Production Overview View/)).toBeNull();
     expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
 
     cleanup();
@@ -110,7 +127,7 @@ describe('App role wiring', () => {
     render(<App />);
 
     expect(await screen.findByText('Member Center View')).toBeTruthy();
-    expect(screen.queryByText('Production Overview View')).toBeNull();
+    expect(screen.queryByText(/Production Overview View/)).toBeNull();
     expect(screen.queryByRole('button', { name: '\u6253\u5f00 \u751f\u4ea7\u603b\u89c8' })).toBeNull();
   });
 
@@ -147,13 +164,13 @@ describe('App role wiring', () => {
     authMock.role = 'merchant';
     const { rerender } = render(<App />);
 
-    expect(await screen.findByText('Production Overview View')).toBeTruthy();
+    expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
 
     authMock.role = 'member';
     rerender(<App />);
 
     expect(await screen.findByText('Member Center View')).toBeTruthy();
-    await waitFor(() => expect(screen.queryByText('Production Overview View')).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Production Overview View/)).toBeNull());
     await waitFor(() => expect(screen.queryByText('Farm Fields View')).toBeNull());
     expect(screen.queryByText('Merchant Management View')).toBeNull();
   });

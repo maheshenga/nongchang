@@ -311,6 +311,7 @@ export default function App() {
             activeTab={activeTab}
             mountedTabs={mountedTabs}
             allowedTabs={allowedTabs}
+            role={navRole}
             onNavigate={setActiveTab}
             fallback={<ViewSkeleton />}
           />

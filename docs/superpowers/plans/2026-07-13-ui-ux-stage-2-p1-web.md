@@ -197,7 +197,7 @@ $env:CI='true'; corepack.cmd pnpm@10.33.2 typecheck:web
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add packages/web/src/ui/identity.ts packages/web/src/ui/identity.spec.ts packages/shared/src/dto/resource-views.dto.ts packages/shared/src/dto/resource-views.dto.spec.ts packages/backend/src/modules/farm-record/farm-record.model.ts packages/backend/src/modules/farm-record/farm-record.model.spec.ts packages/backend/src/modules/farm-record/farm-record.service.ts packages/backend/src/modules/farm-record/farm-record.service.spec.ts packages/web/src/components/BatchAdmin.model.ts packages/web/src/components/BatchAdmin.model.spec.ts packages/web/src/components/BatchAdmin.tsx packages/web/src/components/batch-admin/BatchCommandBar.tsx packages/web/src/components/FarmRecords.tsx packages/web/src/components/FarmRecords.fluent-ui.spec.tsx packages/web/src/components/TiandituMap.tsx packages/web/src/components/FarmFields.tsx packages/web/src/components/FarmFields.spec.tsx packages/web/src/App.tsx
@@ -235,25 +235,25 @@ export function dashboardQuickActions(role: SystemRole): DashboardQuickAction[];
 export function dashboardTitle(role: SystemRole): string;
 ```
 
-- [ ] **Step 1: Add failing role-composition tests**
+- [x] **Step 1: Add failing role-composition tests**
 
 Assert merchant actions are `records`, `batches`, `fields`; agent actions are `merchantFiles`, `batches`, `billing`; system-admin actions include `pendingUsers`, `integrations`, `billing`; platform only opens `tenants`; member opens `memberHome` and `settings`. For every role, assert each action exists in `flattenNavItems(getNavItems(role))`.
 
 Render `<Dashboard role="merchant_admin" onNavigate={onNavigate} />`, click `新建农事记录`, and expect `onNavigate('records')`. Render system-admin and expect pending-record, integration-gap, and credit-warning sections to use real API mock data.
 
-- [ ] **Step 2: Run dashboard tests to verify red**
+- [x] **Step 2: Run dashboard tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/dashboard/dashboard-workspace.spec.ts src/components/Dashboard.truthfulness.spec.tsx src/App.spec.tsx
 ```
 
-- [ ] **Step 3: Implement role-safe workspace composition**
+- [x] **Step 3: Implement role-safe workspace composition**
 
 Use a switch in `Dashboard` so platform/member roles never mount unauthorized production API hooks. Operational roles may reuse batches/fields/records; system-admin additionally reads pending users, three integration configurations, and billing summary; agent reads merchant count and billing summary. Every metric card either renders a button that calls `onNavigate` or carries `aria-label="信息指标"` when no drill-down exists.
 
 Replace `Production mode` and `Loading demo dashboard` with `生产模式` and `正在加载演示看板`. Preserve the explicit demo opt-in and lazy import.
 
-- [ ] **Step 4: Wire App navigation**
+- [x] **Step 4: Wire App navigation**
 
 Replace `<Dashboard />` with:
 
@@ -263,14 +263,14 @@ Replace `<Dashboard />` with:
 
 Do not render shortcuts that are absent from the current role's navigation.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web exec vitest run src/components/dashboard/dashboard-workspace.spec.ts src/components/Dashboard.truthfulness.spec.tsx src/App.spec.tsx src/navigation.spec.ts
 $env:CI='true'; corepack.cmd pnpm@10.33.2 typecheck:web
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add packages/web/src/components/dashboard/dashboard-workspace.ts packages/web/src/components/dashboard/dashboard-workspace.spec.ts packages/web/src/components/Dashboard.tsx packages/web/src/components/Dashboard.truthfulness.spec.tsx packages/web/src/App.tsx packages/web/src/App.spec.tsx
