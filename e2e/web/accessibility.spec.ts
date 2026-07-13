@@ -69,4 +69,24 @@ test.describe('@a11y accessibility', () => {
     await expect(page.getByRole('dialog', { name: '放弃未保存更改' })).toBeVisible();
     await expectNoSeriousViolations(page, '[role="dialog"]');
   });
+
+  test('P2 Web expanded and collapsed navigation have no serious accessibility violations', async ({ page }) => {
+    await loginByApi(page, 'sysadmin');
+    const category = page.getByRole('button', { name: '系统', exact: true });
+
+    await expect(category).toHaveAttribute('aria-expanded', 'true');
+    await expectNoSeriousViolations(page);
+    await category.click();
+    await expect(category).toHaveAttribute('aria-expanded', 'false');
+    await expectNoSeriousViolations(page);
+  });
+
+  test('P2 Web localized mobile navigation dialog has no serious accessibility violations', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginByApi(page);
+    await page.getByRole('button', { name: '打开导航' }).click();
+    await expect(page.getByRole('dialog', { name: '移动导航' })).toBeVisible();
+
+    await expectNoSeriousViolations(page, '[role="dialog"]');
+  });
 });

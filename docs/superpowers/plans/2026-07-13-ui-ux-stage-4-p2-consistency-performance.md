@@ -160,15 +160,15 @@ git commit -m "perf(web): bound retained pages and retry transient reads"
 - Modify: `e2e/web/accessibility.spec.ts`
 - Modify: `docs/superpowers/plans/2026-07-13-ui-ux-stage-4-p2-consistency-performance.md`
 
-- [ ] **Step 1: Add browser tests**
+- [x] **Step 1: Add browser tests**
 
 Cover collapsed-category persistence after reload, billing reachable only through normal navigation, neutral account loading without raw IDs, Chinese mobile navigation labels, and no document overflow at 390/768 pixels after categories collapse/expand.
 
-- [ ] **Step 2: Add Axe coverage**
+- [x] **Step 2: Add Axe coverage**
 
 Scan expanded and collapsed navigation states plus the localized mobile navigation dialog for serious/critical violations.
 
-- [ ] **Step 3: Run focused browser tests**
+- [x] **Step 3: Run focused browser tests**
 
 ```powershell
 $env:CI='true'; $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5545/nongchang?schema=public'; $env:REDIS_URL='redis://127.0.0.1:56379'; $env:E2E_TENANT_CODE='DEMO'; $env:E2E_USERNAME='merchantA'; $env:E2E_PASSWORD='password123'; $env:E2E_BILLING_USERNAME='agentA'; corepack.cmd pnpm@10.33.2 test:browser:prepare
@@ -176,7 +176,7 @@ $env:CI='true'; corepack.cmd pnpm@10.33.2 exec playwright test e2e/web/p2-shell-
 $env:CI='true'; corepack.cmd pnpm@10.33.2 exec playwright test e2e/web/accessibility.spec.ts --grep "P2 Web"
 ```
 
-- [ ] **Step 4: Run Stage 4 completion gates**
+- [x] **Step 4: Run Stage 4 completion gates**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter web test
@@ -188,7 +188,7 @@ git diff --check
 git status --short
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add e2e/web/p2-shell-consistency.spec.ts e2e/web/accessibility.spec.ts docs/superpowers/plans/2026-07-13-ui-ux-stage-4-p2-consistency-performance.md
