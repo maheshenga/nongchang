@@ -31,7 +31,7 @@ const plans: CreditPlanView[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listCreditPlansMock.mockResolvedValue({ items: plans, total: 201, page: 1, pageSize: 100 });
+  listCreditPlansMock.mockResolvedValue({ items: plans, total: 201, page: 1, pageSize: 50 });
   createCreditPlanMock.mockResolvedValue(plans[0]);
   updateCreditPlanMock.mockResolvedValue(plans[0]);
   removeCreditPlanMock.mockResolvedValue({ ok: true });
@@ -47,15 +47,26 @@ describe('BillingPlans pagination', () => {
     }));
 
     render(<BillingPlans />);
-    await screen.findByText('第 1 / 3 页');
+    await screen.findByText('第 1 / 5 页');
 
-    expect(listCreditPlansMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+    expect(listCreditPlansMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
-      expect(listCreditPlansMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+      expect(listCreditPlansMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 50 });
     });
-    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 5 页')).toBeTruthy();
+  });
+
+  it('debounces plan name search into the server query', async () => {
+    render(<BillingPlans />);
+    await screen.findByText('AI Pack');
+
+    fireEvent.change(screen.getByPlaceholderText('搜索套餐名称'), { target: { value: '基础' } });
+
+    await waitFor(() => {
+      expect(listCreditPlansMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: '基础' });
+    });
   });
 });

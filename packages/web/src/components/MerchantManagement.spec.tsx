@@ -61,6 +61,12 @@ beforeEach(() => {
 
 describe('MerchantManagement Fluent table', () => {
   it('renders merchants and filters by search text and status', async () => {
+    listMerchantsMock.mockImplementation((query: { page: number; pageSize: number; search?: string }) => Promise.resolve({
+      items: query.search ? [merchants[0]] : merchants,
+      total: query.search ? 1 : merchants.length,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
     renderWithDialog();
     await screen.findByText('North Farm');
 
@@ -71,10 +77,12 @@ describe('MerchantManagement Fluent table', () => {
     expect(screen.getByText('未填')).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText('搜索商户名称或联系人'), { target: { value: 'north' } });
-    expect(screen.getByText('North Farm')).toBeTruthy();
-    expect(screen.queryByText('South Farm')).toBeNull();
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: 'north' }));
+    expect(await screen.findByText('North Farm')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('South Farm')).toBeNull());
 
     fireEvent.change(screen.getByPlaceholderText('搜索商户名称或联系人'), { target: { value: '' } });
+    expect(await screen.findByText('South Farm')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '已停用' }));
     expect(screen.queryByText('North Farm')).toBeNull();
     expect(screen.getByText('South Farm')).toBeTruthy();
@@ -146,15 +154,15 @@ describe('MerchantManagement Fluent table', () => {
     }));
 
     renderWithDialog();
-    await screen.findByText('第 1 / 3 页');
+    await screen.findByText('第 1 / 5 页');
 
-    expect(listMerchantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+    expect(listMerchantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
-      expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+      expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 50 });
     });
-    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 5 页')).toBeTruthy();
   });
 });

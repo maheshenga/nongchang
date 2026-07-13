@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { AlertTriangle, ArrowRightLeft, Loader2, Plus, QrCode, Wallet, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Loader2, Plus, QrCode, Search, Wallet, X, Zap } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../auth/auth-context';
 import { allocateCredit, getBillingSummary, listCreditAccounts, rechargeCredit } from '../api/billing';
@@ -11,6 +11,7 @@ import BillingAlipayConfig from './BillingAlipayConfig';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const LOW = 100;
 
@@ -25,12 +26,19 @@ export default function BillingAdmin() {
 
   const sum = useApi(getBillingSummary, { cacheKey: 'billing-summary' });
   const [accountPageNumber, setAccountPageNumber] = useState(1);
+  const [accountPageSize, setAccountPageSize] = useState(MANAGEMENT_PAGE_SIZE);
+  const [accountSearch, setAccountSearch] = useState('');
+  const debouncedAccountSearch = useDebouncedValue(accountSearch.trim(), 300);
   const fetchAccounts = useCallback(
-    () => listCreditAccounts({ page: accountPageNumber, pageSize: MANAGEMENT_PAGE_SIZE }),
-    [accountPageNumber],
+    () => listCreditAccounts({
+      page: accountPageNumber,
+      pageSize: accountPageSize,
+      ...(debouncedAccountSearch ? { search: debouncedAccountSearch } : {}),
+    }),
+    [accountPageNumber, accountPageSize, debouncedAccountSearch],
   );
-  const acc = useApi(fetchAccounts, { cacheKey: `billing-accounts-page-${accountPageNumber}` });
-  const accountPage = normalizePage<CreditAccountItem>(acc.data, accountPageNumber);
+  const acc = useApi(fetchAccounts, { cacheKey: `billing-accounts-${accountPageNumber}-${accountPageSize}-${debouncedAccountSearch}` });
+  const accountPage = normalizePage<CreditAccountItem>(acc.data, accountPageNumber, accountPageSize);
   const accounts = accountPage.items;
 
   const [toast, setToast] = useState('');
@@ -146,8 +154,18 @@ export default function BillingAdmin() {
         {isSystemAdmin && <BillingAlipayConfig />}
 
         <section className="border border-[#E1DFDD] bg-white">
-          <div className="flex h-11 items-center gap-2 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 text-sm font-semibold text-[#242424]">
-            <ArrowRightLeft className="h-4 w-4 text-[#0078D4]" /> 下级账户
+          <div className="flex flex-wrap items-center gap-3 border-b border-[#E1DFDD] bg-[#FAFAFA] px-4 py-2 text-sm font-semibold text-[#242424]">
+            <span className="flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-[#0078D4]" /> 下级账户</span>
+            <div className="relative ml-auto min-w-[220px] max-w-sm flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+              <input
+                type="search"
+                placeholder="搜索下级账户名称"
+                value={accountSearch}
+                onChange={event => { setAccountSearch(event.target.value); setAccountPageNumber(1); }}
+                className={`${fluentInput} w-full pl-8`}
+              />
+            </div>
           </div>
           {acc.loading && <LoadingState label="加载下级账户" />}
           {acc.error && (
@@ -195,6 +213,7 @@ export default function BillingAdmin() {
               total={accountPage.total}
               loading={acc.loading}
               onPageChange={setAccountPageNumber}
+              onPageSizeChange={size => { setAccountPageSize(size); setAccountPageNumber(1); }}
             />
           )}
         </section>

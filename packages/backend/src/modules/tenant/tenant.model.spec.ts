@@ -9,6 +9,7 @@ import {
   buildTenantAdminCreateData,
   buildTenantCreateData,
   buildTenantListFindManyArgs,
+  buildTenantListWhere,
   normalizeTenantCode,
   resolveTenantListPagination,
   toPaginatedTenantList,
@@ -52,6 +53,7 @@ describe('tenant.model', () => {
 
   it('builds capped non-paginated tenant list query args', () => {
     expect(buildTenantListFindManyArgs()).toEqual({
+      where: {},
       orderBy: { createdAt: 'desc' },
       select: TENANT_LIST_SELECT,
       skip: 0,
@@ -67,11 +69,23 @@ describe('tenant.model', () => {
       take: 25,
     });
     expect(buildTenantListFindManyArgs({ page: 3, pageSize: 25 })).toEqual({
+      where: {},
       orderBy: { createdAt: 'desc' },
       select: TENANT_LIST_SELECT,
       skip: 50,
       take: 25,
     });
+  });
+
+  it('builds tenant name and code search filters', () => {
+    const where = {
+      OR: [
+        { name: { contains: '华东', mode: 'insensitive' } },
+        { code: { contains: '华东', mode: 'insensitive' } },
+      ],
+    };
+    expect(buildTenantListWhere({ search: '华东' })).toEqual(where);
+    expect(buildTenantListFindManyArgs({ page: 1, pageSize: 50, search: '华东' })).toMatchObject({ where });
   });
 
   it('projects tenant list rows as bare arrays and paginated envelopes', () => {

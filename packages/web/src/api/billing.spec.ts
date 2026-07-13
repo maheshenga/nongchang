@@ -51,6 +51,14 @@ describe('billing api client', () => {
     expect(requestMock).toHaveBeenCalledWith('/billing/plans?page=3&pageSize=10');
   });
 
+  it('serializes search for account and plan management lists', async () => {
+    requestMock.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 50 });
+    await listCreditAccounts({ page: 1, pageSize: 50, search: '华东' });
+    await listCreditPlans({ page: 1, pageSize: 50, search: '基础' });
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/billing/accounts?page=1&pageSize=50&search=%E5%8D%8E%E4%B8%9C');
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/billing/plans?page=1&pageSize=50&search=%E5%9F%BA%E7%A1%80');
+  });
+
   it('gets an order', async () => {
     requestMock.mockResolvedValueOnce(order);
     await getOrder('order-1');

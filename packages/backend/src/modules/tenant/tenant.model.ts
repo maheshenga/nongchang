@@ -36,12 +36,23 @@ export function resolveTenantListPagination(query?: ListQuery): { page: number; 
   return { page, pageSize, skip: (page - 1) * pageSize, take: pageSize };
 }
 
+export function buildTenantListWhere(query?: ListQuery): Record<string, unknown> {
+  if (!query?.search) return {};
+  return {
+    OR: [
+      { name: { contains: query.search, mode: 'insensitive' } },
+      { code: { contains: query.search, mode: 'insensitive' } },
+    ],
+  };
+}
+
 export function buildTenantListFindManyArgs(query?: ListQuery) {
+  const where = buildTenantListWhere(query);
   if (isPaginated(query)) {
     const { skip, take } = resolveTenantListPagination(query);
-    return { orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip, take };
+    return { where, orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip, take };
   }
-  return { orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip: 0, take: DEFAULT_TENANT_LIST_CAP };
+  return { where, orderBy: { createdAt: 'desc' as const }, select: TENANT_LIST_SELECT, skip: 0, take: DEFAULT_TENANT_LIST_CAP };
 }
 
 export function normalizeTenantCode(code: string): string {

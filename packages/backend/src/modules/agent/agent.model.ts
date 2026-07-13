@@ -33,8 +33,16 @@ export function buildAgentCreateData(user: AuthUser, dto: CreateAgentDto) {
   return { tenantId: user.tenantId, ...dto };
 }
 
-export function buildAgentListWhere(user: AuthUser) {
-  return { tenantId: user.tenantId };
+export function buildAgentListWhere(user: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return {
+    tenantId: user.tenantId,
+    ...(query?.search ? {
+      OR: [
+        { name: { contains: query.search, mode: 'insensitive' } },
+        { region: { contains: query.search, mode: 'insensitive' } },
+      ],
+    } : {}),
+  };
 }
 
 export function buildAgentListItem(row: AgentListRow) {
@@ -63,11 +71,18 @@ export function buildAgentSessionRevocationWhere(user: AuthUser, agentId: string
   return { tenantId: user.tenantId, agentId };
 }
 
-export function buildMerchantListWhere(user: AuthUser): Record<string, string> | null {
-  const where: Record<string, string> = { tenantId: user.tenantId, role: Role.MERCHANT };
+export function buildMerchantListWhere(user: AuthUser, query?: ListQuery): Record<string, unknown> | null {
+  const where: Record<string, unknown> = { tenantId: user.tenantId, role: Role.MERCHANT };
   if (user.role === Role.AGENT_ADMIN) {
     if (!user.agentId) return null;
     where.agentId = user.agentId;
+  }
+  if (query?.search) {
+    where.OR = [
+      { displayName: { contains: query.search, mode: 'insensitive' } },
+      { username: { contains: query.search, mode: 'insensitive' } },
+      { phone: { contains: query.search, mode: 'insensitive' } },
+    ];
   }
   return where;
 }

@@ -48,6 +48,12 @@ beforeEach(() => {
 
 describe('AgentManagement Fluent table', () => {
   it('renders the real agent list and filters by name or region', async () => {
+    listAgentsMock.mockImplementation((query: { page: number; pageSize: number; search?: string }) => Promise.resolve({
+      items: query.search ? [agents[0]] : agents,
+      total: query.search ? 1 : agents.length,
+      page: query.page,
+      pageSize: query.pageSize,
+    }));
     renderWithDialog();
     await screen.findByText('North Agent');
 
@@ -59,8 +65,9 @@ describe('AgentManagement Fluent table', () => {
 
     fireEvent.change(screen.getByPlaceholderText('搜索代理商名称或辖区'), { target: { value: 'north' } });
 
-    expect(screen.getByText('North Agent')).toBeTruthy();
-    expect(screen.queryByText('South Agent')).toBeNull();
+    await waitFor(() => expect(listAgentsMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: 'north' }));
+    expect(await screen.findByText('North Agent')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('South Agent')).toBeNull());
   });
 
   it('creates an agent with the real create API payload', async () => {
@@ -118,15 +125,15 @@ describe('AgentManagement Fluent table', () => {
     }));
 
     renderWithDialog();
-    await screen.findByText('第 1 / 3 页');
+    await screen.findByText('第 1 / 5 页');
 
-    expect(listAgentsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+    expect(listAgentsMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
-      expect(listAgentsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+      expect(listAgentsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 50 });
     });
-    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 5 页')).toBeTruthy();
   });
 });

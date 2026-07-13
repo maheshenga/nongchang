@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Package, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import { confirmDialog } from '../hooks/useDialog';
 import { createCreditPlan, listCreditPlans, removeCreditPlan, updateCreditPlan } from '../api/billing';
@@ -7,6 +7,7 @@ import type { CreateCreditPlanInput, CreditPlanView, CreditResource } from '@non
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type PlanForm = {
   name: string;
@@ -38,9 +39,12 @@ function yuan(cents: number): string {
 
 export default function BillingPlans() {
   const [page, setPage] = useState(1);
-  const fetchPlans = useCallback(() => listCreditPlans({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const plansApi = useApi(fetchPlans, { cacheKey: `billing-plans-admin-page-${page}` });
-  const planPage = normalizePage<CreditPlanView>(plansApi.data, page);
+  const [pageSize, setPageSize] = useState(MANAGEMENT_PAGE_SIZE);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery.trim(), 300);
+  const fetchPlans = useCallback(() => listCreditPlans({ page, pageSize, ...(debouncedSearch ? { search: debouncedSearch } : {}) }), [debouncedSearch, page, pageSize]);
+  const plansApi = useApi(fetchPlans, { cacheKey: `billing-plans-${page}-${pageSize}-${debouncedSearch}` });
+  const planPage = normalizePage<CreditPlanView>(plansApi.data, page, pageSize);
   const plans = planPage.items;
 
   const [toast, setToast] = useState('');
@@ -138,10 +142,21 @@ export default function BillingPlans() {
           <Package className="h-4 w-4 text-[#0078D4]" />
           套餐管理
         </div>
-        <button type="button" onClick={openCreate} className={fluentButton('primary')}>
-          <Plus className="h-4 w-4" />
-          新增套餐
-        </button>
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
+          <div className="relative min-w-[200px] max-w-sm flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+            <input
+              type="search"
+              placeholder="搜索套餐名称"
+              value={searchQuery}
+              onChange={event => { setSearchQuery(event.target.value); setPage(1); }}
+              className={`${fluentInput} w-full pl-8`}
+            />
+          </div>
+          <button type="button" onClick={openCreate} className={fluentButton('primary')}>
+            <Plus className="h-4 w-4" /> 新增套餐
+          </button>
+        </div>
       </div>
 
       <div className="p-4">
@@ -210,6 +225,7 @@ export default function BillingPlans() {
             total={planPage.total}
             loading={plansApi.loading}
             onPageChange={setPage}
+            onPageSizeChange={size => { setPageSize(size); setPage(1); }}
             className={plans.length > 0 ? '' : 'mt-4 border border-[#E1DFDD]'}
           />
         )}

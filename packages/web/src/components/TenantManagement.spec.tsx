@@ -134,15 +134,26 @@ describe('TenantManagement', () => {
     }));
 
     render(<TenantManagement />);
-    await screen.findByText('第 1 / 3 页');
+    await screen.findByText('第 1 / 5 页');
 
-    expect(listTenantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+    expect(listTenantsMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
-      expect(listTenantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+      expect(listTenantsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 50 });
     });
-    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 5 页')).toBeTruthy();
+  });
+
+  it('debounces tenant search into the server query', async () => {
+    render(<TenantManagement />);
+    await screen.findByText('Demo Tenant');
+
+    fireEvent.change(screen.getByPlaceholderText('搜索租户名称或编码'), { target: { value: '华东' } });
+
+    await waitFor(() => {
+      expect(listTenantsMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: '华东' });
+    });
   });
 });

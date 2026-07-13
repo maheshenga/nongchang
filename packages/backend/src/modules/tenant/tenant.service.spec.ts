@@ -71,13 +71,21 @@ describe('TenantService', () => {
     ]);
     prisma.tenant.count.mockResolvedValue(3);
 
-    const result = await new TenantService(prisma).list({ page: 2, pageSize: 1 });
+    const result = await new TenantService(prisma).list({ page: 2, pageSize: 1, search: 'Tenant' });
+
+    const where = {
+      OR: [
+        { name: { contains: 'Tenant', mode: 'insensitive' } },
+        { code: { contains: 'Tenant', mode: 'insensitive' } },
+      ],
+    };
 
     expect(prisma.tenant.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where,
       skip: 1,
       take: 1,
     }));
-    expect(prisma.tenant.count).toHaveBeenCalledWith({});
+    expect(prisma.tenant.count).toHaveBeenCalledWith({ where });
     expect(result).toEqual({
       items: [
         {

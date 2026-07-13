@@ -105,15 +105,26 @@ describe('BillingAdmin Fluent operations', () => {
     }));
 
     render(<BillingAdmin />);
-    await screen.findByText('第 1 / 3 页');
+    await screen.findByText('第 1 / 5 页');
 
-    expect(listCreditAccountsMock).toHaveBeenCalledWith({ page: 1, pageSize: 100 });
+    expect(listCreditAccountsMock).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }));
 
     await waitFor(() => {
-      expect(listCreditAccountsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 100 });
+      expect(listCreditAccountsMock).toHaveBeenLastCalledWith({ page: 2, pageSize: 50 });
     });
-    expect(await screen.findByText('第 2 / 3 页')).toBeTruthy();
+    expect(await screen.findByText('第 2 / 5 页')).toBeTruthy();
+  });
+
+  it('debounces subordinate account search into the server query', async () => {
+    render(<BillingAdmin />);
+    await screen.findByText('Merchant One');
+
+    fireEvent.change(screen.getByPlaceholderText('搜索下级账户名称'), { target: { value: '华东' } });
+
+    await waitFor(() => {
+      expect(listCreditAccountsMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: '华东' });
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { memo, useCallback, useState, type FormEvent } from 'react';
 import { CheckCircle2, Filter, Pencil, Plus, Power, Search, Store, X, XCircle } from 'lucide-react';
 import { Role, type CreateUserDto, type MerchantListItem, type UpdateUserDto } from '@nongchang/shared';
 import { createUser, listMerchants, setUserStatus, updateUser } from '../api/users';
@@ -7,6 +7,7 @@ import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type FormState = { displayName: string; username: string; phone: string };
 type StatusFilter = 'all' | 'active' | 'suspended';
@@ -39,26 +40,54 @@ const statusOptions: Array<{ key: StatusFilter; label: string }> = [
   { key: 'suspended', label: '已停用' },
 ];
 
+const MerchantRow = memo(function MerchantRow({ merchant, onEdit, onToggle }: {
+  merchant: MerchantListItem;
+  onEdit: (merchant: MerchantListItem) => void;
+  onToggle: (merchant: MerchantListItem) => void;
+}) {
+  return (
+    <tr className={fluentTable.row}>
+      <td className={fluentTable.td}><span className="font-mono text-xs font-semibold text-[#605E5C]">{merchant.id.slice(0, 8)}</span></td>
+      <td className={fluentTable.td}><div className="font-semibold text-[#242424]">{merchant.displayName}</div></td>
+      <td className={fluentTable.td}>
+        <div className="font-semibold text-[#323130]">{merchant.username}</div>
+        <div className="text-xs text-[#605E5C]">{merchant.phone ?? '未填'}</div>
+      </td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.fieldCount}</td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.totalArea.toFixed(1)} 亩</td>
+      <td className={fluentTable.td}>{statusTag(merchant.status)}</td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(merchant.createdAt).toLocaleDateString()}</td>
+      <td className={`${fluentTable.td} text-right`}>
+        <div className="inline-flex items-center gap-2">
+          <button type="button" onClick={() => onEdit(merchant)} aria-label={`编辑商户 ${merchant.displayName}`} className={fluentButton('subtle')}>
+            <Pencil className="h-4 w-4" /> 编辑
+          </button>
+          <button type="button" onClick={() => onToggle(merchant)} aria-label={`${merchant.status === 'active' ? '停用' : '启用'}商户 ${merchant.displayName}`} className={merchant.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}>
+            <Power className="h-4 w-4" /> {merchant.status === 'active' ? '停用' : '启用'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export default function MerchantManagement() {
   const [page, setPage] = useState(1);
-  const fetchMerchants = useCallback(() => listMerchants({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants, { cacheKey: `merchants-page-${page}` });
-  const merchantPage = normalizePage<MerchantListItem>(rawMerchants, page);
-  const merchants = merchantPage.items;
+  const [pageSize, setPageSize] = useState(MANAGEMENT_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery.trim(), 300);
+  const fetchMerchants = useCallback(() => listMerchants({ page, pageSize, ...(debouncedSearch ? { search: debouncedSearch } : {}) }), [debouncedSearch, page, pageSize]);
+  const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants, { cacheKey: `merchants-${page}-${pageSize}-${debouncedSearch}` });
+  const merchantPage = normalizePage<MerchantListItem>(rawMerchants, page, pageSize);
+  const merchants = merchantPage.items;
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
-  const filteredMerchants = merchants.filter((merchant) => {
-    const query = searchQuery.trim().toLowerCase();
-    const matchesSearch = !query
-      || merchant.displayName.toLowerCase().includes(query)
-      || merchant.username.toLowerCase().includes(query);
-    const matchesStatus = statusFilter === 'all' || merchant.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const visibleMerchants = statusFilter === 'all'
+    ? merchants
+    : merchants.filter(merchant => merchant.status === statusFilter);
 
   const openAdd = () => {
     setEditingId(null);
@@ -66,11 +95,11 @@ export default function MerchantManagement() {
     setShowModal(true);
   };
 
-  const openEdit = (merchant: MerchantListItem) => {
+  const openEdit = useCallback((merchant: MerchantListItem) => {
     setEditingId(merchant.id);
     setForm({ displayName: merchant.displayName, username: merchant.username, phone: merchant.phone ?? '' });
     setShowModal(true);
-  };
+  }, []);
 
   const closeModal = () => {
     setShowModal(false);
@@ -102,7 +131,7 @@ export default function MerchantManagement() {
     }
   };
 
-  const toggleStatus = async (merchant: MerchantListItem) => {
+  const toggleStatus = useCallback(async (merchant: MerchantListItem) => {
     const next = merchant.status === 'active' ? 'suspended' : 'active';
     const message = next === 'suspended'
       ? '确认停用该商户？停用后该账号将无法登录。'
@@ -114,7 +143,7 @@ export default function MerchantManagement() {
     } catch (err) {
       await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
-  };
+  }, [reload]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -141,7 +170,7 @@ export default function MerchantManagement() {
               type="text"
               placeholder="搜索商户名称或联系人"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }}
               className={`${fluentInput} w-full pl-8`}
             />
           </div>
@@ -151,7 +180,7 @@ export default function MerchantManagement() {
               <button
                 key={option.key}
                 type="button"
-                onClick={() => setStatusFilter(option.key)}
+                onClick={() => { setStatusFilter(option.key); setPage(1); }}
                 aria-pressed={statusFilter === option.key}
                 className={statusFilter === option.key ? fluentButton('primary') : fluentButton('secondary')}
               >
@@ -186,47 +215,8 @@ export default function MerchantManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredMerchants.map((merchant) => (
-                  <tr key={merchant.id} className={fluentTable.row}>
-                    <td className={fluentTable.td}>
-                      <span className="font-mono text-xs font-semibold text-[#605E5C]">{merchant.id.slice(0, 8)}</span>
-                    </td>
-                    <td className={fluentTable.td}>
-                      <div className="font-semibold text-[#242424]">{merchant.displayName}</div>
-                    </td>
-                    <td className={fluentTable.td}>
-                      <div className="font-semibold text-[#323130]">{merchant.username}</div>
-                      <div className="text-xs text-[#605E5C]">{merchant.phone ?? '未填'}</div>
-                    </td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.fieldCount}</td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.totalArea.toFixed(1)} 亩</td>
-                    <td className={fluentTable.td}>{statusTag(merchant.status)}</td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(merchant.createdAt).toLocaleDateString()}</td>
-                    <td className={`${fluentTable.td} text-right`}>
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(merchant)}
-                          aria-label={`编辑商户 ${merchant.displayName}`}
-                          className={fluentButton('subtle')}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          编辑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void toggleStatus(merchant)}
-                          aria-label={`${merchant.status === 'active' ? '停用' : '启用'}商户 ${merchant.displayName}`}
-                          className={merchant.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}
-                        >
-                          <Power className="h-4 w-4" />
-                          {merchant.status === 'active' ? '停用' : '启用'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredMerchants.length === 0 && (
+                {visibleMerchants.map(merchant => <MerchantRow key={merchant.id} merchant={merchant} onEdit={openEdit} onToggle={toggleStatus} />)}
+                {visibleMerchants.length === 0 && (
                   <tr>
                     <td colSpan={8} className="p-0">
                       <EmptyState title="暂无匹配商户" />
@@ -244,6 +234,7 @@ export default function MerchantManagement() {
             total={merchantPage.total}
             loading={loading}
             onPageChange={setPage}
+            onPageSizeChange={size => { setPageSize(size); setPage(1); }}
           />
         )}
       </section>

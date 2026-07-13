@@ -39,6 +39,13 @@ describe('agent model helpers', () => {
       region: '华东',
     });
     expect(buildAgentListWhere(baseUser)).toEqual({ tenantId: 't1' });
+    expect(buildAgentListWhere(baseUser, { search: '华东' })).toEqual({
+      tenantId: 't1',
+      OR: [
+        { name: { contains: '华东', mode: 'insensitive' } },
+        { region: { contains: '华东', mode: 'insensitive' } },
+      ],
+    });
   });
 
   it('projects agent list rows with merchant count', () => {
@@ -83,6 +90,15 @@ describe('agent model helpers', () => {
       agentId: 'a1',
     });
     expect(buildMerchantListWhere({ ...baseUser, role: Role.AGENT_ADMIN, agentId: null })).toBeNull();
+    expect(buildMerchantListWhere(baseUser, { search: '合作社' })).toEqual({
+      tenantId: 't1',
+      role: Role.MERCHANT,
+      OR: [
+        { displayName: { contains: '合作社', mode: 'insensitive' } },
+        { username: { contains: '合作社', mode: 'insensitive' } },
+        { phone: { contains: '合作社', mode: 'insensitive' } },
+      ],
+    });
   });
 
   it('builds pagination parameters with legacy non-paginated cap', () => {

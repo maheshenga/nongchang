@@ -41,6 +41,7 @@ function withListQuery(path: string, query: Partial<ListQuery> = {}) {
   const qs = new URLSearchParams();
   if (query.page) qs.set('page', String(query.page));
   if (query.pageSize) qs.set('pageSize', String(query.pageSize));
+  if (query.search) qs.set('search', query.search);
   const value = qs.toString();
   return `${path}${value ? `?${value}` : ''}`;
 }

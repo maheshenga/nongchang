@@ -2,7 +2,8 @@ import type { Paginated } from '@nongchang/shared';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { fluentButton } from './fluent';
 
-export const MANAGEMENT_PAGE_SIZE = 100;
+export const MANAGEMENT_PAGE_SIZE = 50;
+export const MANAGEMENT_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 export function normalizePage<T>(
   data: Paginated<T> | T[] | null | undefined,
@@ -29,6 +30,7 @@ interface PaginationControlsProps {
   loading?: boolean;
   className?: string;
   onPageChange: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
 export function PaginationControls({
@@ -38,6 +40,7 @@ export function PaginationControls({
   loading = false,
   className = '',
   onPageChange,
+  onPageSizeChange,
 }: PaginationControlsProps) {
   const pages = totalPages(total, pageSize);
   const current = Math.min(Math.max(page, 1), pages);
@@ -49,6 +52,20 @@ export function PaginationControls({
         <span className="ml-2 font-normal text-[#605E5C]">共 {total} 条</span>
       </div>
       <div className="flex items-center gap-2">
+        {onPageSizeChange && (
+          <label className="flex items-center gap-2">
+            <span>每页</span>
+            <select
+              aria-label="每页条数"
+              value={pageSize}
+              disabled={loading}
+              onChange={event => onPageSizeChange(Number(event.target.value))}
+              className="h-8 rounded-[4px] border border-[#C8C6C4] bg-white px-2 text-sm text-[#242424]"
+            >
+              {MANAGEMENT_PAGE_SIZE_OPTIONS.map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           aria-label="上一页"

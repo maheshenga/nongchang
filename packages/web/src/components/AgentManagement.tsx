@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { memo, useCallback, useState, type FormEvent } from 'react';
 import { Building2, CheckCircle2, Pencil, Plus, Power, Search, X, XCircle } from 'lucide-react';
 import { type AgentListItem, type CreateAgentDto, type UpdateAgentDto } from '@nongchang/shared';
 import { createAgent, listAgents, setAgentStatus, updateAgent } from '../api/agents';
@@ -7,6 +7,7 @@ import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type FormState = { name: string; region: string };
 
@@ -32,22 +33,44 @@ function statusTag(status: string) {
   return <span className={fluentStatusTag('neutral')}>{status}</span>;
 }
 
+const AgentRow = memo(function AgentRow({ agent, onEdit, onToggle }: {
+  agent: AgentListItem;
+  onEdit: (agent: AgentListItem) => void;
+  onToggle: (agent: AgentListItem) => void;
+}) {
+  return (
+    <tr className={fluentTable.row}>
+      <td className={fluentTable.td}><div className="font-semibold text-[#242424]">{agent.name}</div></td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.region}</td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.merchantCount}</td>
+      <td className={fluentTable.td}>{statusTag(agent.status)}</td>
+      <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(agent.createdAt).toLocaleDateString()}</td>
+      <td className={`${fluentTable.td} text-right`}>
+        <div className="inline-flex items-center gap-2">
+          <button type="button" onClick={() => onEdit(agent)} aria-label={`编辑代理商 ${agent.name}`} className={fluentButton('subtle')}>
+            <Pencil className="h-4 w-4" /> 编辑
+          </button>
+          <button type="button" onClick={() => onToggle(agent)} aria-label={`${agent.status === 'active' ? '停用' : '启用'}代理商 ${agent.name}`} className={agent.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}>
+            <Power className="h-4 w-4" /> {agent.status === 'active' ? '停用' : '启用'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export default function AgentManagement() {
   const [page, setPage] = useState(1);
-  const fetchAgents = useCallback(() => listAgents({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const { data: rawAgents, loading, error, reload } = useApi(fetchAgents, { cacheKey: `agents-page-${page}` });
-  const agentPage = normalizePage<AgentListItem>(rawAgents, page);
-  const agents = agentPage.items;
+  const [pageSize, setPageSize] = useState(MANAGEMENT_PAGE_SIZE);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery.trim(), 300);
+  const fetchAgents = useCallback(() => listAgents({ page, pageSize, ...(debouncedSearch ? { search: debouncedSearch } : {}) }), [debouncedSearch, page, pageSize]);
+  const { data: rawAgents, loading, error, reload } = useApi(fetchAgents, { cacheKey: `agents-${page}-${pageSize}-${debouncedSearch}` });
+  const agentPage = normalizePage<AgentListItem>(rawAgents, page, pageSize);
+  const agents = agentPage.items;
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
-
-  const filteredAgents = agents.filter((agent) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-    return agent.name.toLowerCase().includes(query) || agent.region.toLowerCase().includes(query);
-  });
 
   const openAdd = () => {
     setEditingId(null);
@@ -55,11 +78,11 @@ export default function AgentManagement() {
     setShowModal(true);
   };
 
-  const openEdit = (agent: AgentListItem) => {
+  const openEdit = useCallback((agent: AgentListItem) => {
     setEditingId(agent.id);
     setForm({ name: agent.name, region: agent.region });
     setShowModal(true);
-  };
+  }, []);
 
   const closeModal = () => {
     setShowModal(false);
@@ -85,7 +108,7 @@ export default function AgentManagement() {
     }
   };
 
-  const toggleStatus = async (agent: AgentListItem) => {
+  const toggleStatus = useCallback(async (agent: AgentListItem) => {
     const next = agent.status === 'active' ? 'suspended' : 'active';
     const message = next === 'suspended'
       ? '确认停用该代理商？停用后该代理商账号将无法登录。'
@@ -97,7 +120,7 @@ export default function AgentManagement() {
     } catch (err) {
       await alertDialog({ title: '操作失败', message: err instanceof Error ? err.message : '操作失败', tone: 'danger' });
     }
-  };
+  }, [reload]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -124,7 +147,7 @@ export default function AgentManagement() {
               type="text"
               placeholder="搜索代理商名称或辖区"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }}
               className={`${fluentInput} w-full pl-8`}
             />
           </div>
@@ -153,40 +176,8 @@ export default function AgentManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredAgents.map((agent) => (
-                  <tr key={agent.id} className={fluentTable.row}>
-                    <td className={fluentTable.td}>
-                      <div className="font-semibold text-[#242424]">{agent.name}</div>
-                    </td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.region}</td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{agent.merchantCount}</td>
-                    <td className={fluentTable.td}>{statusTag(agent.status)}</td>
-                    <td className={`${fluentTable.td} text-[#605E5C]`}>{new Date(agent.createdAt).toLocaleDateString()}</td>
-                    <td className={`${fluentTable.td} text-right`}>
-                      <div className="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(agent)}
-                          aria-label={`编辑代理商 ${agent.name}`}
-                          className={fluentButton('subtle')}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          编辑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void toggleStatus(agent)}
-                          aria-label={`${agent.status === 'active' ? '停用' : '启用'}代理商 ${agent.name}`}
-                          className={agent.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}
-                        >
-                          <Power className="h-4 w-4" />
-                          {agent.status === 'active' ? '停用' : '启用'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredAgents.length === 0 && (
+                {agents.map(agent => <AgentRow key={agent.id} agent={agent} onEdit={openEdit} onToggle={toggleStatus} />)}
+                {agents.length === 0 && (
                   <tr>
                     <td colSpan={6} className="p-0">
                       <EmptyState title="暂无匹配代理商" />
@@ -204,6 +195,7 @@ export default function AgentManagement() {
             total={agentPage.total}
             loading={loading}
             onPageChange={setPage}
+            onPageSizeChange={size => { setPageSize(size); setPage(1); }}
           />
         )}
       </section>

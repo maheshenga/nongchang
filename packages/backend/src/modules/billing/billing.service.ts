@@ -14,6 +14,7 @@ import {
   CreditOrderWithPlanRow,
   MerchantAccountRow,
   buildCreditAccountBalanceWhere,
+  buildCreditPlanListWhere,
   buildBuyerOrderListFindManyArgs,
   buildBuyerOrderListWhere,
   buildBuyerOrderWhere,
@@ -642,7 +643,7 @@ export class BillingService {
   async listAccounts(user: AuthUser, query?: ListQuery): Promise<CreditAccountItem[] | Paginated<CreditAccountItem>> {
     const pagination = resolveBillingAccountListPagination(query);
     if (user.role === Role.SYSTEM_ADMIN) {
-      const where = buildSubordinateAgentListWhere(user);
+      const where = buildSubordinateAgentListWhere(user, query);
       const [agents, total] = pagination.paginated
         ? await this.prisma.$transaction([
             this.prisma.agent.findMany(buildSubordinateAgentListFindManyArgs(where, query)),
@@ -656,7 +657,7 @@ export class BillingService {
     }
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
-      const where = buildSubordinateMerchantListWhere(user);
+      const where = buildSubordinateMerchantListWhere(user, query);
       const [merchants, total] = pagination.paginated
         ? await this.prisma.$transaction([
             this.prisma.user.findMany(buildSubordinateMerchantListFindManyArgs(where, query)),
@@ -703,8 +704,7 @@ export class BillingService {
 
   async listPlans(user: AuthUser, query?: ListQuery): Promise<CreditPlanView[] | Paginated<CreditPlanView>> {
     // 购买方(代理/商户)只看上架套餐;系统管理员看全部(含下架)以便管理。
-    const where: any = { tenantId: user.tenantId };
-    if (user.role !== Role.SYSTEM_ADMIN) where.active = true;
+    const where = buildCreditPlanListWhere(user, query);
     if (isPaginated(query)) {
       const page = query.page ?? 1;
       const pageSize = query.pageSize ?? 20;

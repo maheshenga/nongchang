@@ -18,6 +18,11 @@ describe('tenants api', () => {
     expect(requestMock).toHaveBeenCalledWith('/tenants?page=2&pageSize=50');
   });
 
+  it('listTenants serializes server-side search with pagination', async () => {
+    await listTenants({ search: '华东', page: 1, pageSize: 50 });
+    expect(requestMock).toHaveBeenCalledWith('/tenants?page=1&pageSize=50&search=%E5%8D%8E%E4%B8%9C');
+  });
+
   it('createTenant calls POST /tenants with the shared DTO payload', async () => {
     const dto = {
       name: 'Tenant One',

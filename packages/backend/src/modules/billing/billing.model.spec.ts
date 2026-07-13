@@ -7,6 +7,7 @@ import {
   CREDIT_ORDER_PLAN_INCLUDE,
   DEFAULT_BILLING_ACCOUNT_LIST_CAP,
   buildCreditAccountBalanceWhere,
+  buildCreditPlanListWhere,
   buildBuyerOrderListFindManyArgs,
   buildBuyerOrderListWhere,
   buildBuyerOrderWhere,
@@ -118,6 +119,23 @@ describe('billing.model account list helpers', () => {
       skip: 0,
       take: DEFAULT_BILLING_ACCOUNT_LIST_CAP,
       select: ACCOUNT_MERCHANT_SELECT,
+    });
+    expect(buildSubordinateAgentListWhere(actor({ role: Role.SYSTEM_ADMIN }), { search: '华东' })).toEqual({
+      tenantId: 't1',
+      name: { contains: '华东', mode: 'insensitive' },
+    });
+    expect(buildSubordinateMerchantListWhere(
+      actor({ role: Role.AGENT_ADMIN, agentId: 'a1', ownerId: null }),
+      { search: '合作社' },
+    )).toEqual({
+      tenantId: 't1',
+      role: Role.MERCHANT,
+      agentId: 'a1',
+      displayName: { contains: '合作社', mode: 'insensitive' },
+    });
+    expect(buildCreditPlanListWhere(actor({ role: Role.SYSTEM_ADMIN }), { search: '基础' })).toEqual({
+      tenantId: 't1',
+      name: { contains: '基础', mode: 'insensitive' },
     });
   });
 

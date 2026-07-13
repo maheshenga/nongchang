@@ -10,6 +10,21 @@ export function buildUserScopedWhere(actor: AuthUser): Record<string, string> {
   return where;
 }
 
+function buildUserSearch(query?: ListQuery): Record<string, unknown> {
+  if (!query?.search) return {};
+  return {
+    OR: [
+      { displayName: { contains: query.search, mode: 'insensitive' } },
+      { username: { contains: query.search, mode: 'insensitive' } },
+      { phone: { contains: query.search, mode: 'insensitive' } },
+    ],
+  };
+}
+
+export function buildUserListWhere(actor: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return { ...buildUserScopedWhere(actor), ...buildUserSearch(query) };
+}
+
 export const DEFAULT_USER_LIST_CAP = 500;
 
 export const USER_LIST_SELECT = {
@@ -78,8 +93,8 @@ export function buildUserListFindManyArgs(where: Record<string, unknown>, query?
   };
 }
 
-export function buildMerchantListWhere(actor: AuthUser): Record<string, unknown> {
-  return { ...buildUserScopedWhere(actor), role: Role.MERCHANT, status: { not: 'pending' } };
+export function buildMerchantListWhere(actor: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return { ...buildUserScopedWhere(actor), role: Role.MERCHANT, status: { not: 'pending' }, ...buildUserSearch(query) };
 }
 
 export function buildMerchantListFindManyArgs(where: Record<string, unknown>, query?: ListQuery) {
@@ -93,8 +108,8 @@ export function buildMerchantListFindManyArgs(where: Record<string, unknown>, qu
   };
 }
 
-export function buildPendingMerchantListWhere(actor: AuthUser): Record<string, unknown> {
-  return { ...buildUserScopedWhere(actor), role: Role.MERCHANT, status: 'pending' };
+export function buildPendingMerchantListWhere(actor: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return { ...buildUserScopedWhere(actor), role: Role.MERCHANT, status: 'pending', ...buildUserSearch(query) };
 }
 
 export function buildPendingMerchantListFindManyArgs(where: Record<string, unknown>, query?: ListQuery) {

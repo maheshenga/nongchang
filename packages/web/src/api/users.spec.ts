@@ -28,6 +28,15 @@ describe('users api', () => {
     expect(requestMock).toHaveBeenCalledWith('/users/pending?page=4&pageSize=10');
   });
 
+  it('user list APIs serialize server-side search', async () => {
+    await listUsers({ page: 1, pageSize: 50, search: '张三' });
+    await listMerchants({ page: 1, pageSize: 50, search: '合作社' });
+    await listPendingUsers({ page: 1, pageSize: 50, search: '待审核' });
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/users?page=1&pageSize=50&search=%E5%BC%A0%E4%B8%89');
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/users/merchants?page=1&pageSize=50&search=%E5%90%88%E4%BD%9C%E7%A4%BE');
+    expect(requestMock).toHaveBeenNthCalledWith(3, '/users/pending?page=1&pageSize=50&search=%E5%BE%85%E5%AE%A1%E6%A0%B8');
+  });
+
   it('updateUser 打 PATCH /users/:id', async () => {
     await updateUser('m1', { displayName: '新名' });
     expect(requestMock).toHaveBeenCalledWith('/users/m1', {

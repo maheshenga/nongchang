@@ -21,6 +21,7 @@ import {
   buildTenantAdminCreateData,
   buildTenantCreateData,
   buildTenantListFindManyArgs,
+  buildTenantListWhere,
   normalizeTenantCode,
   TenantRow,
   toPaginatedTenantList,
@@ -38,9 +39,10 @@ export class TenantService {
 
   async list(query?: ListQuery): Promise<TenantListItem[] | Paginated<TenantListItem>> {
     if (isPaginated(query)) {
+      const where = buildTenantListWhere(query);
       const [rows, total] = await this.prisma.$transaction([
         this.prisma.tenant.findMany(buildTenantListFindManyArgs(query)),
-        this.prisma.tenant.count({}),
+        this.prisma.tenant.count({ where }),
       ]);
       return toPaginatedTenantList(rows as TenantRow[], total, query);
     }

@@ -15,7 +15,7 @@ import {
   buildPendingMerchantListFindManyArgs,
   buildPendingMerchantListWhere,
   buildUserListFindManyArgs,
-  buildUserScopedWhere,
+  buildUserListWhere,
   buildUserStatusUpdateData,
   getMerchantIds,
   resolveCreateUserAgentId,
@@ -57,7 +57,7 @@ export class UserService {
 
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
   async list(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = this.scopedWhere(actor);
+    const where = buildUserListWhere(actor, query);
     const pagination = resolveUserListPagination(query);
     if (pagination.paginated) {
       const [items, total] = await this.prisma.$transaction([
@@ -72,7 +72,7 @@ export class UserService {
   // 商户管理屏:仅 role=merchant,带地块数/确权面积聚合,排除待审核 pending。
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
   async listMerchants(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = buildMerchantListWhere(actor);
+    const where = buildMerchantListWhere(actor, query);
     const pagination = resolveUserListPagination(query);
     let merchants: MerchantListRow[];
     let total: number | null = null;
@@ -129,12 +129,8 @@ export class UserService {
     return updated;
   }
 
-  private scopedWhere(actor: AuthUser): Record<string, string> {
-    return buildUserScopedWhere(actor);
-  }
-
   async listPending(actor: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = buildPendingMerchantListWhere(actor);
+    const where = buildPendingMerchantListWhere(actor, query);
     const pagination = resolveUserListPagination(query);
     if (pagination.paginated) {
       const [items, total] = await this.prisma.$transaction([

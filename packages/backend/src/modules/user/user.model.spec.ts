@@ -13,6 +13,7 @@ import {
   buildPendingMerchantListFindManyArgs,
   buildPendingMerchantListWhere,
   buildUserListFindManyArgs,
+  buildUserListWhere,
   buildUserScopedWhere,
   buildUserStatusUpdateData,
   getMerchantIds,
@@ -108,6 +109,24 @@ describe('user.model list helpers', () => {
       tenantId: 't1',
       role: Role.MERCHANT,
       status: 'pending',
+    });
+    expect(buildUserListWhere(actor({ role: Role.AGENT_ADMIN, agentId: 'a1' }), { search: '张三' })).toEqual({
+      tenantId: 't1',
+      agentId: 'a1',
+      OR: [
+        { displayName: { contains: '张三', mode: 'insensitive' } },
+        { username: { contains: '张三', mode: 'insensitive' } },
+        { phone: { contains: '张三', mode: 'insensitive' } },
+      ],
+    });
+    expect(buildMerchantListWhere(actor({ role: Role.SYSTEM_ADMIN }), { search: '合作社' })).toMatchObject({
+      tenantId: 't1',
+      role: Role.MERCHANT,
+      OR: [
+        { displayName: { contains: '合作社', mode: 'insensitive' } },
+        { username: { contains: '合作社', mode: 'insensitive' } },
+        { phone: { contains: '合作社', mode: 'insensitive' } },
+      ],
     });
   });
 

@@ -23,6 +23,13 @@ describe('agents api', () => {
     expect(requestMock).toHaveBeenCalledWith('/agents/merchants?page=3&pageSize=25');
   });
 
+  it('agent and merchant lists serialize server-side search', async () => {
+    await listAgents({ page: 1, pageSize: 50, search: '华东' });
+    await listMerchants({ page: 1, pageSize: 50, search: '合作社' });
+    expect(requestMock).toHaveBeenNthCalledWith(1, '/agents?page=1&pageSize=50&search=%E5%8D%8E%E4%B8%9C');
+    expect(requestMock).toHaveBeenNthCalledWith(2, '/agents/merchants?page=1&pageSize=50&search=%E5%90%88%E4%BD%9C%E7%A4%BE');
+  });
+
   it('updateAgent 打 PATCH /agents/:id', async () => {
     await updateAgent('a1', { region: '华南' });
     expect(requestMock).toHaveBeenCalledWith('/agents/a1', {

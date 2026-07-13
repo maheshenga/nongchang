@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Building2, Loader2, Plus, Power, PowerOff, X } from 'lucide-react';
+import { Building2, Loader2, Plus, Power, PowerOff, Search, X } from 'lucide-react';
 import type { CreateTenantResponse, TenantListItem, TenantStatus } from '@nongchang/shared';
 import { createTenant, listTenants, setTenantStatus } from '../api/tenants';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 type FormState = {
   name: string;
@@ -28,6 +29,9 @@ function statusLabel(status: TenantStatus): string {
 
 export default function TenantManagement() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(MANAGEMENT_PAGE_SIZE);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery.trim(), 300);
   const [tenants, setTenants] = useState<TenantListItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pageSize: MANAGEMENT_PAGE_SIZE });
   const [loading, setLoading] = useState(true);
@@ -42,7 +46,11 @@ export default function TenantManagement() {
     setLoading(true);
     setError('');
     try {
-      const result = normalizePage(await listTenants({ page, pageSize: MANAGEMENT_PAGE_SIZE }), page);
+      const result = normalizePage(await listTenants({
+        page,
+        pageSize,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      }), page, pageSize);
       setTenants(result.items);
       setPagination({ total: result.total, page: result.page, pageSize: result.pageSize });
     } catch (err) {
@@ -50,7 +58,7 @@ export default function TenantManagement() {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [debouncedSearch, page, pageSize]);
 
   useEffect(() => {
     void reload();
@@ -114,6 +122,17 @@ export default function TenantManagement() {
           新建租户
         </button>
       </header>
+
+      <div className="relative border border-[#E1DFDD] bg-white p-3">
+        <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#605E5C]" />
+        <input
+          type="search"
+          placeholder="搜索租户名称或编码"
+          value={searchQuery}
+          onChange={event => { setSearchQuery(event.target.value); setPage(1); }}
+          className={`${fluentInput} w-full pl-8`}
+        />
+      </div>
 
       {error && <ErrorState message={error} onRetry={() => void reload()} />}
       {lastCreated && (
@@ -184,6 +203,7 @@ export default function TenantManagement() {
           total={pagination.total}
           loading={loading}
           onPageChange={setPage}
+          onPageSizeChange={size => { setPageSize(size); setPage(1); }}
         />
       )}
 

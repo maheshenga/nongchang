@@ -64,13 +64,29 @@ export function resolveBillingAccountListPagination(query?: ListQuery): { pagina
   };
 }
 
-export function buildSubordinateAgentListWhere(user: AuthUser): Record<string, string> {
-  return { tenantId: user.tenantId };
+export function buildSubordinateAgentListWhere(user: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return {
+    tenantId: user.tenantId,
+    ...(query?.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
+  };
 }
 
-export function buildSubordinateMerchantListWhere(user: AuthUser): Record<string, string> {
+export function buildSubordinateMerchantListWhere(user: AuthUser, query?: ListQuery): Record<string, unknown> {
   if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId');
-  return { tenantId: user.tenantId, role: Role.MERCHANT, agentId: user.agentId };
+  return {
+    tenantId: user.tenantId,
+    role: Role.MERCHANT,
+    agentId: user.agentId,
+    ...(query?.search ? { displayName: { contains: query.search, mode: 'insensitive' } } : {}),
+  };
+}
+
+export function buildCreditPlanListWhere(user: AuthUser, query?: ListQuery): Record<string, unknown> {
+  return {
+    tenantId: user.tenantId,
+    ...(user.role !== Role.SYSTEM_ADMIN ? { active: true } : {}),
+    ...(query?.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
+  };
 }
 
 export function buildSubordinateAgentListFindManyArgs(where: Record<string, unknown>, query?: ListQuery) {

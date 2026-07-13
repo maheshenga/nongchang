@@ -33,7 +33,7 @@ export class AgentService {
   }
 
   async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = buildAgentListWhere(user);
+    const where = buildAgentListWhere(user, query);
     const pagination = buildPagination(query);
     if (pagination.paginated) {
       const [rows, total] = await this.prisma.$transaction([
@@ -88,7 +88,7 @@ export class AgentService {
   }
 
   listMerchants(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
-    const where = buildMerchantListWhere(user);
+    const where = buildMerchantListWhere(user, query);
     if (!where) throw new ForbiddenException('代理管理员缺少 agentId,拒绝访问');
     const pagination = buildPagination(query);
     if (pagination.paginated) {
