@@ -16,10 +16,12 @@ export class HealthService implements BeforeApplicationShutdown {
   }
 
   live() {
+    const deployedGitSha = process.env.DEPLOYED_GIT_SHA;
     return {
       status: 'ok' as const,
       uptimeSeconds: process.uptime(),
       version: process.env.npm_package_version ?? '0.0.0',
+      ...(/^[0-9a-f]{40}$/.test(deployedGitSha ?? '') ? { deployedGitSha } : {}),
     };
   }
 

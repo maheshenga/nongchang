@@ -15,6 +15,18 @@ describe('HealthService', () => {
     });
   });
 
+  it('reports the immutable deployed Git SHA when release automation supplies it', () => {
+    const previous = process.env.DEPLOYED_GIT_SHA;
+    process.env.DEPLOYED_GIT_SHA = 'a'.repeat(40);
+    try {
+      const service = new HealthService({} as never, runtimeReady);
+      expect(service.live()).toMatchObject({ deployedGitSha: 'a'.repeat(40) });
+    } finally {
+      if (previous === undefined) delete process.env.DEPLOYED_GIT_SHA;
+      else process.env.DEPLOYED_GIT_SHA = previous;
+    }
+  });
+
   it('returns ready after PostgreSQL and runtime state accept health probes', async () => {
     const queryRaw = vi.fn().mockResolvedValue([{ '?column?': 1 }]);
     const service = new HealthService({ $queryRaw: queryRaw } as never, runtimeReady);

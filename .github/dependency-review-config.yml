@@ -1,0 +1,5 @@
+fail-on-severity: high
+license-check: true
+vulnerability-check: true
+allow-ghsas: []
+deny-packages: []

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "productionHighAndCritical": 0,
+    "moderateExceptionMaxDays": 90
+  },
+  "exceptions": []
+}
