@@ -208,20 +208,20 @@ git commit -m "feat(miniapp): show registration application status"
 
 - Modify: `docs/superpowers/plans/2026-07-13-ui-ux-stage-3-p1-miniapp.md`
 
-- [ ] **Step 1: Run miniapp tests and type checking**
+- [x] **Step 1: Run miniapp tests and type checking**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp test
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec tsc --noEmit
 ```
 
-- [ ] **Step 2: Build the WeChat miniapp**
+- [x] **Step 2: Build the WeChat miniapp**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 build:miniapp
 ```
 
-- [ ] **Step 3: Run repository diff checks and commit the plan state**
+- [x] **Step 3: Run repository diff checks and commit the plan state**
 
 ```powershell
 git diff --check
