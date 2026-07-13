@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   loadOpenNavigationCategories,
   navigationPreferenceKey,
+  safeReadNavigationPreference,
+  safeWriteNavigationPreference,
   serializeOpenNavigationCategories,
   toggleNavigationCategory,
 } from './navigation-preferences';
@@ -9,8 +11,13 @@ import {
 describe('navigation preferences', () => {
   const categories = ['生产与供应链', '平台组织管理', '系统'] as const;
 
-  it('uses a role-specific storage key', () => {
-    expect(navigationPreferenceKey('system_admin')).not.toBe(navigationPreferenceKey('merchant_admin'));
+  it('isolates storage by tenant, user, and role', () => {
+    expect(navigationPreferenceKey('tenant-a', 'user-a', 'system_admin'))
+      .toBe('nongchang:navigation-open:v1:tenant-a:user-a:system_admin');
+    expect(navigationPreferenceKey('tenant-a', 'user-a', 'system_admin'))
+      .not.toBe(navigationPreferenceKey('tenant-a', 'user-b', 'system_admin'));
+    expect(navigationPreferenceKey('tenant-a', 'user-a', 'system_admin'))
+      .not.toBe(navigationPreferenceKey('tenant-b', 'user-a', 'system_admin'));
   });
 
   it('opens every available category when storage is missing or invalid', () => {
@@ -32,5 +39,26 @@ describe('navigation preferences', () => {
     expect([...original]).toEqual(['系统', '生产与供应链']);
     expect([...next]).toEqual(['生产与供应链']);
     expect(serializeOpenNavigationCategories(next)).toBe(JSON.stringify(['生产与供应链']));
+  });
+
+  it('reads and writes preferences without breaking the shell when storage is denied', () => {
+    const throwingStorage = {
+      getItem: () => { throw new Error('denied'); },
+      setItem: () => { throw new Error('denied'); },
+    } as unknown as Storage;
+
+    expect([...safeReadNavigationPreference(throwingStorage, 'key', categories)]).toEqual(categories);
+    expect(() => safeWriteNavigationPreference(throwingStorage, 'key', new Set(['系统']))).not.toThrow();
+  });
+
+  it('uses the same validation for safely persisted values', () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: key => values.get(key) ?? null,
+      setItem: (key, value) => { values.set(key, value); },
+    } as Storage;
+
+    safeWriteNavigationPreference(storage, 'key', new Set(['系统']));
+    expect([...safeReadNavigationPreference(storage, 'key', categories)]).toEqual(['系统']);
   });
 });

@@ -89,4 +89,33 @@ test.describe('@a11y accessibility', () => {
 
     await expectNoSeriousViolations(page, '[role="dialog"]');
   });
+
+  test('P2 Web mobile drawer contains focus and restores the trigger', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginByApi(page);
+    const trigger = page.getByRole('button', { name: '打开导航' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: '移动导航' });
+    const close = dialog.getByRole('button', { name: '关闭导航' });
+    await expect(close).toBeFocused();
+
+    await page.keyboard.press('Escape');
+
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
+  test('P2 Web global search supports listbox keyboard navigation', async ({ page }) => {
+    await loginByApi(page);
+    const search = page.getByRole('combobox', { name: '全局搜索' });
+    await search.fill('批次');
+    const listbox = page.getByRole('listbox', { name: '菜单结果' });
+    await expect(listbox).toBeVisible();
+    await expectNoSeriousViolations(page);
+
+    await search.press('ArrowDown');
+    await search.press('Enter');
+
+    await expect(page).toHaveURL(/#\/app\/batches$/);
+  });
 });

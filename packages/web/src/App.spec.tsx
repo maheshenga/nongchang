@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMock = vi.hoisted(() => ({
@@ -178,7 +178,7 @@ describe('App role wiring', () => {
 
     const overviewLabel = '\u751f\u4ea7\u603b\u89c8';
     fireEvent.change(await screen.findByPlaceholderText('\u641c\u7d22\u8d44\u6e90\u3001\u83dc\u5355\u548c\u529f\u80fd'), { target: { value: overviewLabel } });
-    fireEvent.click(await screen.findByRole('button', { name: `\u6253\u5f00 ${overviewLabel}` }));
+    fireEvent.click(await screen.findByRole('option', { name: `\u6253\u5f00 ${overviewLabel}` }));
 
     expect(await screen.findByText('Production Overview View system_admin')).toBeTruthy();
   });
@@ -279,7 +279,7 @@ describe('App role wiring', () => {
     render(<App />);
 
     fireEvent.change(await screen.findByPlaceholderText('搜索资源、菜单和功能'), { target: { value: '商户' } });
-    fireEvent.click(await screen.findByRole('button', { name: /打开 商户管理与档案/ }));
+    fireEvent.click(await screen.findByRole('option', { name: /打开 商户管理与档案/ }));
 
     expect(await screen.findByText('Merchant Management View')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '商户管理与档案' })).toBeTruthy();
@@ -410,5 +410,45 @@ describe('App role wiring', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it('stores navigation preferences in the current tenant-user-role scope', async () => {
+    authMock.role = 'system_admin';
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '系统' }));
+
+    expect(window.localStorage.getItem('nongchang:navigation-open:v1:mock-tenant:mock-user:system_admin')).not.toBeNull();
+  });
+
+  it('moves focus into the mobile drawer, closes on Escape, and restores the trigger', async () => {
+    authMock.role = 'agent_admin';
+    render(<App />);
+    const trigger = await screen.findByRole('button', { name: '打开导航' });
+
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole('dialog', { name: '移动导航' });
+    const close = screen.getByRole('button', { name: '关闭导航' });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '移动导航' })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('opens navigation targets from the drawer search on mobile', async () => {
+    authMock.role = 'merchant';
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开导航' }));
+    const dialog = await screen.findByRole('dialog', { name: '移动导航' });
+    const search = within(dialog).getByRole('combobox', { name: '全局搜索' });
+
+    fireEvent.change(search, { target: { value: '农事实操' } });
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    fireEvent.keyDown(search, { key: 'Enter' });
+
+    expect(await screen.findByText('Farm Records View')).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: '移动导航' })).toBeNull();
   });
 });

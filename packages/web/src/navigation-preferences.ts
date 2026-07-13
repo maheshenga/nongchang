@@ -1,9 +1,9 @@
 import type { SystemRole } from './navigation';
 
-const STORAGE_PREFIX = 'nongchang:navigation-open';
+const STORAGE_PREFIX = 'nongchang:navigation-open:v1';
 
-export function navigationPreferenceKey(role: SystemRole): string {
-  return `${STORAGE_PREFIX}:${role}`;
+export function navigationPreferenceKey(tenantId: string, userId: string, role: SystemRole): string {
+  return `${STORAGE_PREFIX}:${tenantId}:${userId}:${role}`;
 }
 
 export function loadOpenNavigationCategories(
@@ -27,6 +27,41 @@ export function loadOpenNavigationCategories(
 
 export function serializeOpenNavigationCategories(open: ReadonlySet<string>): string {
   return JSON.stringify([...open]);
+}
+
+export function safeReadNavigationPreference(
+  storage: Pick<Storage, 'getItem'> | null,
+  key: string,
+  categories: readonly string[],
+): Set<string> {
+  try {
+    if (!storage) return new Set(categories);
+    return loadOpenNavigationCategories(storage.getItem(key), categories);
+  } catch {
+    return new Set(categories);
+  }
+}
+
+export function safeWriteNavigationPreference(
+  storage: Pick<Storage, 'setItem'> | null,
+  key: string,
+  open: ReadonlySet<string>,
+): void {
+  try {
+    if (!storage) return;
+    storage.setItem(key, serializeOpenNavigationCategories(open));
+  } catch {
+    // Storage denial should not make navigation unusable.
+  }
+}
+
+export function getBrowserLocalStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function toggleNavigationCategory(open: ReadonlySet<string>, category: string): Set<string> {

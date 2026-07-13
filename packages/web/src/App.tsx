@@ -10,9 +10,10 @@ import { DialogHost } from './hooks/useDialog';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, type AppTab, type SystemRole } from './navigation';
 import {
-  loadOpenNavigationCategories,
+  getBrowserLocalStorage,
   navigationPreferenceKey,
-  serializeOpenNavigationCategories,
+  safeReadNavigationPreference,
+  safeWriteNavigationPreference,
   toggleNavigationCategory,
 } from './navigation-preferences';
 import { updateRetainedTabs } from './page-retention';
@@ -20,6 +21,7 @@ import { fluentButton } from './ui/fluent';
 import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 import AppErrorBoundary from './ui/AppErrorBoundary';
 import { useAppLocation } from './useAppLocation';
+import { useDrawerFocus } from './ui/useDrawerFocus';
 
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
@@ -55,15 +57,14 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [aiContext, setAiContext] = useState<AiWorkspaceContext>();
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
+  const drawerFocus = useDrawerFocus(mobileNavOpen, setMobileNavOpen);
   const navRole = systemRole ?? 'system_admin';
   const navItems = getNavItems(navRole);
   const navigationCategories = useMemo(() => navItems.map(category => category.category), [navItems]);
-  const navigationStorageKey = navigationPreferenceKey(navRole);
+  const navigationStorage = getBrowserLocalStorage();
+  const navigationStorageKey = navigationPreferenceKey(user?.tenantId ?? 'platform', user?.userId ?? 'anonymous', navRole);
   const [openNavigationCategories, setOpenNavigationCategories] = useState<Set<string>>(() =>
-    loadOpenNavigationCategories(
-      typeof window === 'undefined' ? null : window.localStorage.getItem(navigationStorageKey),
-      navigationCategories,
-    ),
+    safeReadNavigationPreference(navigationStorage, navigationStorageKey, navigationCategories),
   );
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
   const searchItems = useMemo(
@@ -95,16 +96,13 @@ export default function App() {
   };
 
   useEffect(() => {
-    setOpenNavigationCategories(loadOpenNavigationCategories(
-      window.localStorage.getItem(navigationStorageKey),
-      navigationCategories,
-    ));
-  }, [navigationStorageKey, navigationCategories]);
+    setOpenNavigationCategories(safeReadNavigationPreference(navigationStorage, navigationStorageKey, navigationCategories));
+  }, [navigationStorage, navigationStorageKey, navigationCategories]);
 
   const toggleNavigationGroup = (category: string) => {
     setOpenNavigationCategories(previous => {
       const next = toggleNavigationCategory(previous, category);
-      window.localStorage.setItem(navigationStorageKey, serializeOpenNavigationCategories(next));
+      safeWriteNavigationPreference(navigationStorage, navigationStorageKey, next);
       return next;
     });
   };
@@ -205,7 +203,7 @@ export default function App() {
             aria-pressed={active}
             onClick={() => {
               void requestTabChange(item.id).then(changed => {
-                if (changed && mobile) setMobileNavOpen(false);
+                if (changed && mobile) drawerFocus.closeDrawer();
               });
             }}
             className={`flex h-10 w-full items-center gap-3 border-l-2 px-4 text-left text-sm transition-colors ${
@@ -232,12 +230,14 @@ export default function App() {
             type="button"
             aria-label="关闭导航遮罩"
             className="absolute inset-0 bg-black/30"
-            onClick={() => setMobileNavOpen(false)}
+            onClick={drawerFocus.closeDrawer}
           />
           <aside
             role="dialog"
             aria-modal="true"
             aria-label="移动导航"
+            tabIndex={-1}
+            onKeyDown={drawerFocus.onDialogKeyDown}
             className="relative flex h-full w-[280px] flex-col border-r border-[#E1DFDD] bg-[#FAFAFA] shadow-xl"
           >
             <div className="flex h-12 items-center gap-3 border-b border-[#E1DFDD] px-4">
@@ -245,11 +245,20 @@ export default function App() {
                 <Leaf className="h-4 w-4" />
               </div>
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">农场溯源管理</span>
-              <button type="button" aria-label="关闭导航" onClick={() => setMobileNavOpen(false)} className={fluentButton('icon')}>
+              <button ref={drawerFocus.closeButtonRef} type="button" aria-label="关闭导航" onClick={drawerFocus.closeDrawer} className={fluentButton('icon')}>
                 <X className="h-4 w-4" />
               </button>
             </div>
             <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">
+              <div className="px-3 py-2 sm:hidden">
+                <GlobalSearch
+                  items={searchItems}
+                  onOpen={tab => void requestTabChange(tab).then(changed => { if (changed) drawerFocus.closeDrawer(); })}
+                  className="block sm:hidden"
+                  idPrefix="mobile-global-search"
+                  enableShortcut={false}
+                />
+              </div>
               {renderNavSections(true)}
             </nav>
           </aside>
@@ -275,10 +284,10 @@ export default function App() {
       <main className="flex min-w-0 flex-1 flex-col">
         {!isPresentationMode && (
           <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[#E1DFDD] bg-white px-4">
-            <button type="button" aria-label="打开导航" onClick={() => setMobileNavOpen(true)} className={`${fluentButton('icon')} md:hidden`}>
+            <button ref={drawerFocus.triggerRef} type="button" aria-label="打开导航" onClick={drawerFocus.openDrawer} className={`${fluentButton('icon')} md:hidden`}>
               <Menu className="h-4 w-4" />
             </button>
-            <GlobalSearch items={searchItems} onOpen={tab => void requestTabChange(tab)} />
+            <GlobalSearch items={searchItems} onOpen={tab => void requestTabChange(tab)} idPrefix="desktop-global-search" />
             <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-[#605E5C]">
               <span className="hidden truncate sm:inline">{profile?.displayName ?? '账户加载中'}</span>
               <span className="hidden rounded-[4px] bg-[#F3F2F1] px-2 py-1 font-semibold text-[#323130] sm:inline">{roleInfo.badge}</span>
