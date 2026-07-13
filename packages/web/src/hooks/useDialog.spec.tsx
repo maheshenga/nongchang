@@ -84,6 +84,35 @@ describe('DialogHost', () => {
 
     await waitFor(() => expect(result).toBe(false));
   });
+
+  it('renders through the global modal portal and cancels on Escape', async () => {
+    const view = render(<div data-testid="app-host"><DialogHost /></div>);
+    let result: boolean | undefined;
+
+    await act(async () => {
+      void confirmDialog({ title: '离开页面', message: '确认离开？' })
+        .then((value) => { result = value; });
+    });
+
+    const dialog = screen.getByRole('dialog', { name: '离开页面' });
+    expect(view.container.contains(dialog)).toBe(false);
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+
+    await waitFor(() => expect(result).toBe(false));
+  });
+
+  it('restores focus to the button that opened the confirmation', async () => {
+    render(<><button type="button">触发按钮</button><DialogHost /></>);
+    const trigger = screen.getByRole('button', { name: '触发按钮' });
+    trigger.focus();
+
+    await act(async () => {
+      void confirmDialog('确认操作？');
+    });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
 });
 
 describe('native dialog usage', () => {

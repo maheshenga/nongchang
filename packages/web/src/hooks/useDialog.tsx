@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
 import { fluentButton } from '../ui/fluent';
+import { ModalSurface } from '../ui/ModalSurface';
 
 export interface DialogOptions {
   title?: string;
@@ -115,26 +115,14 @@ export function DialogHost() {
   const confirmVariant = request.tone === 'danger' ? 'danger' : 'primary';
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/35 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`dialog-title-${request.id}`}
-        className="w-full max-w-md overflow-hidden rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl"
-      >
-        <div className="flex min-h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5 py-3">
-          <h2 id={`dialog-title-${request.id}`} className="flex items-center gap-2 text-base font-semibold text-[#242424]">
-            {request.tone === 'danger' && <AlertTriangle className="h-5 w-5 text-[#A4262C]" />}
-            {request.title}
-          </h2>
-          <button type="button" aria-label="关闭" onClick={() => closeConfirm(false)} className={fluentButton('icon')}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="px-5 py-5 text-sm leading-6 text-[#605E5C] whitespace-pre-wrap">
-          {request.message}
-        </div>
-        <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">
+    <ModalSurface
+      title={request.title}
+      description={request.message}
+      tone={request.tone === 'danger' ? 'danger' : 'default'}
+      onClose={() => closeConfirm(false)}
+      maxWidthClassName="max-w-md"
+      footer={(
+        <>
           {request.kind === 'confirm' && (
             <button type="button" onClick={() => closeConfirm(false)} className={fluentButton('secondary')}>
               {request.cancelLabel}
@@ -143,8 +131,10 @@ export function DialogHost() {
           <button type="button" onClick={() => closeConfirm(true)} className={fluentButton(confirmVariant)}>
             {request.confirmLabel}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      )}
+    >
+      <div className="sr-only" aria-hidden="true" />
+    </ModalSurface>
   );
 }
