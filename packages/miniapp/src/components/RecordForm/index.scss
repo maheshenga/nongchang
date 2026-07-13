@@ -313,4 +313,85 @@
     font-weight: bold;
     padding: 4px 0;
   }
+
+  &__review,
+  &__receipt {
+    @include card;
+    padding: 30px 24px;
+  }
+
+  &__review-title,
+  &__receipt-title {
+    display: block;
+    font-size: 32px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__review-copy,
+  &__receipt-copy,
+  &__receipt-id {
+    display: block;
+    margin-top: 12px;
+    font-size: 24px;
+    line-height: 1.6;
+    color: $c-text-sub;
+  }
+
+  &__review-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 22px;
+    padding: 20px;
+    border-radius: 16px;
+    background: $c-soft;
+    font-size: 24px;
+    color: $c-text;
+  }
+
+  &__review-offline {
+    display: block;
+    margin-top: 18px;
+    font-size: 24px;
+    color: $c-rose;
+  }
+
+  &__review-actions,
+  &__receipt-actions {
+    display: flex;
+    gap: 14px;
+    margin-top: 26px;
+  }
+
+  &__review-back,
+  &__review-confirm {
+    flex: 1;
+    border-radius: 16px;
+    font-size: 26px;
+    font-weight: bold;
+  }
+
+  &__review-back {
+    background: #fff;
+    color: $c-text;
+    border: 1px solid $c-border;
+  }
+
+  &__review-confirm {
+    background: $c-primary;
+    color: #fff;
+  }
+
+  &__receipt-eyebrow {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 22px;
+    font-weight: bold;
+    color: $c-primary;
+  }
+
+  &__receipt-id {
+    word-break: break-all;
+  }
 }

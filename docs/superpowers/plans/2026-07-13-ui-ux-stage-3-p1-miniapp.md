@@ -120,29 +120,29 @@ export interface RecordReceiptView {
 }
 ```
 
-- [ ] **Step 1: Add failing draft model tests**
+- [x] **Step 1: Add failing draft model tests**
 
 Require safe parsing, reject malformed arrays/unknown shapes, treat an auto-selected batch alone as non-meaningful, and treat action, note, cost, labor, uploaded URLs, location, or supply data as meaningful.
 
-- [ ] **Step 2: Run the draft tests to verify red**
+- [x] **Step 2: Run the draft tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/components/RecordForm/draft.spec.ts
 ```
 
-- [ ] **Step 3: Restore and persist the local draft**
+- [x] **Step 3: Restore and persist the local draft**
 
 After the initial storage read, synchronize only the `RecordDraft` fields to Taro storage. Remove the key when the draft is no longer meaningful. Feature-detect `enableAlertBeforeUnload`/`disableAlertBeforeUnload` and warn with `当前农事草稿尚未提交，确认离开？` while meaningful input exists.
 
-- [ ] **Step 4: Add review and final submission states**
+- [x] **Step 4: Add review and final submission states**
 
 The primary button becomes `核对并提交`. Validation builds the existing `CreateFarmRecordDto`, then opens `RecordSubmissionReview` with batch, action, note, material, location, evidence count, cost, and labor. Only `确认提交` calls `createFarmRecord`; offline confirmation does not call the API and explains that connectivity is required.
 
-- [ ] **Step 5: Add the durable receipt**
+- [x] **Step 5: Add the durable receipt**
 
 On success, clear the draft and render `RecordReceipt` with the real returned record ID. `查看记录` navigates to `/pages/batch/index` using the selected batch identity; `再记一笔` clears the receipt and focuses the form. Failed submission preserves every draft field and uploaded URL.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/components/RecordForm/draft.spec.ts src/components/RecordForm/payload.spec.ts

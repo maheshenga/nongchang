@@ -6,9 +6,19 @@ import { transcribeVoice, normalizeAiError, aiAdvice } from '../../api/ai';
 import { FARM_ACTIONS } from '../../constants/actions';
 import { FarmRecordSource } from '@nongchang/shared';
 import type { QuickTemplateView, SupplyItem } from '@nongchang/shared';
+import { buildRecordReceipt, isMeaningfulRecordDraft, parseRecordDraft, RECORD_DRAFT_KEY, type RecordDraft, type RecordReceiptView } from './draft';
 import { buildFarmRecordPayload, getSupplyAmountError, getSupplySelectionUpdate } from './payload';
+import RecordReceipt from './RecordReceipt';
+import RecordSubmissionReview from './RecordSubmissionReview';
 import Icon from '../Icon';
 import './index.scss';
+
+type DraftAlertApi = {
+  enableAlertBeforeUnload?: (options: { message: string }) => unknown;
+  disableAlertBeforeUnload?: () => unknown;
+};
+
+const draftAlertApi = Taro as typeof Taro & DraftAlertApi;
 
 interface Props {
   batches: Batch[];
@@ -42,6 +52,9 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
   const [location, setLocation] = useState('');
   const [locating, setLocating] = useState(false);
   const [noteFocused, setNoteFocused] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const [reviewPayload, setReviewPayload] = useState<ReturnType<typeof buildFarmRecordPayload> | null>(null);
+  const [receipt, setReceipt] = useState<RecordReceiptView | null>(null);
   // 扫码定位到、但 props.batches 未包含的批次(范围内补充)。
   const [scannedBatches, setScannedBatches] = useState<Batch[]>([]);
   const recorderRef = useRef<ReturnType<typeof Taro.getRecorderManager> | null>(null);
@@ -51,9 +64,43 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     offlineRef.current = isOffline;
   }, [isOffline]);
 
+  useEffect(() => {
+    const draft = parseRecordDraft(Taro.getStorageSync(RECORD_DRAFT_KEY));
+    if (draft) {
+      setBatchId(draft.batchId);
+      setAction(draft.action);
+      setNote(draft.note);
+      setCost(draft.cost);
+      setLabor(draft.labor);
+      setImages(draft.images);
+      setLocation(draft.location);
+      setSupplyId(draft.supplyId);
+      setSupplyAmount(draft.supplyAmount);
+    }
+    setDraftReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady || receipt) return;
+    const draft: RecordDraft = { batchId, action, note, cost, labor, images, location, supplyId, supplyAmount };
+    if (isMeaningfulRecordDraft(draft)) Taro.setStorageSync(RECORD_DRAFT_KEY, draft);
+    else Taro.removeStorageSync(RECORD_DRAFT_KEY);
+  }, [action, batchId, cost, draftReady, images, labor, location, note, receipt, supplyAmount, supplyId]);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    const draft: RecordDraft = { batchId, action, note, cost, labor, images, location, supplyId, supplyAmount };
+    const meaningful = isMeaningfulRecordDraft(draft);
+    if (meaningful) draftAlertApi.enableAlertBeforeUnload?.({ message: '当前农事草稿尚未提交，确认离开？' });
+    else draftAlertApi.disableAlertBeforeUnload?.();
+    return () => { if (meaningful) draftAlertApi.disableAlertBeforeUnload?.(); };
+  }, [action, batchId, cost, draftReady, images, labor, location, note, supplyAmount, supplyId]);
+
   // 父组件(工作台)点击快捷模板时回填表单。
   useImperativeHandle(ref, () => ({
     applyTemplate(t: QuickTemplateView) {
+      setReceipt(null);
+      setReviewPayload(null);
       setAction(t.action);
       setNote(t.note ?? '');
       setCost(t.cost != null ? String(t.cost) : '');
@@ -63,10 +110,14 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       setNoteFocused(true);
     },
     openManual() {
+      setReceipt(null);
+      setReviewPayload(null);
       void Taro.pageScrollTo({ selector: '#record-form-actions', duration: 250 });
       setNoteFocused(true);
     },
     openLocation() {
+      setReceipt(null);
+      setReviewPayload(null);
       void Taro.pageScrollTo({ selector: '#record-form-location', duration: 250 });
       void captureLocation();
     },
@@ -230,11 +281,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
     }
   }
 
-  async function submit() {
-    if (isOffline) {
-      Taro.showToast({ title: '离线状态下无法提交，草稿已保存在本机', icon: 'none' });
-      return;
-    }
+  function prepareSubmit() {
     if (!selectedBatch) {
       Taro.showToast({ title: '请选择批次', icon: 'none' });
       return;
@@ -248,30 +295,89 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
       Taro.showToast({ title: supplyError, icon: 'none' });
       return;
     }
+    setReviewPayload(buildFarmRecordPayload({
+      batch: selectedBatch,
+      action,
+      note,
+      cost,
+      labor,
+      images,
+      location,
+      recordedAt: new Date().toISOString(),
+      source: FarmRecordSource.MINIAPP,
+      supplyId,
+      supplyAmount,
+    }));
+  }
+
+  function resetInputs() {
+    setNote('');
+    setCost('');
+    setLabor('');
+    setImages([]);
+    setSupplyId('');
+    setSupplyAmount('');
+    setAction('');
+    setLocation('');
+  }
+
+  async function confirmSubmit() {
+    if (!reviewPayload || !selectedBatch) return;
+    if (isOffline) {
+      Taro.showToast({ title: '离线状态下无法提交，草稿已保存在本机', icon: 'none' });
+      return;
+    }
     setSubmitting(true);
     try {
-      await createFarmRecord(buildFarmRecordPayload({
-        batch: selectedBatch,
-        action,
-        note,
-        cost,
-        labor,
-        images,
-        location,
-        recordedAt: new Date().toISOString(),
-        source: FarmRecordSource.MINIAPP,
-        supplyId,
-        supplyAmount,
-      }));
-      Taro.showToast({ title: '已提交', icon: 'success' });
-      setNote(''); setCost(''); setLabor(''); setImages([]);
-      setSupplyId(''); setSupplyAmount(''); setAction(''); setLocation('');
+      const created = await createFarmRecord(reviewPayload);
+      setReceipt(buildRecordReceipt(created, selectedBatch, action));
+      setReviewPayload(null);
+      resetInputs();
+      Taro.removeStorageSync(RECORD_DRAFT_KEY);
+      draftAlertApi.disableAlertBeforeUnload?.();
       onSaved();
     } catch (e: any) {
       Taro.showToast({ title: e.message || '提交失败', icon: 'none' });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function viewReceipt() {
+    if (!receipt) return;
+    void Taro.navigateTo({
+      url: `/pages/batch/index?id=${encodeURIComponent(receipt.batchId)}&batchNo=${encodeURIComponent(receipt.batchNo)}&cropName=${encodeURIComponent(receipt.cropName)}`,
+    });
+  }
+
+  function createAnother() {
+    setReceipt(null);
+    setNoteFocused(true);
+    setTimeout(() => { void Taro.pageScrollTo({ selector: '#record-form-actions', duration: 250 }); }, 0);
+  }
+
+  if (receipt) {
+    return <RecordReceipt receipt={receipt} onView={viewReceipt} onAnother={createAnother} />;
+  }
+
+  if (reviewPayload && selectedBatch) {
+    return (
+      <RecordSubmissionReview
+        batch={selectedBatch}
+        action={action}
+        note={note}
+        cost={cost}
+        labor={labor}
+        evidenceCount={images.length}
+        location={location}
+        supply={selectedSupply}
+        supplyAmount={supplyAmount}
+        offline={isOffline}
+        submitting={submitting}
+        onBack={() => setReviewPayload(null)}
+        onConfirm={() => void confirmSubmit()}
+      />
+    );
   }
 
   return (
@@ -318,7 +424,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         </View>
       </View>
 
-      <View id="record-form-actions" className="rec-form__section">
+      <View className="rec-form__section">
         <View className="rec-form__section-head">
           <Text className="rec-form__section-title">投入与物料</Text>
           <Text className="rec-form__section-sub">可选填,用于核算</Text>
@@ -361,7 +467,7 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         </View>
       </View>
 
-      <View className="rec-form__section">
+      <View id="record-form-actions" className="rec-form__section">
         <View className="rec-form__section-head">
           <Text className="rec-form__section-title">作业实录</Text>
           <Text className="rec-form__section-sub">先选动作再补充说明</Text>
@@ -397,8 +503,8 @@ const RecordForm = forwardRef<RecordFormHandle, Props>(function RecordForm({ bat
         </View>
       </View>
 
-      <Button className="rec-form__submit" loading={submitting} onClick={submit}>
-        提交上报
+      <Button className="rec-form__submit" loading={submitting} onClick={prepareSubmit}>
+        核对并提交
       </Button>
     </View>
   );
