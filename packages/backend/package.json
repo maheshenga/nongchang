@@ -16,7 +16,8 @@
     "prisma:seed:demo": "tsx scripts/run-demo-seed.ts",
     "billing:recover-reservations": "tsx scripts/recover-stale-reservations.ts",
     "upload:cleanup": "tsx scripts/cleanup-stale-uploads.ts",
-    "operations:enqueue": "tsx scripts/enqueue-operation.ts"
+    "operations:enqueue": "tsx scripts/enqueue-operation.ts",
+    "db:query-plans": "tsx scripts/check-query-plans.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",

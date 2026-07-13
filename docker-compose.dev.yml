@@ -14,11 +14,11 @@
 services:
   redis:
     image: redis:7.4-alpine
-    container_name: nongchang-redis
+    container_name: ${REDIS_CONTAINER_NAME:-nongchang-redis}
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     ports:
-      - "56379:6379"
+      - "${REDIS_HOST_PORT:-56379}:6379"
     volumes:
       - nongchang_redis:/data
     healthcheck:
@@ -29,8 +29,16 @@ services:
 
   db:
     image: postgis/postgis:16-3.4
-    container_name: nongchang-postgis
+    container_name: ${POSTGRES_CONTAINER_NAME:-nongchang-postgis}
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - track_io_timing=on
     environment:
       POSTGRES_USER: nongchang
       POSTGRES_PASSWORD: nongchang
@@ -38,9 +46,10 @@ services:
     ports:
       # 宿主 5432 被 WSL 内的另一个 Postgres(经 wslrelay 占用 127.0.0.1/::1)抢占,
       # localhost 会解析到那个库导致认证失败;故容器映射到宿主 5544 规避冲突。
-      - "5544:5432"
+      - "${POSTGRES_HOST_PORT:-5544}:5432"
     volumes:
       - nongchang_pgdata:/var/lib/postgresql/data
+      - ./ops/postgres/enable-observability.sql:/docker-entrypoint-initdb.d/20-observability.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nongchang -d nongchang"]
       interval: 5s
@@ -49,14 +58,14 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4:8
-    container_name: nongchang-pgadmin
+    container_name: ${PGADMIN_CONTAINER_NAME:-nongchang-pgadmin}
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "5050:80"
+      - "${PGADMIN_HOST_PORT:-5050}:80"
     depends_on:
       db:
         condition: service_healthy

@@ -78,6 +78,36 @@ $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?sch
 corepack pnpm@10.33.2 --filter @nongchang/backend e2e:check-db
 ```
 
+## PostgreSQL Pooling And Query Plans
+
+Production should place PgBouncer in transaction-pooling mode using `ops/pgbouncer/pgbouncer.ini`. Generate `userlist.txt` outside the repository from the production SCRAM verifier; never commit a database password or verifier. The Prisma connection string must include `pgbouncer=true`, `connection_limit` matching `DATABASE_POOL_MAX`, and `pool_timeout` matching `DATABASE_POOL_TIMEOUT_SECONDS`.
+
+PostgreSQL must start with `shared_preload_libraries=pg_stat_statements`. Apply the versioned observability setup and run the slow-query report as a database administrator:
+
+```powershell
+Get-Content ops/postgres/enable-observability.sql -Raw | docker exec -i nongchang-postgis psql -U nongchang -d nongchang
+Get-Content ops/postgres/slow-query-report.sql -Raw | docker exec -i nongchang-postgis psql -U nongchang -d nongchang
+```
+
+Run the index and EXPLAIN regression gate against the release database:
+
+```powershell
+$env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public'
+corepack pnpm@10.33.2 --filter @nongchang/backend db:query-plans
+```
+
+The gate verifies required indexes, checks `pg_stat_statements`, and rejects estimated sequential scans above 1,000 rows on anti-fake, reconciliation, and primary paginated read paths. It intentionally avoids machine-specific execution-time thresholds.
+
+When multiple worktrees need isolated local services, override the fixed defaults without touching another checkout's containers:
+
+```powershell
+$env:POSTGRES_CONTAINER_NAME='nongchang-postgis-r4'
+$env:POSTGRES_HOST_PORT='5545'
+$env:REDIS_CONTAINER_NAME='nongchang-redis-r4'
+$env:REDIS_HOST_PORT='56380'
+docker compose -p nongchang-r4 -f docker-compose.dev.yml up -d db redis
+```
+
 ## Deployment Health And Logging Smoke Checks
 
 After PM2 has started the built backend, verify liveness and readiness through the same HTTPS origin used by clients:
