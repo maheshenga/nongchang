@@ -23,4 +23,15 @@ describe('WorkQuickActions truthful copy', () => {
     expect(workSource).not.toContain('芍药工作台');
     expect(workSource).not.toContain('白芍种植组');
   });
+
+  it('loads work resources independently with visible retry paths', () => {
+    expect(workSource).toContain('loadBatches');
+    expect(workSource).toContain('loadRecords');
+    expect(workSource).toContain('loadTemplates');
+    expect(workSource).toContain('loadBilling');
+    expect(workSource).toContain('Promise.allSettled');
+    expect(workSource).toContain('DataState');
+    expect(workSource).not.toContain('.catch(() => setTemplates([]))');
+    expect(workSource).not.toContain('.catch(() => {})');
+  });
 });

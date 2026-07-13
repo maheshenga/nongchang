@@ -1,24 +1,34 @@
 import { memo } from 'react';
 import { View, Text, Image } from '@tarojs/components';
 import type { FarmRecord } from '../../../api/farm';
+import DataState from '../../../components/DataState';
+import type { AsyncResource } from '../../../components/DataState/model';
 import '../index.scss';
 
 interface Props {
   records: FarmRecord[];
-  err: string | null;
+  status: AsyncResource<FarmRecord[]>['status'];
+  error: string | null;
+  onRetry: () => void;
 }
 
-function WorkRecords({ records, err }: Props) {
+function WorkRecords({ records, status, error, onRetry }: Props) {
   return (
     <View className="work__card">
       <View className="work__section-head">
         <Text className="work__section-title">近期农事</Text>
         <Text className="work__section-sub">最近 5 条</Text>
       </View>
-      {err && <Text className="work__hint work__hint--err">{err}</Text>}
-      {!err && records.length === 0 && (
-        <Text className="work__hint">暂无农事记录</Text>
-      )}
+      <DataState
+        status={status}
+        error={error}
+        hasData={records.length > 0}
+        loadingLabel="加载农事记录中…"
+        emptyLabel="暂无农事记录"
+        errorTitle="农事记录加载失败"
+        onRetry={onRetry}
+        compact
+      />
       {records.map((r) => (
         <View className="work__rec" key={r.id}>
           <View className="work__rec-top">

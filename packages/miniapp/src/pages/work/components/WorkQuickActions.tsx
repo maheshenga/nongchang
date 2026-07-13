@@ -3,6 +3,8 @@ import { View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import type { QuickTemplateView } from '@nongchang/shared';
 import Icon from '../../../components/Icon';
+import DataState from '../../../components/DataState';
+import type { AsyncResource } from '../../../components/DataState/model';
 import { runWorkQuickAction, type WorkQuickAction } from '../quick-actions.model';
 import '../index.scss';
 
@@ -14,9 +16,12 @@ interface Props {
   onOpenManual: () => void;
   onOpenLocation: () => void;
   onApplyTemplate: (template: QuickTemplateView) => void;
+  templateStatus: AsyncResource<QuickTemplateView[]>['status'];
+  templateError: string | null;
+  onRetryTemplates: () => void;
 }
 
-function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenManual, onOpenLocation, onApplyTemplate }: Props) {
+function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenManual, onOpenLocation, onApplyTemplate, templateStatus, templateError, onRetryTemplates }: Props) {
   const isAiDisabled = aiBalance !== null && aiBalance <= 0;
   const run = (action: WorkQuickAction) => runWorkQuickAction(action, {
     offline: isOffline,
@@ -28,7 +33,17 @@ function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenMan
   });
 
   return (
-    <ScrollView scrollX className="work__quick">
+    <>
+      <DataState
+        status={templateStatus}
+        error={templateError}
+        hasData={templates.length > 0}
+        loadingLabel="加载快捷模板中…"
+        errorTitle="快捷模板加载失败"
+        onRetry={onRetryTemplates}
+        compact
+      />
+      <ScrollView scrollX className="work__quick">
       <View
         className={`work__quick-item${isAiDisabled ? ' work__quick-item--disabled' : ''}`}
         onClick={() => run('chat')}
@@ -57,7 +72,8 @@ function WorkQuickActions({ templates, aiBalance, isOffline, onOpenAi, onOpenMan
           <Text className="work__quick-text">{t.name}</Text>
         </View>
       ))}
-    </ScrollView>
+      </ScrollView>
+    </>
   );
 }
 

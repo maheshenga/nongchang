@@ -1,0 +1,47 @@
+@use '../../styles/theme.scss' as *;
+
+.data-state {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: $c-soft;
+
+  &--compact {
+    margin: 0 0 18px;
+    padding: 16px 20px;
+  }
+
+  &--error {
+    background: #fff1f2;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title,
+  &__detail {
+    display: block;
+    font-size: 24px;
+    color: $c-text-sub;
+  }
+
+  &__title {
+    color: $c-rose;
+    font-weight: bold;
+  }
+
+  &__retry {
+    margin: 0;
+    padding: 0 20px;
+    min-height: 60px;
+    line-height: 60px;
+    border-radius: 12px;
+    background: $c-primary;
+    color: #fff;
+    font-size: 24px;
+  }
+}
