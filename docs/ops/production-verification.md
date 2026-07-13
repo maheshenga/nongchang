@@ -1,5 +1,7 @@
 # Production Verification Gates
 
+For encrypted PostgreSQL backup, restore, RPO/RTO, and quarterly drill procedures, see [disaster-recovery.md](./disaster-recovery.md).
+
 This document is the release checklist for the production-hardening roadmap in `docs/superpowers/specs/2026-07-04-production-hardening-design.md`.
 
 ## Local Non-E2E Gate

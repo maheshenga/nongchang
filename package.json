@@ -17,7 +17,10 @@
     "test:browser": "pnpm test:browser:prepare && playwright test --grep-invert @a11y",
     "test:accessibility": "pnpm test:browser:prepare && playwright test --grep @a11y",
     "verify:local": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm build:web && pnpm build:miniapp && pnpm audit:prod",
-    "verify:production": "pnpm verify:local && pnpm test:e2e"
+    "verify:production": "pnpm verify:local && pnpm test:e2e",
+    "backup:postgres": "node scripts/backup-postgres.mjs",
+    "backup:restore": "node scripts/restore-postgres.mjs",
+    "backup:verify-restore": "node scripts/verify-backup-restore.mjs"
   },
   "engines": {
     "node": ">=20"
