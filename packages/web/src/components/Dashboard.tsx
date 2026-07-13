@@ -131,9 +131,9 @@ function MerchantProductionDashboard(props: DashboardFrameProps) {
             <h3 className="text-sm font-semibold text-[#242424]">最近农事记录</h3>
             {latestRecord ? (
               <div className="mt-3 grid gap-2 text-sm text-[#605E5C] sm:grid-cols-3">
-                <div><div className="text-xs font-semibold text-[#8A8886]">作业类型</div><div className="mt-1 font-semibold text-[#242424]">{latestRecord.action}</div></div>
-                <div><div className="text-xs font-semibold text-[#8A8886]">状态</div><div className="mt-1 text-[#242424]">{latestRecord.status}</div></div>
-                <div><div className="text-xs font-semibold text-[#8A8886]">记录时间</div><div className="mt-1 text-[#242424]">{new Date(latestRecord.recordedAt).toLocaleString()}</div></div>
+                <div><div className="text-xs font-semibold text-[#605E5C]">作业类型</div><div className="mt-1 font-semibold text-[#242424]">{latestRecord.action}</div></div>
+                <div><div className="text-xs font-semibold text-[#605E5C]">状态</div><div className="mt-1 text-[#242424]">{latestRecord.status}</div></div>
+                <div><div className="text-xs font-semibold text-[#605E5C]">记录时间</div><div className="mt-1 text-[#242424]">{new Date(latestRecord.recordedAt).toLocaleString()}</div></div>
               </div>
             ) : <EmptyState title="暂无农事记录" description="创建农事记录后，这里会显示最近一次真实作业。" />}
           </section>

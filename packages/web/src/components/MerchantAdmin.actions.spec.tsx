@@ -52,7 +52,7 @@ describe('MerchantAdmin production actions', () => {
     render(<MerchantAdmin onNavigate={onNavigate} />);
     await screen.findByText('Peony');
 
-    fireEvent.click(screen.getByRole('button', { name: /新增芍药繁育生产批次/ }));
+    fireEvent.click(screen.getByRole('button', { name: '新增生产批次' }));
 
     expect(onNavigate).toHaveBeenCalledWith('batches');
   });

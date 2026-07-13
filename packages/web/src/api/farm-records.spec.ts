@@ -19,7 +19,7 @@ describe('farm record api response contracts', () => {
   it('parses the paginated envelope and every item', async () => {
     requestMock.mockResolvedValue({ items: [record], total: 1, page: 1, pageSize: 20 });
     await expect(listFarmRecordsPaged()).resolves.toEqual({
-      items: [{ ...record, ownerName: null }], total: 1, page: 1, pageSize: 20,
+      items: [{ ...record, ownerName: null, operatorName: null }], total: 1, page: 1, pageSize: 20,
     });
   });
 

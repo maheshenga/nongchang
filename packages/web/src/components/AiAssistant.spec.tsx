@@ -59,12 +59,16 @@ describe('AiAssistant Fluent production AI surface', () => {
   });
 
   it('uses shared Fluent primitives and excludes fake AI output paths', () => {
-    for (const file of ['AiAssistant.tsx', 'AiDataQa.tsx']) {
+    const files = ['AiAssistant.tsx', 'AiKnowledgeTask.tsx', 'AiVisionTask.tsx', 'AiAdviceTask.tsx', 'AiDataQa.tsx'];
+    const combined = files.map(source).join('\n');
+
+    expect(combined).toContain("from '../ui/fluent'");
+    expect(combined).toContain('fluentButton');
+    expect(combined).toContain('fluentInput');
+
+    for (const file of files) {
       const text = source(file);
 
-      expect(text).toContain("from '../ui/fluent'");
-      expect(text).toContain('fluentButton');
-      expect(text).toContain('fluentInput');
       expect(text).not.toContain('rounded-xl');
       expect(text).not.toContain('rounded-2xl');
       expect(text).not.toContain('bg-emerald-600');
