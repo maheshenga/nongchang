@@ -6,7 +6,7 @@ const KEYS = [
   'NODE_ENV', 'DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET',
   'APP_ENCRYPTION_KEY', 'ALLOW_MANUAL_PAY',
   'TRUST_PROXY_HOPS', 'UPLOAD_DAILY_BYTES_LIMIT', 'UPLOAD_ACTIVE_BYTES_LIMIT',
-  'UPLOAD_PENDING_MAX_AGE_MINUTES',
+  'UPLOAD_PENDING_MAX_AGE_MINUTES', 'RUNTIME_STATE_DRIVER', 'REDIS_URL',
 ];
 
 let snapshot: Record<string, string | undefined>;
@@ -16,6 +16,7 @@ function setValidProdEnv() {
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.JWT_REFRESH_SECRET = 'b'.repeat(40);
   process.env.APP_ENCRYPTION_KEY = '0'.repeat(64);
+  process.env.REDIS_URL = 'redis://127.0.0.1:56379';
 }
 
 beforeEach(() => {
@@ -107,6 +108,18 @@ describe('validateEnv runtime safety limits', () => {
   });
 
   it('keeps safe non-production defaults usable', () => {
+    expect(() => validateEnv()).not.toThrow();
+  });
+
+  it('requires REDIS_URL when production uses distributed runtime state', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.REDIS_URL;
+    expect(() => validateEnv()).toThrow(/REDIS_URL/);
+  });
+
+  it('allows the memory adapter outside production', () => {
+    process.env.RUNTIME_STATE_DRIVER = 'memory';
+    delete process.env.REDIS_URL;
     expect(() => validateEnv()).not.toThrow();
   });
 });

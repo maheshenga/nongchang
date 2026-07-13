@@ -32,6 +32,9 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { HealthModule } from './modules/health/health.module';
 import { RequestLoggingInterceptor } from './common/logging/request-logging.interceptor';
+import { RuntimeStateModule } from './common/runtime/runtime-state.module';
+import { RUNTIME_STATE, type RuntimeStateStore } from './common/runtime/runtime-state.types';
+import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage';
 
 @Module({
   imports: [
@@ -39,15 +42,23 @@ import { RequestLoggingInterceptor } from './common/logging/request-logging.inte
     // read JWT secrets from .env at runtime.
     ConfigModule.forRoot({ isGlobal: true }),
     ClsModule.forRoot({ global: true, middleware: { mount: true } }),
+    RuntimeStateModule,
     // 全局限流:默认每 IP 60s 内最多 120 次请求,挡撞库/刷量/低成本 DoS。
     // 测试环境(NODE_ENV=test)放到极高阈值,避免 e2e 中密集请求误触限流导致脆弱失败。
     // 单端点更严的限制(如登录、公开扫码)由控制器上的 @Throttle 覆盖。
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60_000,
-        limit: process.env.NODE_ENV === 'test' ? 100_000 : 120,
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [RuntimeStateModule],
+      inject: [RUNTIME_STATE],
+      useFactory: (store: RuntimeStateStore) => ({
+        storage: new RedisThrottlerStorage(store),
+        throttlers: [
+          {
+            ttl: 60_000,
+            limit: process.env.NODE_ENV === 'test' ? 100_000 : 120,
+          },
+        ],
+      }),
+    }),
     PrismaModule,
     AuthModule,
     AgentModule,

@@ -1,11 +1,15 @@
-import { BeforeApplicationShutdown, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BeforeApplicationShutdown, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RUNTIME_STATE, type RuntimeStateStore } from '../../common/runtime/runtime-state.types';
 
 @Injectable()
 export class HealthService implements BeforeApplicationShutdown {
   private shuttingDown = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(RUNTIME_STATE) private readonly runtimeState: RuntimeStateStore,
+  ) {}
 
   beforeApplicationShutdown(): void {
     this.shuttingDown = true;
@@ -25,6 +29,7 @@ export class HealthService implements BeforeApplicationShutdown {
     }
     try {
       await this.prisma.$queryRaw`SELECT 1`;
+      if (!(await this.runtimeState.ping())) throw new Error('runtime state unavailable');
       return { status: 'ready' as const };
     } catch {
       throw new ServiceUnavailableException({ status: 'not_ready' });
