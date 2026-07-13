@@ -130,8 +130,10 @@ describe('BatchAdmin Fluent console', () => {
     fireEvent.change(screen.getByLabelText('预计收获'), { target: { value: '2026-09-01' } });
 
     const submit = screen.getByRole('button', { name: '创建' });
+    const form = document.getElementById('create-batch-form');
+    expect(form).toBeTruthy();
     fireEvent.click(submit);
-    fireEvent.submit(submit.closest('form')!);
+    fireEvent.submit(form!);
 
     expect(batchApiMock.createBatch).toHaveBeenCalledTimes(1);
     expect((screen.getByRole('button', { name: '提交中…' }) as HTMLButtonElement).disabled).toBe(true);
