@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { BillingService } from '../billing/billing.service';
 import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
+import { IdempotencyLockService } from '../../common/runtime/idempotency-lock.service';
 import {
   MAX_CODES_PER_BATCH,
   assertTraceGenerationCount,
@@ -25,6 +26,7 @@ export class TraceService {
     private scope: ScopeService,
     private billing: BillingService,
     @Optional() private cache?: PublicTraceCacheService,
+    @Optional() private locks?: IdempotencyLockService,
   ) {}
 
   /** 一物一码:为批次批量生成 count 个唯一溯源码并返回。 */
@@ -38,41 +40,49 @@ export class TraceService {
       batchId,
       requestKey: normalizedRequestKey,
     });
-    const ref = buildTraceGenerationRef(batchId, generationKey);
-    const traceCodeLookup = buildTraceCodeLookup(user.tenantId, batchId, generationKey);
-    const existingCodes = await this.prisma.traceCode.findMany(traceCodeLookup);
-    if (existingCodes.length > 0) {
-      assertTraceGenerationRetryCount(existingCodes.length, count);
-      await this.billing.confirmReservation(user, 'CODE', ref);
-      return existingCodes;
-    }
-    const reservation = await this.billing.reserve(user, 'CODE', count, ref);
-    const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${batchId} FOR UPDATE`;
-        if (locked.length === 0) throw new NotFoundException('批次不存在');
-        const existingCodes = await tx.traceCode.findMany(traceCodeLookup);
-        if (existingCodes.length > 0) {
-          assertTraceGenerationRetryCount(existingCodes.length, count);
-          return;
-        }
-        await tx.traceCode.createMany({
-          data: buildTraceCodeCreateData({
-            tenantId: user.tenantId,
-            batchId,
-            reservationId: reservation.reservationId,
-            codes,
-            generationKey,
-          }),
+    const execute = async () => {
+      const ref = buildTraceGenerationRef(batchId, generationKey);
+      const traceCodeLookup = buildTraceCodeLookup(user.tenantId, batchId, generationKey);
+      const existingCodes = await this.prisma.traceCode.findMany(traceCodeLookup);
+      if (existingCodes.length > 0) {
+        assertTraceGenerationRetryCount(existingCodes.length, count);
+        await this.billing.confirmReservation(user, 'CODE', ref);
+        return existingCodes;
+      }
+      const reservation = await this.billing.reserve(user, 'CODE', count, ref);
+      const codes = Array.from({ length: count }, () => `ORC-${randomUUID().slice(0, 12).toUpperCase()}`);
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM batches WHERE id = ${batchId} FOR UPDATE`;
+          if (locked.length === 0) throw new NotFoundException('批次不存在');
+          const existingCodes = await tx.traceCode.findMany(traceCodeLookup);
+          if (existingCodes.length > 0) {
+            assertTraceGenerationRetryCount(existingCodes.length, count);
+            return;
+          }
+          await tx.traceCode.createMany({
+            data: buildTraceCodeCreateData({
+              tenantId: user.tenantId,
+              batchId,
+              reservationId: reservation.reservationId,
+              codes,
+              generationKey,
+            }),
+          });
         });
+      } catch (err) {
+        await this.billing.releaseReservation(user, 'CODE', count, ref);
+        throw err;
+      }
+      await this.billing.confirmReservation(user, 'CODE', ref);
+      return this.prisma.traceCode.findMany({
+        where: { tenantId: user.tenantId, batchId, generationKey },
+        orderBy: { createdAt: 'asc' },
       });
-    } catch (err) {
-      await this.billing.releaseReservation(user, 'CODE', count, ref);
-      throw err;
-    }
-    await this.billing.confirmReservation(user, 'CODE', ref);
-    return this.prisma.traceCode.findMany({ where: { tenantId: user.tenantId, batchId, generationKey }, orderBy: { createdAt: 'asc' } });
+    };
+    return this.locks
+      ? this.locks.run(`trace:${generationKey}`, execute)
+      : execute();
   }
 
   async addEvent(user: AuthUser, dto: CreateTraceEventDto) {
@@ -84,7 +94,7 @@ export class TraceService {
         payload: (dto.payload ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
-    this.cache?.invalidateBatch(dto.batchId);
+    await this.cache?.invalidateBatch(dto.batchId);
     return event;
   }
 

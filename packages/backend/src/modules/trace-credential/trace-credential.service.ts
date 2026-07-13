@@ -54,7 +54,7 @@ export class TraceCredentialService {
     const row = (await this.prisma.traceCredential.create({
       data: buildTraceCredentialCreateData({ tenantId: user.tenantId, dto: input }),
     })) as CredentialRow;
-    this.cache?.invalidateBatch(input.batchId);
+    await this.cache?.invalidateBatch(input.batchId);
     return toTraceCredentialView(row);
   }
 
@@ -66,7 +66,7 @@ export class TraceCredentialService {
     if (!cred) throw new ForbiddenException('资质记录不在可操作范围内');
     await this.scope.assertInScope(this.prisma, user, 'batch', cred.batchId);
     await this.prisma.traceCredential.delete({ where: { id } });
-    this.cache?.invalidateBatch(cred.batchId);
+    await this.cache?.invalidateBatch(cred.batchId);
     return { id };
   }
 }

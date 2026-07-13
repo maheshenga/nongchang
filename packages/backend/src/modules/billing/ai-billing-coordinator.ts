@@ -1,8 +1,9 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillingService } from './billing.service';
+import { IdempotencyLockService } from '../../common/runtime/idempotency-lock.service';
 import {
   recoveryActionForAiOperation,
   toAiOperationErrorCategory,
@@ -46,9 +47,20 @@ export class AiBillingCoordinator {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    @Optional() private readonly locks?: IdempotencyLockService,
   ) {}
 
   async execute<T>(
+    input: AiBillingExecutionInput,
+    providerCall: () => Promise<T>,
+  ): Promise<T> {
+    const execute = () => this.executeLocked(input, providerCall);
+    return this.locks
+      ? this.locks.run(`ai:${input.user.tenantId}:${input.user.userId}:${input.operationKey}`, execute)
+      : execute();
+  }
+
+  private async executeLocked<T>(
     input: AiBillingExecutionInput,
     providerCall: () => Promise<T>,
   ): Promise<T> {

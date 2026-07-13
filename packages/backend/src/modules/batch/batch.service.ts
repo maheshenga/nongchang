@@ -73,7 +73,7 @@ export class BatchService {
     if (!cur) throw new NotFoundException('批次不存在');
     assertBatchStatusProgression(cur.status, status);
     const updated = serializeBatch(await this.prisma.batch.update({ where: { id }, data: { status } }));
-    this.cache?.invalidateBatch(id);
+    await this.cache?.invalidateBatch(id);
     return updated;
   }
 
@@ -129,7 +129,7 @@ export class BatchService {
       await tx.farmRecord.deleteMany({ where: { batchId: id } });
       await tx.batch.delete({ where: { id } });
     });
-    this.cache?.invalidateBatch(id);
+    await this.cache?.invalidateBatch(id);
     return { id };
   }
 

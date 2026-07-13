@@ -3,6 +3,7 @@ import { AuthUser, CreateAgentDto, UpdateAgentDto, ListQuery, Paginated } from '
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
+import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
 import {
   AGENT_LIST_SELECT,
   MERCHANT_LIST_SELECT,
@@ -22,11 +23,12 @@ export class AgentService {
     private prisma: PrismaService,
     private scope: ScopeService,
     @Optional() private cache?: PublicTraceCacheService,
+    @Optional() private sessions?: SessionValidationCacheService,
   ) {}
 
   async create(user: AuthUser, dto: CreateAgentDto) {
     const created = await this.prisma.agent.create({ data: buildAgentCreateData(user, dto) });
-    this.cache?.invalidateTenant(user.tenantId);
+    await this.cache?.invalidateTenant(user.tenantId);
     return created;
   }
 
@@ -61,7 +63,8 @@ export class AgentService {
     if (!target) throw new ForbiddenException('代理商不存在或不在可管理范围');
     const data = buildAgentUpdateData(dto);
     const updated = await this.prisma.agent.update({ where: { id }, data, select: { id: true, name: true, region: true, status: true } });
-    this.cache?.invalidateTenant(user.tenantId);
+    await this.cache?.invalidateTenant(user.tenantId);
+    await this.sessions?.invalidateTenant(user.tenantId);
     return updated;
   }
 
@@ -79,7 +82,8 @@ export class AgentService {
             data: { sessionVersion: { increment: 1 } },
           }),
         ]))[0];
-    this.cache?.invalidateTenant(user.tenantId);
+    await this.cache?.invalidateTenant(user.tenantId);
+    await this.sessions?.invalidateTenant(user.tenantId);
     return updated;
   }
 

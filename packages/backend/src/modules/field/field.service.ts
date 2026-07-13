@@ -34,7 +34,7 @@ export class FieldService {
       `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
       lng, lat, field.id,
     );
-    this.cache?.invalidateTenant(user.tenantId);
+    await this.cache?.invalidateTenant(user.tenantId);
     return field;
   }
 

@@ -23,7 +23,7 @@ export class PublicTraceService {
     if (!traceCode) throw new NotFoundException('溯源码不存在');
     if (traceCode.status === 'frozen') return { code: traceCode.code, frozen: true };
 
-    let response = this.cache.get(code);
+    let response = await this.cache.get(code);
     if (!response) {
       const batch = await this.prisma.batch.findUnique({ where: { id: traceCode.batchId } });
       if (!batch) throw new NotFoundException('批次不存在');
@@ -78,7 +78,7 @@ export class PublicTraceService {
         credentials,
         credentialTotal,
       });
-      this.cache.set(code, traceCode.tenantId, traceCode.batchId, response);
+      await this.cache.set(code, traceCode.tenantId, traceCode.batchId, response);
     }
 
     const updated = await this.prisma.traceCode.update({
