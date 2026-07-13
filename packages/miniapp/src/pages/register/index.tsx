@@ -4,12 +4,14 @@ import Taro from '@tarojs/taro';
 import { registerWechat } from '../../api/auth';
 import { WX_APPID } from '../../config/env';
 import Icon from '../../components/Icon';
+import { buildRegistrationStatus, type RegistrationStatusView } from './status';
 import './index.scss';
 
 export default function Register() {
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<RegistrationStatusView | null>(null);
 
   async function onSubmit() {
     const name = displayName.trim();
@@ -27,9 +29,8 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await registerWechat(name, phone || undefined);
-      Taro.showToast({ title: '已提交,待后台审核', icon: 'success' });
-      setTimeout(() => Taro.navigateBack(), 1200);
+      const response = await registerWechat(name, phone || undefined);
+      setStatus(buildRegistrationStatus(name, response));
     } catch (e: any) {
       Taro.showToast({ title: e.message || '提交失败', icon: 'none' });
     } finally {
@@ -48,27 +49,30 @@ export default function Register() {
       </View>
 
       <View className="register__card">
-        <Text className="register__label">姓名 / 名称</Text>
-        <Input
-          className="register__input"
-          placeholder="请输入真实姓名或主体名称"
-          value={displayName}
-          onInput={(e) => setDisplayName(e.detail.value)}
-        />
-        <Text className="register__label">手机号(选填)</Text>
-        <Input
-          className="register__input"
-          type="number"
-          placeholder="便于审核联系,可不填"
-          value={phone}
-          onInput={(e) => setPhone(e.detail.value)}
-        />
-        <Button className="register__submit" loading={loading} onClick={onSubmit}>
-          微信授权并提交
-        </Button>
-        <View className="register__back" onClick={() => Taro.navigateBack()}>
-          <Text className="register__back-text">已有账号? 返回登录</Text>
-        </View>
+        {status ? (
+          <View className="register__status">
+            <View className="register__status-icon"><Icon name="check" color="#fff" size={32} /></View>
+            <Text className="register__status-title">申请已提交</Text>
+            <Text className="register__status-name">申请主体：{status.displayName}</Text>
+            <Text className="register__status-pill">{status.statusLabel}</Text>
+            <Text className="register__status-message">
+              {status.applicationId ? `申请编号：${status.applicationId}` : status.trackingMessage}
+            </Text>
+            <Text className="register__status-next">下一步：请等待租户管理员或代理商管理员审核。审核通过后，再返回登录页使用微信登录。</Text>
+            <Button className="register__submit" onClick={() => Taro.navigateBack()}>返回登录</Button>
+          </View>
+        ) : (
+          <>
+            <Text className="register__label">姓名 / 名称</Text>
+            <Input className="register__input" placeholder="请输入真实姓名或主体名称" value={displayName} onInput={(e) => setDisplayName(e.detail.value)} />
+            <Text className="register__label">手机号(选填)</Text>
+            <Input className="register__input" type="number" placeholder="便于审核联系,可不填" value={phone} onInput={(e) => setPhone(e.detail.value)} />
+            <Button className="register__submit" loading={loading} onClick={onSubmit}>微信授权并提交</Button>
+            <View className="register__back" onClick={() => Taro.navigateBack()}>
+              <Text className="register__back-text">已有账号? 返回登录</Text>
+            </View>
+          </>
+        )}
       </View>
     </View>
   );

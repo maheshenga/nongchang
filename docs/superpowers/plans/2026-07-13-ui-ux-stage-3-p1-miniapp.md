@@ -177,21 +177,21 @@ export interface RegistrationStatusView {
 export function buildRegistrationStatus(displayName: string, response: PendingResponse): RegistrationStatusView;
 ```
 
-- [ ] **Step 1: Add failing API and status tests**
+- [x] **Step 1: Add failing API and status tests**
 
 Assert `registerWechat` returns `{ status: 'pending' }` after clearing stale tokens. Assert the status model preserves the submitted display name, labels the state `待审核`, sets `applicationId` to `null`, and returns `当前接口未返回申请跟踪编号`.
 
-- [ ] **Step 2: Run the focused tests to verify red**
+- [x] **Step 2: Run the focused tests to verify red**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/api/auth.spec.ts src/pages/register/status.spec.ts
 ```
 
-- [ ] **Step 3: Render the durable application status**
+- [x] **Step 3: Render the durable application status**
 
 Remove the delayed `navigateBack`. After success, replace the form with the submitted name, `待审核`, the truthful no-tracking-number message, guidance that an administrator must approve the account, and an explicit `返回登录` action.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 ```powershell
 $env:CI='true'; corepack.cmd pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/api/auth.spec.ts src/pages/register/status.spec.ts

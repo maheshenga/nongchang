@@ -97,8 +97,9 @@ describe('api/auth loginWechat', () => {
     taro.login.mockResolvedValue({ code: 'jscode_register' });
     taro.request.mockResolvedValueOnce(okResp({ status: 'pending' }));
 
-    await auth.registerWechat('新用户', '13900001111');
+    const result = await auth.registerWechat('新用户', '13900001111');
 
+    expect(result).toEqual({ status: 'pending' });
     expect(taro.removeStorageSync).toHaveBeenCalledWith('access_token');
     expect(taro.removeStorageSync).toHaveBeenCalledWith('refresh_token');
     expect(taro.setStorageSync).not.toHaveBeenCalled();

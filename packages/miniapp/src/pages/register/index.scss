@@ -78,4 +78,56 @@
     font-size: 24px;
     color: $c-text-sub;
   }
+
+  &__status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  &__status-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $c-primary;
+  }
+
+  &__status-title {
+    margin-top: 18px;
+    font-size: 34px;
+    font-weight: bold;
+    color: $c-text;
+  }
+
+  &__status-name,
+  &__status-message,
+  &__status-next {
+    display: block;
+    margin-top: 14px;
+    font-size: 24px;
+    line-height: 1.6;
+    color: $c-text-sub;
+  }
+
+  &__status-pill {
+    margin-top: 16px;
+    padding: 8px 20px;
+    border-radius: 999px;
+    background: #fff7ed;
+    color: #9a3412;
+    font-size: 24px;
+    font-weight: bold;
+  }
+
+  &__status-next {
+    text-align: left;
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: $c-soft;
+    color: $c-text;
+  }
 }

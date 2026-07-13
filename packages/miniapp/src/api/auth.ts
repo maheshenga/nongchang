@@ -5,6 +5,7 @@ import {
   pendingResponseSchema,
   tokenPairSchema,
   type MeProfileView,
+  type PendingResponse,
 } from '@nongchang/shared';
 import { WX_APPID } from '../config/env';
 import { clearToken, setTokens } from '../store/auth';
@@ -28,7 +29,7 @@ export async function loginWechat(): Promise<void> {
   setTokens(parseResponse(tokenPairSchema, value, 'auth.wechatLogin'));
 }
 
-export async function registerWechat(displayName: string, phone?: string): Promise<void> {
+export async function registerWechat(displayName: string, phone?: string): Promise<PendingResponse> {
   if (!WX_APPID) throw new Error('未配置微信 AppID');
   const { code } = await Taro.login();
   if (!code) throw new Error('微信授权失败,请重试');
@@ -36,8 +37,9 @@ export async function registerWechat(displayName: string, phone?: string): Promi
     url: '/auth/wechat/register', method: 'POST',
     data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) }, auth: false,
   });
-  parseResponse(pendingResponseSchema, value, 'auth.wechatRegister');
+  const response = parseResponse(pendingResponseSchema, value, 'auth.wechatRegister');
   clearToken();
+  return response;
 }
 
 export async function getMe(): Promise<MeProfileView> {

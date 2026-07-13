@@ -13,6 +13,7 @@ const PATHS: Record<string, string> = {
   wifi: 'M5 12a10 10 0 0 1 14 0 M8.5 15.5a5 5 0 0 1 7 0 M12 19h.01',
   send: 'M3 11l18-8-8 18-2-7-8-3z',
   leaf: 'M5 21c0-9 7-16 16-16 0 9-7 16-16 16z',
+  check: 'M5 12l4 4L19 6',
 };
 
 interface Props { name: keyof typeof PATHS | string; size?: number; color?: string }
