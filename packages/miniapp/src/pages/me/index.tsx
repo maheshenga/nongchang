@@ -10,6 +10,7 @@ import { countThisMonth } from '../../utils/stats';
 import { SUPPORT_CONTACT } from '../../config/env';
 import { buildSupportMessage } from '../../utils/support';
 import MeFieldSection from './MeFieldSection';
+import MeProfileHeader from './MeProfileHeader';
 import './index.scss';
 
 export default function Me() {
@@ -155,28 +156,11 @@ export default function Me() {
       setSavingPwd(false);
     }
   }
+  const profileHeaderProps = { displayName, username, role, phone, loading: profileLoading, error: profileError };
 
   return (
     <View className="me">
-      <View className="me__header">
-        <View className="me__avatar">
-          <Text className="me__avatar-text">{(profileLoading ? '账' : displayName || username).slice(0, 1)}</Text>
-        </View>
-        <View>
-          <Text className="me__eyebrow">当前账号</Text>
-          <Text className="me__name">{profileLoading ? '账户加载中' : displayName || username}</Text>
-          <Text className="me__role">{profileLoading ? '身份加载中' : role}{!profileLoading && phone ? ` · ${phone}` : ''}</Text>
-        </View>
-      </View>
-
-      {profileError && (
-        <View className="me__profile-error" role="alert">
-          <Text className="me__profile-error-text">{profileError}</Text>
-          <Button className="me__profile-retry" loading={profileLoading} onClick={() => void loadProfile()}>
-            重新加载账户
-          </Button>
-        </View>
-      )}
+      <MeProfileHeader {...profileHeaderProps} onRetry={() => void loadProfile()} />
 
       <View className="me__stats">
         <View className="me__stat">

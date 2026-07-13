@@ -2,7 +2,7 @@ const WX_APP_ID = /^wx[0-9A-Za-z]{16}$/;
 
 export function resolveProductionMiniappEnv(
   env: NodeJS.ProcessEnv,
-): { apiUrl: string; wxAppId: string } {
+): { apiUrl: string; wxAppId: string; supportContact: string } {
   const rawApi = env.TARO_APP_API?.trim();
   if (!rawApi) throw new Error('TARO_APP_API is required for a production miniapp build');
 
@@ -26,5 +26,9 @@ export function resolveProductionMiniappEnv(
     throw new Error('TARO_APP_WX_APPID must be a valid WeChat AppID');
   }
 
-  return { apiUrl: `${url.origin}${pathname}`, wxAppId };
+  return {
+    apiUrl: `${url.origin}${pathname}`,
+    wxAppId,
+    supportContact: env.TARO_APP_SUPPORT_CONTACT?.trim() ?? '',
+  };
 }

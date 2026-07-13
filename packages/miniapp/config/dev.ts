@@ -7,5 +7,6 @@ export default {
   defineConstants: {
     'process.env.TARO_APP_API': JSON.stringify('http://localhost:3001/api'),
     'process.env.TARO_APP_WX_APPID': JSON.stringify(process.env.TARO_APP_WX_APPID || ''),
+    'process.env.TARO_APP_SUPPORT_CONTACT': JSON.stringify(process.env.TARO_APP_SUPPORT_CONTACT || ''),
   },
 };

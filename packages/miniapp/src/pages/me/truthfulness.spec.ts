@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), 'index.tsx');
 const source = readFileSync(sourcePath, 'utf8');
+const profileHeaderSource = readFileSync(join(dirname(sourcePath), 'MeProfileHeader.tsx'), 'utf8');
 
 describe('Me page truthful copy', () => {
   it('uses traceability record copy instead of blockchain storage claims', () => {
@@ -17,6 +18,6 @@ describe('Me page truthful copy', () => {
     expect(source).not.toContain("useState('农技员')");
     expect(source).toContain('buildSupportMessage(SUPPORT_CONTACT)');
     expect(source).toContain("Taro.switchTab({ url: '/pages/trace/index' })");
-    expect(source).toContain('重新加载账户');
+    expect(profileHeaderSource).toContain('重新加载账户');
   });
 });

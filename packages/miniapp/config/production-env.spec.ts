@@ -16,9 +16,11 @@ describe('resolveProductionMiniappEnv', () => {
     expect(resolveProductionMiniappEnv({
       TARO_APP_API: 'https://api.example.com/api/',
       TARO_APP_WX_APPID: 'wx0000000000000000',
+      TARO_APP_SUPPORT_CONTACT: ' support@example.com ',
     })).toEqual({
       apiUrl: 'https://api.example.com/api',
       wxAppId: 'wx0000000000000000',
+      supportContact: 'support@example.com',
     });
   });
 });
