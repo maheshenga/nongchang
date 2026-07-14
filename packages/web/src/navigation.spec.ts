@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as navigation from './navigation';
@@ -82,6 +82,16 @@ describe('production navigation', () => {
 
   it('does not expose pending user review to agent admins without agent-bound registration', () => {
     expect(idsFor('agent_admin')).not.toContain('pendingUsers');
+  });
+
+  it('removes dead admin and mobile demo component files from production source', () => {
+    for (const relativePath of [
+      'components/SystemAdmin.tsx',
+      'components/AgentPlatform.tsx',
+      'components/legacy/MobileView.tsx',
+    ]) {
+      expect(existsSync(resolve(__dirname, relativePath)), relativePath).toBe(false);
+    }
   });
 
   it('exposes legal publication settings only to system admins', () => {

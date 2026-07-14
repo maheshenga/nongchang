@@ -11,7 +11,7 @@ import type { AuthUser, LoginDto, MeProfileView } from '@nongchang/shared';
 import { clearAccessToken, setAccessToken } from './token-store';
 import { decodeToken } from './decode-token';
 import { getMe, webLogin, webLogout } from '../api/auth';
-import { refreshWebSession, setOnAuthExpired } from '../api/request';
+import { discoverWebSession, setOnAuthExpired } from '../api/request';
 import { resetAppQueryCache } from '../query-client';
 
 interface AuthContextValue {
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    void refreshWebSession()
+    void discoverWebSession()
       .then((accessToken) => {
         if (cancelled || !accessToken) return;
         const decoded = decodeToken(accessToken);

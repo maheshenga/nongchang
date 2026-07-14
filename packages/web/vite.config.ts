@@ -2,13 +2,15 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
-import { dashboardDemoManualChunk } from './src/config/manual-chunks';
+import { manualChunksForBuild } from './src/config/manual-chunks';
 import { resolveProductionWebEnv } from './src/config/production-env';
 
 export default defineConfig(({ mode }) => {
+  const env = { ...process.env, ...loadEnv(mode, __dirname, '') };
   if (mode === 'production') {
-    resolveProductionWebEnv({ ...process.env, ...loadEnv(mode, __dirname, '') });
+    resolveProductionWebEnv(env);
   }
+  const demoDashboardEnabled = env.VITE_ENABLE_DEMO_DASHBOARD === 'true';
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -26,7 +28,7 @@ export default defineConfig(({ mode }) => {
       },
       rollupOptions: {
         output: {
-          manualChunks: dashboardDemoManualChunk,
+          manualChunks: manualChunksForBuild(demoDashboardEnabled),
         },
       },
     },

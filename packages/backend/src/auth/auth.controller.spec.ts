@@ -75,6 +75,31 @@ describe('AuthController web sessions', () => {
     expect(result).toBeUndefined();
   });
 
+  it('discovers no anonymous web session as 204 without refreshing', async () => {
+    const result = await controller.webSession({ headers: {} } as never, response as never);
+
+    expect(result).toBeUndefined();
+    expect(response.status).toHaveBeenCalledWith(204);
+    expect(auth.refresh).not.toHaveBeenCalled();
+  });
+
+  it('discovers and rotates a valid web session cookie', async () => {
+    const request = { headers: { cookie: 'nc_refresh=old.refresh' } };
+
+    await expect(controller.webSession(request as never, response as never)).resolves.toEqual({
+      accessToken: 'access.token',
+    });
+    expect(auth.refresh).toHaveBeenCalledWith('old.refresh');
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('nc_refresh=refresh.token; Path=/api/auth/web; HttpOnly'),
+    );
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, AuthController.prototype.webSession)).toBe(true);
+    expect(Reflect.getMetadata(
+      `${THROTTLER_LIMIT}default`, AuthController.prototype.webSession,
+    )).toBe(process.env.NODE_ENV === 'test' ? 100_000 : 10);
+  });
+
   it('forwards publication IDs through every dedicated miniapp auth route', async () => {
     const publicationId = '22222222-2222-4222-8222-222222222222';
     const passwordInput = { ...loginDto, publicationId };

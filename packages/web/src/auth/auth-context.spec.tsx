@@ -7,7 +7,7 @@ import { clearAccessToken, getAccessToken } from './token-store';
 const webLoginMock = vi.fn<(dto: LoginDto) => Promise<WebAccessTokenResponse>>();
 const webLogoutMock = vi.fn<() => Promise<void>>();
 const getMeMock = vi.fn<() => Promise<MeProfileView>>();
-const refreshWebSessionMock = vi.fn<() => Promise<string | null>>();
+const discoverWebSessionMock = vi.fn<() => Promise<string | null>>();
 let authExpiredCallback: (() => void) | null = null;
 
 vi.mock('../api/auth', () => ({
@@ -17,7 +17,7 @@ vi.mock('../api/auth', () => ({
 }));
 
 vi.mock('../api/request', () => ({
-  refreshWebSession: () => refreshWebSessionMock(),
+  discoverWebSession: () => discoverWebSessionMock(),
   setOnAuthExpired: (callback: () => void) => {
     authExpiredCallback = callback;
   },
@@ -72,12 +72,12 @@ describe('AuthProvider', () => {
     webLoginMock.mockReset();
     webLogoutMock.mockReset().mockResolvedValue();
     getMeMock.mockReset().mockResolvedValue(profileA);
-    refreshWebSessionMock.mockReset();
+    discoverWebSessionMock.mockReset();
   });
 
   it('starts unready, bootstraps once from the cookie, then exposes the decoded user', async () => {
     let resolveRefresh!: (token: string | null) => void;
-    refreshWebSessionMock.mockReturnValue(new Promise((resolve) => {
+    discoverWebSessionMock.mockReturnValue(new Promise((resolve) => {
       resolveRefresh = resolve;
     }));
 
@@ -89,14 +89,14 @@ describe('AuthProvider', () => {
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
     expect(result.current.user?.userId).toBe('u1');
-    expect(refreshWebSessionMock).toHaveBeenCalledOnce();
+    expect(discoverWebSessionMock).toHaveBeenCalledOnce();
     expect(getAccessToken()).toBe(accessA);
     expect(localStorage.length).toBe(0);
     await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
   });
 
   it('becomes ready and unauthenticated when bootstrap refresh fails', async () => {
-    refreshWebSessionMock.mockResolvedValue(null);
+    discoverWebSessionMock.mockResolvedValue(null);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -106,7 +106,7 @@ describe('AuthProvider', () => {
   });
 
   it('logs in with the web endpoint and stores only the access token in memory', async () => {
-    refreshWebSessionMock.mockResolvedValue(null);
+    discoverWebSessionMock.mockResolvedValue(null);
     webLoginMock.mockResolvedValue({ accessToken: accessA });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isReady).toBe(true));
@@ -123,7 +123,7 @@ describe('AuthProvider', () => {
   });
 
   it('clears memory and state even when the logout request fails', async () => {
-    refreshWebSessionMock.mockResolvedValue(accessA);
+    discoverWebSessionMock.mockResolvedValue(accessA);
     webLogoutMock.mockRejectedValue(new Error('offline'));
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.user?.userId).toBe('u1'));
@@ -137,7 +137,7 @@ describe('AuthProvider', () => {
   });
 
   it('ignores a pending profile reload after logout', async () => {
-    refreshWebSessionMock.mockResolvedValue(accessA);
+    discoverWebSessionMock.mockResolvedValue(accessA);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
 
@@ -157,7 +157,7 @@ describe('AuthProvider', () => {
   });
 
   it('ignores profile data that belongs to a different user', async () => {
-    refreshWebSessionMock.mockResolvedValue(accessA);
+    discoverWebSessionMock.mockResolvedValue(accessA);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
 
@@ -167,7 +167,7 @@ describe('AuthProvider', () => {
   });
 
   it('clears React auth state when the request layer expires the session', async () => {
-    refreshWebSessionMock.mockResolvedValue(accessA);
+    discoverWebSessionMock.mockResolvedValue(accessA);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.user?.userId).toBe('u1'));
 

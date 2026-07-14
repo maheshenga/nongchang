@@ -112,6 +112,27 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('web/session')
+  async webSession(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<WebAccessTokenResponse | undefined> {
+    const refreshToken = parseWebRefreshCookie(request.headers.cookie);
+    if (!refreshToken) {
+      response.status(HttpStatus.NO_CONTENT);
+      return undefined;
+    }
+
+    const tokens = await this.auth.refresh(refreshToken);
+    response.setHeader(
+      'Set-Cookie',
+      buildWebRefreshCookie(tokens.refreshToken, process.env.NODE_ENV === 'production'),
+    );
+    return { accessToken: tokens.accessToken };
+  }
+
+  @Public()
   @Post('web/refresh')
   async webRefresh(
     @Req() request: Request,

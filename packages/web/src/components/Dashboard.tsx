@@ -10,10 +10,18 @@ import { useApi } from '../hooks/useApi';
 import type { AppTab, SystemRole } from '../navigation';
 import { fluentButton } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
+import DemoBadge from './DemoBadge';
 import { dashboardQuickActions, dashboardTitle } from './dashboard/dashboard-workspace';
 import TenantReadinessPanel from './dashboard/TenantReadinessPanel';
 
-const DashboardDemo = lazy(() => import('./DashboardDemo'));
+const demoDashboardEnabledAtBuild = import.meta.env.VITE_ENABLE_DEMO_DASHBOARD === 'true';
+const DashboardDemo = demoDashboardEnabledAtBuild
+  ? lazy(() => import('./DashboardDemo'))
+  : null;
+
+const isDemoDashboardEnabled = () => (
+  import.meta.env.VITE_ENABLE_DEMO_DASHBOARD === 'true' && DashboardDemo !== null
+);
 
 export interface DashboardProps {
   role: SystemRole;
@@ -44,6 +52,7 @@ function activeBatchCount(items: Array<{ status: unknown }>): number {
 
 function DashboardFrame({ role, onNavigate, onEnterDemo, children }: DashboardFrameProps) {
   const actions = dashboardQuickActions(role);
+  const demoEnabled = isDemoDashboardEnabled();
   return (
     <div className="flex h-full min-h-[520px] flex-col gap-4 bg-white p-4 md:p-6">
       <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-5">
@@ -74,12 +83,15 @@ function DashboardFrame({ role, onNavigate, onEnterDemo, children }: DashboardFr
         </div>
       </section>
 
-      <div className="border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-        演示看板仍可用于售前或内部评审，但必须带有演示标识，避免和生产数据混淆。
-      </div>
-      <div>
-        <button type="button" onClick={onEnterDemo} className={fluentButton('primary')}>进入演示看板</button>
-      </div>
+      {demoEnabled && (
+        <section className="border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800" aria-label="演示功能已启用">
+          <div className="flex flex-wrap items-center gap-2">
+            <DemoBadge note="演示功能已启用" />
+            <span>仅用于售前或内部评审，不代表当前租户生产数据。</span>
+          </div>
+          <button type="button" onClick={onEnterDemo} className={`${fluentButton('primary')} mt-3`}>进入演示看板</button>
+        </section>
+      )}
     </div>
   );
 }
@@ -232,13 +244,17 @@ function ProductionDashboardStatus(props: DashboardFrameProps) {
 
 export default function Dashboard({ role, onNavigate }: DashboardProps) {
   const [dashboardMode, setDashboardMode] = useState<'production' | 'demo'>('production');
-  return dashboardMode === 'production' ? (
+  if (dashboardMode === 'demo' && isDemoDashboardEnabled() && DashboardDemo) {
+    return (
+      <Suspense fallback={<LoadingState label="正在加载演示看板" />}>
+        <DashboardDemo onExitDemo={() => setDashboardMode('production')} />
+      </Suspense>
+    );
+  }
+
+  return (
     <ProductionDashboardStatus role={role} onNavigate={onNavigate} onEnterDemo={() => setDashboardMode('demo')}>
       {null}
     </ProductionDashboardStatus>
-  ) : (
-    <Suspense fallback={<LoadingState label="正在加载演示看板" />}>
-      <DashboardDemo onExitDemo={() => setDashboardMode('production')} />
-    </Suspense>
   );
 }

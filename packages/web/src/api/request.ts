@@ -58,6 +58,29 @@ export function refreshWebSession(): Promise<string | null> {
   return refreshing;
 }
 
+export async function discoverWebSession(): Promise<string | null> {
+  const response = await fetch('/api/auth/web/session', {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+
+  if (response.status === 204) {
+    clearAccessToken();
+    return null;
+  }
+  if (!response.ok) throw await parseError(response);
+
+  let body: WebAccessTokenResponse;
+  try {
+    body = (await response.json()) as WebAccessTokenResponse;
+  } catch {
+    throw new ApiError(response.status, '会话发现响应无效');
+  }
+  if (!body.accessToken) throw new ApiError(response.status, '会话发现响应无效');
+  setAccessToken(body.accessToken);
+  return body.accessToken;
+}
+
 async function parseError(response: Response): Promise<ApiError> {
   let message = `请求失败 (${response.status})`;
   try {

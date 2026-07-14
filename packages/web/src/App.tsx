@@ -18,6 +18,7 @@ import {
 } from './navigation-preferences';
 import { updateRetainedTabs } from './page-retention';
 import { fluentButton } from './ui/fluent';
+import { PRODUCT_NAME } from './ui/branding';
 import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 import AppErrorBoundary from './ui/AppErrorBoundary';
 import { useAppLocation } from './useAppLocation';
@@ -103,8 +104,8 @@ export default function App() {
 
   useEffect(() => {
     document.title = isAuthenticated
-      ? `${activePageLabel} - 农场溯源管理`
-      : '农场溯源管理';
+      ? `${activePageLabel} - ${PRODUCT_NAME}`
+      : PRODUCT_NAME;
   }, [activePageLabel, isAuthenticated]);
 
   const toggleNavigationGroup = (category: string) => {
@@ -251,7 +252,7 @@ export default function App() {
               <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">
                 <Leaf className="h-4 w-4" />
               </div>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">农场溯源管理</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{PRODUCT_NAME}</span>
               <button ref={drawerFocus.closeButtonRef} type="button" aria-label="关闭导航" onClick={drawerFocus.closeDrawer} className={fluentButton('icon')}>
                 <X className="h-4 w-4" />
               </button>
@@ -278,7 +279,7 @@ export default function App() {
             <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">
               <Leaf className="h-4 w-4" />
             </div>
-            <span className="truncate text-sm font-semibold">农场溯源管理</span>
+            <span className="truncate text-sm font-semibold">{PRODUCT_NAME}</span>
           </div>
 
           <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">

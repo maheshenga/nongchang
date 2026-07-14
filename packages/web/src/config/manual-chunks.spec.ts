@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { dashboardDemoManualChunk } from './manual-chunks';
+import { dashboardDemoManualChunk, manualChunksForBuild } from './manual-chunks';
 
 describe('dashboardDemoManualChunk', () => {
+  it('omits demo-named manual chunks from builds without the demo flag', () => {
+    expect(manualChunksForBuild(false)).toBeUndefined();
+    expect(manualChunksForBuild(true)).toBe(dashboardDemoManualChunk);
+  });
+
   it('splits demo chart packages into a chart vendor chunk', () => {
     expect(dashboardDemoManualChunk('E:/code/nongchang/packages/web/node_modules/recharts/es6/chart/AreaChart.js')).toBe(
       'dashboard-demo-charts',

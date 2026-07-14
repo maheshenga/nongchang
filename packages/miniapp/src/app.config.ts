@@ -1,3 +1,5 @@
+import { PRODUCT_NAME } from './constants/branding';
+
 export default {
   pages: [
     'pages/login/index',
@@ -16,7 +18,7 @@ export default {
   window: {
     backgroundTextStyle: 'light',
     navigationBarBackgroundColor: '#059669',
-    navigationBarTitleText: '芍药工作台',
+    navigationBarTitleText: PRODUCT_NAME,
     navigationBarTextStyle: 'white',
   },
   tabBar: {

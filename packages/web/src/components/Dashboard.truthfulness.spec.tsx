@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.hoisted(() => {
+  vi.stubEnv('VITE_ENABLE_DEMO_DASHBOARD', 'true');
+});
+
 const apiMocks = vi.hoisted(() => ({
   listBatches: vi.fn(),
   listFields: vi.fn(),
@@ -88,6 +92,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.stubEnv('VITE_ENABLE_DEMO_DASHBOARD', 'true');
   apiMocks.listBatches.mockReset();
   apiMocks.listFields.mockReset();
   apiMocks.listFarmRecords.mockReset();
@@ -139,6 +144,16 @@ beforeEach(() => {
 });
 
 describe('Dashboard truthfulness boundary', () => {
+  it('does not expose demo entry points when the build flag is absent', async () => {
+    vi.stubEnv('VITE_ENABLE_DEMO_DASHBOARD', '');
+
+    render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
+
+    expect(await screen.findByText('商户生产工作台')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '进入演示看板' })).toBeNull();
+    expect(screen.queryByText(/演示功能已启用/)).toBeNull();
+  });
+
   it('defaults to a production status surface instead of showing simulated dashboard actions', async () => {
     render(<Dashboard role="merchant_admin" onNavigate={vi.fn()} />);
 
@@ -151,6 +166,7 @@ describe('Dashboard truthfulness boundary', () => {
     expect(screen.getByText('最近农事记录')).toBeTruthy();
     expect(screen.getByText('巡田')).toBeTruthy();
     expect(screen.getByText('进入演示看板')).toBeTruthy();
+    expect(screen.getByText(/演示功能已启用/)).toBeTruthy();
     expect(screen.queryByText('智能种植顾问 (AI)')).toBeNull();
     expect(screen.queryByText('年度溯源决策报告 (PDF)')).toBeNull();
     expect(screen.queryByText('自动刷新: 关闭')).toBeNull();

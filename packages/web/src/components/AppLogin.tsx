@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Building2, Lock, QrCode, User } from 'lucide-react';
 import { useAuth } from '../auth/auth-context';
 import { fluentButton, fluentInput } from '../ui/fluent';
+import { PRODUCT_NAME } from '../ui/branding';
 
 interface AppLoginProps {
   onBackToLanding?: () => void;
@@ -46,7 +47,7 @@ export default function AppLogin({ onBackToLanding }: AppLoginProps) {
             <p className="mt-4 max-w-md text-sm leading-6 text-[#605E5C]">全链路资料留档与数字农业协作，面向租户、代理商与商户的统一管理入口。</p>
           </div>
           <div className="text-xs leading-5 text-[#605E5C]">
-            <div className="font-semibold text-[#323130]">农场溯源管理</div>
+            <div className="font-semibold text-[#323130]">{PRODUCT_NAME}</div>
             <div>Microsoft Fluent 风格控制台</div>
           </div>
         </section>

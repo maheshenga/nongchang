@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, request, setOnAuthExpired } from './request';
+import { ApiError, discoverWebSession, request, setOnAuthExpired } from './request';
 import { clearAccessToken, getAccessToken, setAccessToken } from '../auth/token-store';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -28,6 +28,48 @@ describe('request', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer old-access');
     expect(init.credentials).toBe('same-origin');
     expect(localStorage.length).toBe(0);
+  });
+
+  it('discovers an anonymous session from 204 without expiring auth state', async () => {
+    const onExpired = vi.fn();
+    setOnAuthExpired(onExpired);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(discoverWebSession()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/web/session', {
+      method: 'POST',
+      credentials: 'same-origin',
+    });
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('keeps session-discovery server failures distinct from auth expiry', async () => {
+    const onExpired = vi.fn();
+    setOnAuthExpired(onExpired);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: '暂时不可用' }, 503)));
+
+    await expect(discoverWebSession()).rejects.toMatchObject({
+      status: 503,
+      message: '暂时不可用',
+    });
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('propagates session-discovery network failures without expiring auth state', async () => {
+    const onExpired = vi.fn();
+    setOnAuthExpired(onExpired);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network offline')));
+
+    await expect(discoverWebSession()).rejects.toThrow('network offline');
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('stores the access token returned by session discovery', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ accessToken: 'discovered-access' })));
+
+    await expect(discoverWebSession()).resolves.toBe('discovered-access');
+    expect(getAccessToken()).toBe('discovered-access');
   });
 
   it('on 401 refreshes through the cookie endpoint then retries exactly once', async () => {

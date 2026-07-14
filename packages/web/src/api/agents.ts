@@ -1,7 +1,7 @@
 import type { CreateAgentDto, AgentListItem, UpdateAgentDto, ListQuery, Paginated } from '@nongchang/shared';
 import { request } from './request';
 
-// 兼容旧引用(SystemAdmin.tsx):代理商列表项改用 shared 的 AgentListItem,tenantId 可选
+// 代理商列表项使用 shared 的 AgentListItem，tenantId 在当前视图中可选。
 export type Agent = AgentListItem & { tenantId?: string };
 
 export interface MerchantUser {

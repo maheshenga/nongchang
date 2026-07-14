@@ -16,3 +16,9 @@ export function dashboardDemoManualChunk(id: string): string | undefined {
 
   return undefined;
 }
+
+export function manualChunksForBuild(
+  demoDashboardEnabled: boolean,
+): typeof dashboardDemoManualChunk | undefined {
+  return demoDashboardEnabled ? dashboardDemoManualChunk : undefined;
+}

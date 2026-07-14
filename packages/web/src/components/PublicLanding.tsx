@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight, CheckCircle2, ClipboardList, FileText, Layers, Mail, Search, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { fluentButton, fluentInput, fluentStatusTag } from '../ui/fluent';
+import { PRODUCT_NAME } from '../ui/branding';
 
 export interface PublicLandingProps {
   onLogin: () => void;
@@ -67,7 +68,7 @@ export default function PublicLanding({ onLogin, onTraceLookup, salesContact = r
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] bg-[#0078D4] text-white">
               <ShieldCheck className="h-4 w-4" />
             </div>
-            <span className="truncate text-sm font-semibold">农场溯源管理</span>
+            <span className="truncate text-sm font-semibold">{PRODUCT_NAME}</span>
           </div>
           <button type="button" onClick={onLogin} className={fluentButton('primary')}>
             登录
