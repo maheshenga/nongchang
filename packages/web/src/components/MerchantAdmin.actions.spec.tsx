@@ -1,12 +1,24 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DialogHost } from '../hooks/useDialog';
+import { resetAppQueryCache } from '../query-client';
 
 const listBatchesMock = vi.fn();
+const listFieldsMock = vi.fn();
+const getBillingSummaryMock = vi.fn();
 const generateCodesMock = vi.fn();
 const createTraceGenerationRequestKeyMock = vi.fn();
 
 vi.mock('../api/batches', () => ({
   listBatches: () => listBatchesMock(),
+}));
+
+vi.mock('../api/fields', () => ({
+  listFields: () => listFieldsMock(),
+}));
+
+vi.mock('../api/billing', () => ({
+  getBillingSummary: () => getBillingSummaryMock(),
 }));
 
 vi.mock('../api/trace', () => ({
@@ -30,14 +42,24 @@ const batch = {
   createdAt: '2026-07-01T00:00:00.000Z',
   laborCost: 0,
   sellPrice: 0,
-  codeCount: 0,
+  codeCount: 7,
   scanTotal: 0,
   inputCost: 0,
 };
 
-beforeEach(() => {
+const renderArchive = (onNavigate = vi.fn()) => render(
+  <>
+    <MerchantAdmin onNavigate={onNavigate} />
+    <DialogHost />
+  </>,
+);
+
+beforeEach(async () => {
+  await resetAppQueryCache();
   vi.clearAllMocks();
   listBatchesMock.mockResolvedValue([batch]);
+  listFieldsMock.mockResolvedValue([{ id: 'field-1', name: '东区一号田' }]);
+  getBillingSummaryMock.mockResolvedValue({ aiBalance: 100, codeBalance: 50 });
   generateCodesMock.mockResolvedValue([{ code: 'TRACE-001' }]);
   let requestKeySeq = 0;
   createTraceGenerationRequestKeyMock.mockImplementation((source: string, batchId: string, count: number) => {
@@ -47,99 +69,72 @@ beforeEach(() => {
 });
 
 describe('MerchantAdmin production actions', () => {
-  it('routes batch creation to the real batch page', async () => {
+  it('routes batch creation and generic batch management to the real batch page', async () => {
     const onNavigate = vi.fn();
-    render(<MerchantAdmin onNavigate={onNavigate} />);
-    await screen.findByText('Peony');
+    renderArchive(onNavigate);
+    await screen.findAllByText('Peony');
 
     fireEvent.click(screen.getByRole('button', { name: '新增生产批次' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '进入批次管理 BATCH-001' })[0]);
 
-    expect(onNavigate).toHaveBeenCalledWith('batches');
+    expect(onNavigate).toHaveBeenNthCalledWith(1, 'batches');
+    expect(onNavigate).toHaveBeenNthCalledWith(2, 'batches');
   });
 
-  it('generates trace codes through the real API from the side panel', async () => {
-    render(<MerchantAdmin />);
-    await screen.findByText('Peony');
+  it('exposes responsive product records with the same safe label command', async () => {
+    renderArchive();
+    await screen.findAllByText('Peony');
 
-    fireEvent.click(screen.getByText('Peony'));
-    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
-    fireEvent.change(amountInput, { target: { value: '5' } });
-    fireEvent.click(screen.getByRole('button', { name: /^生成溯源码$/ }));
+    expect(screen.getByRole('list', { name: '产品档案列表' })).toBeTruthy();
+    expect(screen.getByRole('listitem', { name: '产品档案 BATCH-001' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '配置溯源标签 BATCH-001' })).toHaveLength(2);
+    expect(screen.getAllByText('7')).not.toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /打印追溯标签/ })).toBeNull();
+    expect(generateCodesMock).not.toHaveBeenCalled();
+  });
+
+  it('opens the shared workspace and confirms before generating one code', async () => {
+    renderArchive();
+    await screen.findAllByText('Peony');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '配置溯源标签 BATCH-001' })[0]);
+    expect(screen.getByRole('dialog', { name: '溯源码标签配置' })).toBeTruthy();
+    expect(screen.getByText('东区一号田')).toBeTruthy();
+    expect(screen.getByText('本次申请 1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '生成真实溯源码' }));
+    expect(generateCodesMock).not.toHaveBeenCalled();
+
+    const confirmation = await screen.findByRole('dialog', { name: '批量生成并导出溯源标签矩阵' });
+    fireEvent.click(within(confirmation).getByRole('button', { name: '确认生成' }));
 
     await waitFor(() => {
-      expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 5, expect.any(String));
+      expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 1, expect.any(String));
     });
-    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledWith('merchant-side-panel', 'batch-1', 5);
-    expect(listBatchesMock).toHaveBeenCalledTimes(2);
+    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledWith('product-archive-label', 'batch-1', 1);
+    expect(await screen.findByRole('dialog', { name: '标签打印预览' })).toBeTruthy();
   });
 
-  it('reuses the same request key when side panel generation is retried after failure', async () => {
+  it('reuses the product-archive request key after a failed confirmed generation', async () => {
     generateCodesMock
       .mockRejectedValueOnce(new Error('confirm down'))
       .mockResolvedValueOnce([{ code: 'TRACE-001' }]);
-    render(<MerchantAdmin />);
-    await screen.findByText('Peony');
+    renderArchive();
+    await screen.findAllByText('Peony');
 
-    fireEvent.click(screen.getByText('Peony'));
-    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
-    fireEvent.change(amountInput, { target: { value: '5' } });
-    const generateButton = screen.getByRole('button', { name: /^生成溯源码$/ });
+    fireEvent.click(screen.getAllByRole('button', { name: '配置溯源标签 BATCH-001' })[0]);
+    const generateButton = screen.getByRole('button', { name: '生成真实溯源码' });
+
     fireEvent.click(generateButton);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '批量生成并导出溯源标签矩阵' })).getByRole('button', { name: '确认生成' }));
     await waitFor(() => expect(generateCodesMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((generateButton as HTMLButtonElement).disabled).toBe(false));
 
     fireEvent.click(generateButton);
+    fireEvent.click(within(await screen.findByRole('dialog', { name: '批量生成并导出溯源标签矩阵' })).getByRole('button', { name: '确认生成' }));
     await waitFor(() => expect(generateCodesMock).toHaveBeenCalledTimes(2));
 
     expect(generateCodesMock.mock.calls[1][2]).toBe(generateCodesMock.mock.calls[0][2]);
     expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows existing code count and blocks invalid generation amounts', async () => {
-    listBatchesMock.mockResolvedValue([{ ...batch, codeCount: 7 }]);
-    const { container } = render(<MerchantAdmin />);
-    await screen.findByText('Peony');
-
-    expect(container.textContent).toContain('7');
-    fireEvent.click(screen.getByText('Peony'));
-    const amountInput = screen.getByRole('spinbutton', { name: /本次生成溯源码数量/ });
-    fireEvent.change(amountInput, { target: { value: '1.5' } });
-    fireEvent.click(screen.getByRole('button', { name: /^生成溯源码$/ }));
-
-    expect(generateCodesMock).not.toHaveBeenCalled();
-    expect(createTraceGenerationRequestKeyMock).not.toHaveBeenCalled();
-  });
-
-  it('keeps unavailable batch capabilities out of the primary action cluster', async () => {
-    const { container } = render(<MerchantAdmin />);
-    await screen.findByText('Peony');
-    fireEvent.click(screen.getByText('Peony'));
-
-    expect(container.textContent).not.toContain('pending backend integration');
-    expect(screen.queryByRole('button', { name: /出入库单未开放/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Lifecycle trace archive unavailable' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /发货流向绑定未开通/ })).toBeNull();
-    expect(screen.getAllByText('批次状态流转、发货流向、出入库单和完整追溯档案请在批次管理中处理。')[0]).toBeTruthy();
-  });
-
-  it('prints trace labels without unsupported certification or cryptographic claims', async () => {
-    const { container } = render(<MerchantAdmin />);
-    await screen.findByText('Peony');
-
-    fireEvent.click(screen.getByText('Peony'));
-    fireEvent.click(screen.getByRole('button', { name: /打印追溯标签/ }));
-
-    await screen.findByRole('dialog', { name: '溯源码标签打印预览' });
-
-    expect(createTraceGenerationRequestKeyMock).toHaveBeenCalledWith('merchant-print', 'batch-1', 1);
-    expect(generateCodesMock).toHaveBeenCalledWith('batch-1', 1, expect.any(String));
-    expect(container.textContent).toContain('TRACE-001');
-    expect(container.textContent).toContain('扫码查看该批次已登记的溯源信息');
-    expect(container.textContent).not.toContain('权威质检');
-    expect(container.textContent).not.toContain('PASSED');
-    expect(container.textContent).not.toContain('zero-knowledge');
-    expect(container.textContent).not.toContain('OAUTH');
-    expect(container.textContent).not.toContain('地理标志');
-    expect(container.textContent).not.toContain('源头温室棚室标识');
-    expect(container.textContent).not.toContain('花卉品种品系级别');
   });
 });
