@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
-import { Permission, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
+import { Permission, Role, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
+import { useAuth } from '../auth/auth-context';
 import { useApi } from '../hooks/useApi';
 import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { createUserGroup, deleteUserGroup, listUserGroups, updateUserGroup } from '../api/user-group';
@@ -30,6 +31,8 @@ function knownPermissions(permissions: string[]): PermissionValue[] {
 }
 
 export default function UserGroups() {
+  const { user } = useAuth();
+  const canManageGroups = user?.role === Role.SYSTEM_ADMIN;
   const { data, loading, error, reload } = useApi(listUserGroups, { cacheKey: 'user-groups' });
   const [edit, setEdit] = useState<EditState | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,8 +40,13 @@ export default function UserGroups() {
 
   const groups = data ?? [];
 
-  const openCreate = () => { setErr(null); setEdit({ ...EMPTY }); };
+  const openCreate = () => {
+    if (!canManageGroups) return;
+    setErr(null);
+    setEdit({ ...EMPTY });
+  };
   const openEdit = (g: UserGroupView) => {
+    if (!canManageGroups) return;
     setErr(null);
     setEdit({
       id: g.id,
@@ -58,7 +66,7 @@ export default function UserGroups() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!edit) return;
+    if (!canManageGroups || !edit) return;
     setSubmitting(true); setErr(null);
     const dto: UserGroupInput = { name: edit.name.trim(), isDefault: edit.isDefault, permissions: edit.permissions };
     try {
@@ -72,6 +80,7 @@ export default function UserGroups() {
   };
 
   const onDelete = async (g: UserGroupView) => {
+    if (!canManageGroups) return;
     if (!(await confirmDialog({ title: '删除用户组', message: `确认删除用户组「${g.name}」？如果仍有关联用户，后端可能拒绝删除。`, confirmLabel: '删除', tone: 'danger' }))) return;
     try {
       await deleteUserGroup(g.id);
@@ -93,10 +102,18 @@ export default function UserGroups() {
             微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入: 创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。
           </p>
         </div>
-        <button type="button" onClick={openCreate} className={fluentButton('primary')}>
-          <Plus className="h-4 w-4" /> 新建用户组
-        </button>
+        {canManageGroups && (
+          <button type="button" onClick={openCreate} className={fluentButton('primary')}>
+            <Plus className="h-4 w-4" /> 新建用户组
+          </button>
+        )}
       </header>
+
+      {!canManageGroups && (
+        <div role="note" className="border border-[#C8C6C4] bg-[#F5F5F5] px-4 py-3 text-sm text-[#605E5C]">
+          代理管理员可查看用户组配置；新建、编辑和删除由系统管理员负责。
+        </div>
+      )}
 
       {loading && <div className="border border-[#E1DFDD] bg-white p-8 text-center text-sm text-[#605E5C]">加载中...</div>}
       {error && (
@@ -119,7 +136,7 @@ export default function UserGroups() {
                   <th className={fluentTable.th}>名称</th>
                   <th className={fluentTable.th}>默认组</th>
                   <th className={fluentTable.th}>接口权限</th>
-                  <th className={`${fluentTable.th} text-right`}>操作</th>
+                  {canManageGroups && <th className={`${fluentTable.th} text-right`}>操作</th>}
                 </tr>
               </thead>
               <tbody>
@@ -132,14 +149,16 @@ export default function UserGroups() {
                         {g.isDefault ? <span className={fluentStatusTag('active')}>是</span> : <span className="text-[#605E5C]">-</span>}
                       </td>
                       <td className={`${fluentTable.td} text-[#605E5C]`}>{knownCount ? `${knownCount} 项` : '未配置'}</td>
-                      <td className={`${fluentTable.td} text-right`}>
-                        <div className="inline-flex gap-2">
-                          <button type="button" onClick={() => openEdit(g)} aria-label={`编辑 ${g.name}`} className={fluentButton('subtle')}>编辑</button>
-                          <button type="button" onClick={() => void onDelete(g)} aria-label={`删除 ${g.name}`} className={fluentButton('danger')}>
-                            <Trash2 className="h-4 w-4" /> 删除
-                          </button>
-                        </div>
-                      </td>
+                      {canManageGroups && (
+                        <td className={`${fluentTable.td} text-right`}>
+                          <div className="inline-flex gap-2">
+                            <button type="button" onClick={() => openEdit(g)} aria-label={`编辑 ${g.name}`} className={fluentButton('subtle')}>编辑</button>
+                            <button type="button" onClick={() => void onDelete(g)} aria-label={`删除 ${g.name}`} className={fluentButton('danger')}>
+                              <Trash2 className="h-4 w-4" /> 删除
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

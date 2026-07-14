@@ -6,6 +6,21 @@ const listUserGroupsMock = vi.fn();
 const createUserGroupMock = vi.fn();
 const updateUserGroupMock = vi.fn();
 const deleteUserGroupMock = vi.fn();
+const authMock = vi.hoisted(() => ({
+  role: 'system_admin' as 'system_admin' | 'agent_admin',
+}));
+
+vi.mock('../auth/auth-context', () => ({
+  useAuth: () => ({
+    user: {
+      userId: 'user-1',
+      tenantId: 'tenant-1',
+      role: authMock.role,
+      agentId: authMock.role === 'agent_admin' ? 'agent-1' : null,
+      ownerId: null,
+    },
+  }),
+}));
 
 vi.mock('../api/user-group', () => ({
   listUserGroups: () => listUserGroupsMock(),
@@ -31,6 +46,7 @@ const groups: UserGroupView[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authMock.role = 'system_admin';
   listUserGroupsMock.mockResolvedValue(groups);
   createUserGroupMock.mockResolvedValue(groups[0]);
   updateUserGroupMock.mockResolvedValue(groups[0]);
@@ -48,6 +64,22 @@ describe('UserGroups permission enforcement wording', () => {
     expect(screen.getByText(/管理员与未接入接口仍按角色与业务范围鉴权/)).toBeTruthy();
     expect(screen.queryByText(/当前系统仍以角色作为接口鉴权依据/)).toBeNull();
     expect(screen.queryByText(/暂不参与接口放行/)).toBeNull();
+  });
+
+  it('renders agent administrators as read-only without mutation controls', async () => {
+    authMock.role = 'agent_admin';
+    renderWithDialog();
+
+    await screen.findByText('记录员');
+
+    expect(screen.getByText('代理管理员可查看用户组配置；新建、编辑和删除由系统管理员负责。')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /新建用户组/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '编辑 记录员' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '删除 记录员' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: '操作' })).toBeNull();
+    expect(createUserGroupMock).not.toHaveBeenCalled();
+    expect(updateUserGroupMock).not.toHaveBeenCalled();
+    expect(deleteUserGroupMock).not.toHaveBeenCalled();
   });
 
   it('saves selected permissions used by connected interfaces', async () => {
