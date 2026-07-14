@@ -23,12 +23,10 @@ import { confirmUnsavedNavigation } from './ui/unsaved-changes';
 import AppErrorBoundary from './ui/AppErrorBoundary';
 import { useAppLocation } from './useAppLocation';
 import { useDrawerFocus } from './ui/useDrawerFocus';
-
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
 const PayResult = lazy(() => import('./components/PayResult'));
 const ProfileSettings = lazy(() => import('./components/ProfileSettings'));
-
 const ViewSkeleton = () => (
   <div role="status" aria-label="正在恢复会话" className="h-full w-full animate-pulse bg-white p-5">
     <div className="mb-5 h-7 w-64 rounded-[4px] bg-[#EDEBE9]" />
@@ -45,7 +43,6 @@ const ViewSkeleton = () => (
     </div>
   </div>
 );
-
 export default function App() {
   const { user, profile, isAuthenticated, isReady, logout } = useAuth();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
