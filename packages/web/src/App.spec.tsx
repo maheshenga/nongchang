@@ -128,6 +128,18 @@ describe('App role wiring', () => {
     expect(screen.queryByText('Tenant Management View')).toBeNull();
   });
 
+  it('keeps only the breadcrumb outside the workspace and updates page identity', async () => {
+    authMock.role = 'merchant';
+
+    render(<App />);
+
+    expect(await screen.findByText('Production Overview View merchant_admin')).toBeTruthy();
+    expect(screen.getByText('首页 / 生产总览')).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 2, name: '生产总览' })).toBeNull();
+    expect(screen.queryByText('商户工作台账户')).toBeNull();
+    await waitFor(() => expect(document.title).toBe('生产总览 - 农场溯源管理'));
+  });
+
   it('routes public trace lookup through the encoded hash route', async () => {
     authMock.isAuthenticated = false;
     render(<App />);
@@ -282,7 +294,9 @@ describe('App role wiring', () => {
     fireEvent.click(await screen.findByRole('option', { name: /打开 商户管理与档案/ }));
 
     expect(await screen.findByText('Merchant Management View')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '商户管理与档案' })).toBeTruthy();
+    expect(screen.getByText('首页 / 商户管理与档案')).toBeTruthy();
+    expect(screen.queryByRole('heading', { level: 2, name: '商户管理与档案' })).toBeNull();
+    await waitFor(() => expect(document.title).toBe('商户管理与档案 - 农场溯源管理'));
   });
 
   it('keeps batch navigation reachable from the shell', async () => {
@@ -308,7 +322,7 @@ describe('App role wiring', () => {
     authMock.role = 'system_admin';
     render(<App />);
 
-    const category = await screen.findByRole('button', { name: '系统' });
+    const category = await screen.findByRole('button', { name: '智能与计费' });
     expect(category.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('button', { name: /AI 助手/ })).toBeTruthy();
 
@@ -322,13 +336,13 @@ describe('App role wiring', () => {
     authMock.role = 'system_admin';
     const first = render(<App />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '平台组织管理' }));
+    fireEvent.click(await screen.findByRole('button', { name: '组织管理' }));
     expect(screen.queryByRole('button', { name: /代理商管理/ })).toBeNull();
     first.unmount();
 
     render(<App />);
 
-    const restored = await screen.findByRole('button', { name: '平台组织管理' });
+    const restored = await screen.findByRole('button', { name: '组织管理' });
     expect(restored.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByRole('button', { name: /代理商管理/ })).toBeNull();
   });
@@ -416,7 +430,7 @@ describe('App role wiring', () => {
     authMock.role = 'system_admin';
     render(<App />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '系统' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置与合规' }));
 
     expect(window.localStorage.getItem('nongchang:navigation-open:v1:mock-tenant:mock-user:system_admin')).not.toBeNull();
   });

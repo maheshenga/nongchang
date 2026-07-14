@@ -66,12 +66,14 @@ export default function App() {
   const [openNavigationCategories, setOpenNavigationCategories] = useState<Set<string>>(() =>
     safeReadNavigationPreference(navigationStorage, navigationStorageKey, navigationCategories),
   );
+  const roleInfo = roleDisplay(systemRole);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
+  const activeItem = flatNavItems.find(item => item.id === activeTab);
+  const activePageLabel = activeItem ? navLabel(activeItem.id, activeItem.label) : roleInfo.title;
   const searchItems = useMemo(
     () => flatNavItems.map(item => ({ id: item.id, label: navLabel(item.id, item.label), icon: item.icon })),
     [flatNavItems],
   );
-  const roleInfo = roleDisplay(systemRole);
   const allowedTabs = useMemo(() => flatNavItems.map(item => item.id), [flatNavItems]);
   const mountedTabs = useMemo(() => new Set(retainedTabs), [retainedTabs]);
   const { clearAuthenticatedRoute, pushWorkspaceTab, replaceWorkspaceTab } = useAppLocation({
@@ -98,6 +100,12 @@ export default function App() {
   useEffect(() => {
     setOpenNavigationCategories(safeReadNavigationPreference(navigationStorage, navigationStorageKey, navigationCategories));
   }, [navigationStorage, navigationStorageKey, navigationCategories]);
+
+  useEffect(() => {
+    document.title = isAuthenticated
+      ? `${activePageLabel} - 农场溯源管理`
+      : '农场溯源管理';
+  }, [activePageLabel, isAuthenticated]);
 
   const toggleNavigationGroup = (category: string) => {
     setOpenNavigationCategories(previous => {
@@ -173,7 +181,6 @@ export default function App() {
     );
   }
 
-  const activeItem = flatNavItems.find(i => i.id === activeTab);
   const renderNavSections = (mobile = false) => navItems.map((category, categoryIndex) => {
     const open = openNavigationCategories.has(category.category);
     const sectionId = `${mobile ? 'mobile' : 'desktop'}-navigation-group-${categoryIndex}`;
@@ -301,10 +308,8 @@ export default function App() {
         )}
 
         {!isPresentationMode && (
-          <div className="border-b border-[#E1DFDD] bg-white px-4 py-3 md:px-6">
+          <div className="border-b border-[#E1DFDD] bg-white px-4 py-2 md:px-6">
             <div className="text-xs text-[#605E5C]">首页 / {activeItem ? navLabel(activeItem.id, activeItem.label) : '工作台'}</div>
-            <h2 className="mt-1 text-xl font-semibold text-[#242424]">{activeItem ? navLabel(activeItem.id, activeItem.label) : roleInfo.title}</h2>
-            <div className="mt-1 text-xs text-[#605E5C]">{roleInfo.subtitle}</div>
           </div>
         )}
 

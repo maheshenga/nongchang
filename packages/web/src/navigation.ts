@@ -58,7 +58,7 @@ const PLATFORM_ADMIN_NAV: NavCategory[] = [
 
 const SYSTEM_ADMIN_NAV: NavCategory[] = [
   {
-    category: '生产与供应链',
+    category: '生产管理',
     items: [
       { id: 'overview', label: '生产总览', icon: LayoutDashboard },
       { id: 'fields', label: '数字地块', icon: Map },
@@ -69,22 +69,27 @@ const SYSTEM_ADMIN_NAV: NavCategory[] = [
     ],
   },
   {
-    category: '平台组织管理',
+    category: '组织管理',
     items: [
       { id: 'agents', label: '代理商管理', icon: Users },
       { id: 'merchantFiles', label: '商户管理与档案', icon: Store },
+      { id: 'userGroups', label: '用户分组', icon: UserCog },
+      { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
     ],
   },
   {
-    category: '系统',
+    category: '智能与计费',
     items: [
       { id: 'aiAssistant', label: 'AI 助手', icon: Sparkles },
       { id: 'aiProviders', label: 'AI 服务商', icon: Sparkles },
       { id: 'billing', label: '算力与额度', icon: Wallet },
+    ],
+  },
+  {
+    category: '配置与合规',
+    items: [
       { id: 'aiOssSettings', label: 'AI 与存储设置', icon: SettingsIcon },
       { id: 'integrations', label: '第三方集成', icon: Plug },
-      { id: 'userGroups', label: '用户分组', icon: UserCog },
-      { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
       { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
       { id: 'legalSettings', label: '法律与协议', icon: FileText },
       { id: 'settings', label: '本地偏好', icon: SettingsIcon },

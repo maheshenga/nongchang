@@ -11,7 +11,7 @@ async function expectNoDocumentOverflow(page: Page, label: string) {
 test('collapsed navigation category persists after reload', async ({ page }) => {
   await loginByApi(page, 'sysadmin');
 
-  const category = page.getByRole('button', { name: '系统', exact: true });
+  const category = page.getByRole('button', { name: '智能与计费', exact: true });
   await expect(category).toHaveAttribute('aria-expanded', 'true');
   await category.click();
   await expect(category).toHaveAttribute('aria-expanded', 'false');
@@ -19,7 +19,7 @@ test('collapsed navigation category persists after reload', async ({ page }) => 
 
   await page.reload();
   await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '系统', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: '智能与计费', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByRole('button', { name: 'AI 助手', exact: true })).toHaveCount(0);
 });
 

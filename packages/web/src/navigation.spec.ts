@@ -19,6 +19,24 @@ const idsFor = (role: SystemRole) =>
   flattenNavItems(getNavItems(role)).map((item) => item.id);
 
 describe('production navigation', () => {
+  it('groups every system-admin route once into four operator-focused categories', () => {
+    const categories = getNavItems('system_admin');
+
+    expect(categories.map((category) => category.category)).toEqual([
+      '生产管理',
+      '组织管理',
+      '智能与计费',
+      '配置与合规',
+    ]);
+    expect(categories.map((category) => category.items.map((item) => item.id))).toEqual([
+      ['overview', 'fields', 'records', 'phenology', 'batches', 'logistics'],
+      ['agents', 'merchantFiles', 'userGroups', 'pendingUsers'],
+      ['aiAssistant', 'aiProviders', 'billing'],
+      ['aiOssSettings', 'integrations', 'quickTemplates', 'legalSettings', 'settings'],
+    ]);
+    expect(idsFor('system_admin')).toHaveLength(new Set(idsFor('system_admin')).size);
+  });
+
   it('exposes supply management to merchants', () => {
     expect(idsFor('merchant_admin')).toContain('logistics');
   });

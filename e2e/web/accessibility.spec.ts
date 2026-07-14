@@ -102,7 +102,7 @@ test.describe('@a11y accessibility', () => {
 
   test('P2 Web expanded and collapsed navigation have no serious accessibility violations', async ({ page }) => {
     await loginByApi(page, 'sysadmin');
-    const category = page.getByRole('button', { name: '系统', exact: true });
+    const category = page.getByRole('button', { name: '配置与合规', exact: true });
 
     await expect(category).toHaveAttribute('aria-expanded', 'true');
     await expectNoSeriousViolations(page);
