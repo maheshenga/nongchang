@@ -38,6 +38,7 @@ import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage'
 import { OperationsModule } from './modules/operations/operations.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { LegalModule } from './modules/legal/legal.module';
+import { AccountLifecycleModule } from './modules/account-lifecycle/account-lifecycle.module';
 
 @Module({
   imports: [
@@ -89,6 +90,7 @@ import { LegalModule } from './modules/legal/legal.module';
     HealthModule,
     OperationsModule,
     LegalModule,
+    AccountLifecycleModule,
   ],
   providers: [
     ScopeService,
