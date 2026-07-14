@@ -7,6 +7,12 @@ let routerParams: Record<string, string> = {};
 export const request = vi.fn();
 export const login = vi.fn();
 export const uploadFile = vi.fn();
+export const downloadFile = vi.fn();
+export const saveFile = vi.fn();
+export const shareFileMessage = vi.fn();
+const fileSystemManager = { readFileSync: vi.fn() };
+export const getFileSystemManager = vi.fn(() => fileSystemManager);
+export const env = { USER_DATA_PATH: '/user-data' };
 export const redirectTo = vi.fn();
 export const navigateTo = vi.fn();
 export const switchTab = vi.fn();
@@ -60,6 +66,7 @@ export function __setRouterParams(params: Record<string, string>): void {
 export function __resetTaro(): void {
   storage.clear();
   routerParams = {};
+  fileSystemManager.readFileSync.mockClear();
   Object.values(taro).forEach((value) => {
     if (typeof value === 'function' && 'mockClear' in value) {
       (value as ReturnType<typeof vi.fn>).mockClear();
@@ -71,6 +78,11 @@ const taro = {
   request,
   login,
   uploadFile,
+  downloadFile,
+  saveFile,
+  shareFileMessage,
+  getFileSystemManager,
+  env,
   redirectTo,
   navigateTo,
   switchTab,

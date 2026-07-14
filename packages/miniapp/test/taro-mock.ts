@@ -5,11 +5,17 @@ const store = new Map<string, unknown>();
 const getStorageImpl = (k: string) => store.get(k) ?? '';
 const setStorageImpl = (k: string, v: unknown) => void store.set(k, v);
 const removeStorageImpl = (k: string) => void store.delete(k);
+const fileSystemManager = { readFileSync: vi.fn() };
 
 export const taroMock = {
   request: vi.fn(),
   login: vi.fn(),
   uploadFile: vi.fn(),
+  downloadFile: vi.fn(),
+  saveFile: vi.fn(),
+  shareFileMessage: vi.fn(),
+  getFileSystemManager: vi.fn(() => fileSystemManager),
+  env: { USER_DATA_PATH: '/user-data' },
   redirectTo: vi.fn(),
   navigateTo: vi.fn(),
   switchTab: vi.fn(),
@@ -37,6 +43,7 @@ export const taroMock = {
   removeStorageSync: vi.fn(removeStorageImpl),
   __reset() {
     store.clear();
+    fileSystemManager.readFileSync.mockReset();
     Object.values(this).forEach((f) => {
       if (typeof f === 'function' && 'mockReset' in f) (f as any).mockReset();
     });
@@ -44,6 +51,7 @@ export const taroMock = {
     this.getStorageSync.mockImplementation(getStorageImpl);
     this.setStorageSync.mockImplementation(setStorageImpl);
     this.removeStorageSync.mockImplementation(removeStorageImpl);
+    this.getFileSystemManager.mockReturnValue(fileSystemManager);
   },
 };
 

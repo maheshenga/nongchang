@@ -3,6 +3,8 @@ export default {
     'pages/login/index',
     'pages/register/index',
     'pages/legal/index',
+    'pages/account-data/index',
+    'pages/close-account/index',
     'pages/work/index',
     'pages/trace/index',
     'pages/me/index',

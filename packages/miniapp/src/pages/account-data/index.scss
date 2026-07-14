@@ -1,0 +1,128 @@
+@use '../../styles/theme.scss' as *;
+
+.account-data {
+  min-height: 100vh;
+  padding: 28px 28px 56px;
+  background: $c-bg;
+  box-sizing: border-box;
+
+  &__identity,
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 26px;
+    @include card;
+    color: $c-text-sub;
+    font-size: 23px;
+    line-height: 1.55;
+  }
+
+  &__title {
+    color: $c-text;
+    font-size: 38px;
+    font-weight: bold;
+  }
+
+  &__counts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 22px;
+  }
+
+  &__count {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 8px;
+    @include card;
+  }
+
+  &__count-value {
+    color: $c-primary;
+    font-size: 34px;
+    font-weight: bold;
+  }
+
+  &__count-label,
+  &__group-title {
+    color: $c-text-sub;
+    font-size: 22px;
+  }
+
+  &__section {
+    margin-top: 22px;
+  }
+
+  &__section-title {
+    color: $c-text;
+    font-size: 28px;
+    font-weight: bold;
+  }
+
+  &__group {
+    padding: 14px 0;
+    border-top: 1px solid $c-border;
+  }
+
+  &__group-title {
+    display: block;
+    font-weight: bold;
+  }
+
+  &__record,
+  &__empty,
+  &__exclusion {
+    display: block;
+    margin-top: 8px;
+    color: $c-text;
+    font-size: 23px;
+    line-height: 1.55;
+  }
+
+  &__empty {
+    color: $c-text-sub;
+  }
+
+  &__export,
+  &__share,
+  &__retry {
+    margin-top: 22px;
+    border-radius: 16px;
+    background: $c-primary;
+    color: #fff;
+  }
+
+  &__share,
+  &__retry {
+    border: 1px solid $c-primary;
+    background: #fff;
+    color: $c-primary;
+  }
+
+  &__export-error {
+    display: block;
+    margin-top: 22px;
+    padding: 18px;
+    border-radius: 14px;
+    background: #fff1f2;
+    color: $c-rose;
+    font-size: 23px;
+    line-height: 1.55;
+  }
+
+  &__state {
+    margin: 48px 28px;
+    padding: 26px;
+    border-radius: 16px;
+    background: $c-soft;
+    color: $c-text-sub;
+    font-size: 26px;
+
+    &--error {
+      background: #fff1f2;
+      color: $c-rose;
+    }
+  }
+}

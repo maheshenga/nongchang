@@ -144,6 +144,11 @@
     &--reserved {
       opacity: 0.7;
     }
+
+    &--danger .me__item-text,
+    &--danger .me__item-arrow {
+      color: $c-rose;
+    }
   }
 
   &__item-text {

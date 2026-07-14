@@ -136,6 +136,43 @@ export async function uploadMultipart(url: string, filePath: string, header: Rec
   return { statusCode: res.statusCode, data: res.data };
 }
 
+async function downloadWithToken(url: string, token: string) {
+  return Taro.downloadFile({
+    url: `${BASE_URL}${url}`,
+    timeout: TIMEOUT,
+    header: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+}
+
+function readDownloadError(result: { statusCode: number; tempFilePath: string }): string {
+  try {
+    const content = Taro.getFileSystemManager().readFileSync(result.tempFilePath, 'utf8');
+    const parsed = JSON.parse(String(content)) as { message?: unknown };
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.map(String).join(',');
+    }
+    if (typeof parsed.message === 'string' && parsed.message) return parsed.message;
+  } catch {
+    // Fall through to a stable status-based message when the error file is unreadable.
+  }
+  return `数据导出失败(${result.statusCode})`;
+}
+
+export async function downloadAuthenticated(url: string): Promise<string> {
+  let token = await getUsableAccessToken();
+  let result = await downloadWithToken(url, token);
+  if (result.statusCode === 401) {
+    if (!getRefreshToken()) expireSession();
+    token = await refreshAccessToken();
+    result = await downloadWithToken(url, token);
+    if (result.statusCode === 401) expireSession();
+  }
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    throw new RequestError(result.statusCode, readDownloadError(result));
+  }
+  return result.tempFilePath;
+}
+
 // 单文件上传(multipart),走 Taro.uploadFile 而非 request
 export type UploadPurpose = 'farm-record' | 'credential' | 'ai-diagnose';
 

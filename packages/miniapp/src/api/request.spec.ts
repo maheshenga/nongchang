@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import taro from '@tarojs/taro';
-import { request, uploadFile } from './request';
+import { downloadAuthenticated, request, uploadFile } from './request';
 import { getRefreshToken, getToken, setToken, setTokens } from '../store/auth';
 
 function makeJwt(payload: Record<string, unknown>): string {
@@ -201,5 +201,62 @@ describe('api/request', () => {
     expect(taro.redirectTo).toHaveBeenCalledWith({ url: '/pages/login/index' });
     expect(getToken()).toBe('');
     expect(getRefreshToken()).toBe('');
+  });
+
+  it('refreshes an expired access token before downloading account data', async () => {
+    setTokens({ accessToken: makeJwt({ exp: 1 }), refreshToken: 'refresh-download-1' });
+    const freshAccess = makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+    (taro.request as any).mockResolvedValueOnce({
+      statusCode: 200,
+      data: { accessToken: freshAccess, refreshToken: 'refresh-download-2' },
+    });
+    (taro.downloadFile as any).mockResolvedValueOnce({
+      statusCode: 200,
+      tempFilePath: '/tmp/account-data.json',
+    });
+
+    await expect(downloadAuthenticated('/auth/me/data/export'))
+      .resolves.toBe('/tmp/account-data.json');
+    expect((taro.downloadFile as any).mock.calls[0][0]).toMatchObject({
+      url: expect.stringMatching(/\/auth\/me\/data\/export$/),
+      header: { Authorization: `Bearer ${freshAccess}` },
+    });
+  });
+
+  it('refreshes and retries once when an authenticated download returns 401', async () => {
+    setTokens({
+      accessToken: makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+      refreshToken: 'refresh-download-3',
+    });
+    const freshAccess = makeJwt({ exp: Math.floor(Date.now() / 1000) + 7200 });
+    (taro.downloadFile as any)
+      .mockResolvedValueOnce({ statusCode: 401, tempFilePath: '/tmp/unauthorized.json' })
+      .mockResolvedValueOnce({ statusCode: 200, tempFilePath: '/tmp/account-data.json' });
+    (taro.request as any).mockResolvedValueOnce({
+      statusCode: 200,
+      data: { accessToken: freshAccess, refreshToken: 'refresh-download-4' },
+    });
+
+    await expect(downloadAuthenticated('/auth/me/data/export'))
+      .resolves.toBe('/tmp/account-data.json');
+    expect(taro.downloadFile).toHaveBeenCalledTimes(2);
+    expect((taro.downloadFile as any).mock.calls[1][0].header.Authorization)
+      .toBe(`Bearer ${freshAccess}`);
+  });
+
+  it('extracts a 413 Nest message from the downloaded temporary JSON file', async () => {
+    setToken(makeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }));
+    (taro.downloadFile as any).mockResolvedValueOnce({
+      statusCode: 413,
+      tempFilePath: '/tmp/export-error.json',
+    });
+    const files = taro.getFileSystemManager() as any;
+    files.readFileSync.mockReturnValue(JSON.stringify({
+      message: ['地块数据超过单次导出限制', '请联系隐私负责人'],
+    }));
+
+    await expect(downloadAuthenticated('/auth/me/data/export'))
+      .rejects.toThrow('地块数据超过单次导出限制,请联系隐私负责人');
+    expect(files.readFileSync).toHaveBeenCalledWith('/tmp/export-error.json', 'utf8');
   });
 });

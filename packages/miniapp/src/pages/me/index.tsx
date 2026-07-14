@@ -1,23 +1,35 @@
 import { useState } from 'react';
 import { View, Text, Input, Button } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
+import type { PublicLegalQuery } from '@nongchang/shared';
 import { getToken, clearToken } from '../../store/auth';
 import { request } from '../../api/request';
 import { getMe, updateMe, changePassword } from '../../api/auth';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
-import { SUPPORT_CONTACT } from '../../config/env';
+import { SUPPORT_CONTACT, WX_APPID } from '../../config/env';
 import { buildSupportMessage } from '../../utils/support';
+import { buildLegalDocumentUrl } from '../../components/LegalConsent/model';
 import MeFieldSection from './MeFieldSection';
+import MeLegalAccountSection from './MeLegalAccountSection';
 import MeProfileHeader from './MeProfileHeader';
+import MeStatsSection from './MeStatsSection';
 import './index.scss';
+
+const LEGAL_LOOKUP: PublicLegalQuery | null = WX_APPID ? { appId: WX_APPID } : null;
+const openAccountData = () => Taro.navigateTo({ url: '/pages/account-data/index' });
+const openAccountClosure = () => Taro.navigateTo({ url: '/pages/close-account/index' });
+const openLegal = (kind: 'privacy' | 'agreement') => {
+  if (LEGAL_LOOKUP) Taro.navigateTo({ url: buildLegalDocumentUrl(kind, LEGAL_LOOKUP) });
+};
 
 export default function Me() {
   const [username, setUsername] = useState('账户加载中');
   const [displayName, setDisplayName] = useState('');
   const [phone, setPhone] = useState<string>('');
   const [role, setRole] = useState('身份加载中');
+  const [roleCode, setRoleCode] = useState<string | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [monthCount, setMonthCount] = useState<number | null>(null);
@@ -25,13 +37,11 @@ export default function Me() {
   const [fieldCount, setFieldCount] = useState<number | null>(null);
   const [fields, setFields] = useState<Field[] | null>(null);
 
-  // 编辑资料面板
   const [editing, setEditing] = useState(false);
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // 修改密码面板
   const [pwdPanel, setPwdPanel] = useState(false);
   const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -47,11 +57,11 @@ export default function Me() {
     const p = decodeToken(token);
     if (p?.username) setUsername(p.username);
     setRole(roleLabel(p?.role));
+    setRoleCode(p?.role ?? null);
     void loadProfile();
     void loadStats();
   });
 
-  // 从 /auth/me 拉真实资料(displayName/phone 以服务端为准)
   async function loadProfile() {
     setProfileLoading(true);
     setProfileError(null);
@@ -61,6 +71,7 @@ export default function Me() {
       setDisplayName(me.displayName);
       setPhone(me.phone ?? '');
       setRole(roleLabel(me.role));
+      setRoleCode(me.role);
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : '账户资料加载失败');
     } finally {
@@ -79,8 +90,6 @@ export default function Me() {
     listBatches().then((bs) => setBatchCount(bs.length)).catch(() => setBatchCount(null));
     listFields().then((fs) => setFieldCount(fs.length)).catch(() => setFieldCount(null));
   }
-
-  const comingSoon = () => Taro.showToast({ title: '功能即将开放', icon: 'none' });
 
   async function toggleFields() {
     if (fields) { setFields(null); return; }
@@ -162,20 +171,7 @@ export default function Me() {
     <View className="me">
       <MeProfileHeader {...profileHeaderProps} onRetry={() => void loadProfile()} />
 
-      <View className="me__stats">
-        <View className="me__stat">
-          <Text className="me__stat-num">{monthCount ?? '—'}</Text>
-          <Text className="me__stat-label">本月记录</Text>
-        </View>
-        <View className="me__stat">
-          <Text className="me__stat-num">{batchCount ?? '—'}</Text>
-          <Text className="me__stat-label">在管批次</Text>
-        </View>
-        <View className="me__stat">
-          <Text className="me__stat-num">{fieldCount ?? '—'}</Text>
-          <Text className="me__stat-label">承包地块</Text>
-        </View>
-      </View>
+      <MeStatsSection monthCount={monthCount} batchCount={batchCount} fieldCount={fieldCount} />
 
       <View className="me__menu-section">
         <Text className="me__section-title">账号设置</Text>
@@ -187,11 +183,15 @@ export default function Me() {
           <Text className="me__item-text">修改登录密码</Text>
           <Text className="me__item-arrow">›</Text>
         </Button>
-        <Button className="nc-button-reset me__item me__item--reserved" onClick={comingSoon}>
-          <Text className="me__item-text">蓝牙传感设备配置</Text>
-          <Text className="me__item-badge">即将开放</Text>
-        </Button>
       </View>
+
+      <MeLegalAccountSection
+        roleCode={roleCode}
+        legalLookup={LEGAL_LOOKUP}
+        onOpenData={openAccountData}
+        onOpenLegal={openLegal}
+        onOpenClosure={openAccountClosure}
+      />
 
       <View className="me__menu-section">
         <Text className="me__section-title">农场服务</Text>

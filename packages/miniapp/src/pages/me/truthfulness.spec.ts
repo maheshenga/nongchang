@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), 'index.tsx');
 const source = readFileSync(sourcePath, 'utf8');
 const profileHeaderSource = readFileSync(join(dirname(sourcePath), 'MeProfileHeader.tsx'), 'utf8');
+const legalAccountSource = readFileSync(join(dirname(sourcePath), 'MeLegalAccountSection.tsx'), 'utf8');
 
 describe('Me page truthful copy', () => {
   it('uses traceability record copy instead of blockchain storage claims', () => {
@@ -19,5 +20,15 @@ describe('Me page truthful copy', () => {
     expect(source).toContain('buildSupportMessage(SUPPORT_CONTACT)');
     expect(source).toContain("Taro.switchTab({ url: '/pages/trace/index' })");
     expect(profileHeaderSource).toContain('重新加载账户');
+  });
+
+  it('offers real personal data and legal actions, with closure only for eligible roles', () => {
+    expect(legalAccountSource).toContain('我的数据');
+    expect(legalAccountSource).toContain('隐私政策');
+    expect(legalAccountSource).toContain('用户协议');
+    expect(legalAccountSource).toContain('注销账号');
+    expect(legalAccountSource).toContain('canSelfClose(roleCode)');
+    expect(source).not.toContain('蓝牙传感设备配置');
+    expect(source).not.toContain('comingSoon');
   });
 });

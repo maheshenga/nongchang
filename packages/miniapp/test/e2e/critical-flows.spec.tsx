@@ -19,6 +19,7 @@ import { getBillingSummary, listLedger } from '../../src/api/billing';
 import { request } from '../../src/api/request';
 import { listQuickTemplates } from '../../src/api/quickTemplate';
 import { listTraceEvents } from '../../src/api/trace';
+import { getPublicLegal } from '../../src/api/legal';
 import {
   __setRouterParams,
   getStorageSync,
@@ -72,6 +73,27 @@ vi.mock('../../src/api/trace', () => ({
   listTraceEvents: vi.fn(),
 }));
 
+vi.mock('../../src/api/legal', () => ({
+  getPublicLegal: vi.fn(),
+}));
+
+const legalPublication = {
+  configured: true as const,
+  tenantId: '11111111-1111-4111-8111-111111111111',
+  publicationId: '22222222-2222-4222-8222-222222222222',
+  operatorName: '示例农业科技有限公司',
+  contactAddress: '杭州市示例路 1 号',
+  privacyContact: '数据保护负责人',
+  contactPhone: '0571-12345678',
+  contactEmail: null,
+  privacyVersion: 'privacy-v1',
+  agreementVersion: 'agreement-v1',
+  effectiveDate: '2026-07-14',
+  privacyPolicyText: '隐私政策正文'.repeat(80),
+  userAgreementText: '用户协议正文'.repeat(80),
+  publishedAt: '2026-07-14T09:00:00.000Z',
+};
+
 vi.mock('../../src/components/RecordForm', async () => {
   const React = await import('react');
   return {
@@ -101,24 +123,28 @@ describe('miniapp critical rendered flows', () => {
     });
     vi.mocked(request).mockResolvedValue({ items: [] });
     vi.mocked(listQuickTemplates).mockResolvedValue([]);
+    vi.mocked(getPublicLegal).mockResolvedValue(legalPublication);
   });
 
   it('requires authorization for both login methods and locks WeChat while password login is pending', async () => {
     render(<Login />);
 
     expect(screen.getByRole('button', { name: /申请入驻/ })).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '安全登录' }));
-    fireEvent.click(screen.getByRole('button', { name: '微信一键登录' }));
-
+    const initialConsent = await screen.findByRole('checkbox');
+    expect((screen.getByRole('button', { name: '安全登录' }) as HTMLButtonElement).disabled)
+      .toBe(true);
+    expect((screen.getByRole('button', { name: '微信一键登录' }) as HTMLButtonElement).disabled)
+      .toBe(true);
     expect(login).not.toHaveBeenCalled();
     expect(loginWechat).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert').textContent).toContain('请先阅读并同意隐私与授权说明');
+    expect(initialConsent).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText('请输入机构编码'), { target: { value: ' acme ' } });
+    const tenantInput = screen.getByPlaceholderText('请输入机构编码');
+    fireEvent.change(tenantInput, { target: { value: ' acme ' } });
+    fireEvent.blur(tenantInput);
     fireEvent.change(screen.getByPlaceholderText('手机号 / 用户名'), { target: { value: ' admin ' } });
     fireEvent.change(screen.getByPlaceholderText('请输入服务密码'), { target: { value: ' secret ' } });
-    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('checkbox'));
 
     let resolveLogin!: () => void;
     vi.mocked(login).mockImplementation(() => new Promise<void>((resolve) => {
@@ -128,7 +154,9 @@ describe('miniapp critical rendered flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '安全登录' }));
 
     await waitFor(() => {
-      expect(login).toHaveBeenCalledWith('ACME', 'admin', 'secret');
+      expect(login).toHaveBeenCalledWith(
+        'ACME', 'admin', 'secret', legalPublication.publicationId,
+      );
       expect((screen.getByRole('button', { name: '微信一键登录' }) as HTMLButtonElement).disabled).toBe(true);
     });
 
@@ -271,6 +299,7 @@ describe('miniapp critical rendered flows', () => {
 
     render(<Register />);
     expect(screen.getByRole('button', { name: /已有账号.*返回登录/ })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('checkbox'));
     fireEvent.change(screen.getByPlaceholderText('请输入真实姓名或主体名称'), {
       target: { value: '青禾农场' },
     });
@@ -297,6 +326,7 @@ describe('miniapp critical rendered flows', () => {
         displayName: '张三',
         phone: '13800000000',
         status: 'active',
+        deletionVerification: 'password',
       });
     setStorageSync('access_token', 'test-token');
 

@@ -1,0 +1,106 @@
+@use '../../styles/theme.scss' as *;
+
+.close-account {
+  min-height: 100vh;
+  padding: 34px 28px 56px;
+  background: $c-bg;
+  box-sizing: border-box;
+
+  &__title {
+    display: block;
+    color: $c-rose;
+    font-size: 40px;
+    font-weight: bold;
+  }
+
+  &__warning {
+    display: block;
+    margin-top: 12px;
+    color: $c-text-sub;
+    font-size: 24px;
+  }
+
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 22px;
+    padding: 24px;
+    border-radius: 16px;
+    background: $c-soft;
+    color: $c-text;
+    font-size: 24px;
+    line-height: 1.65;
+
+    &--removed {
+      background: #fff1f2;
+    }
+  }
+
+  &__panel-title {
+    font-size: 28px;
+    font-weight: bold;
+  }
+
+  &__data,
+  &__retry {
+    margin-top: 22px;
+    border: 1px solid $c-primary;
+    border-radius: 16px;
+    background: #fff;
+    color: $c-primary;
+  }
+
+  &__label,
+  &__wechat {
+    display: block;
+    margin-top: 24px;
+    color: $c-text-sub;
+    font-size: 24px;
+  }
+
+  &__input {
+    margin-top: 10px;
+    padding: 22px 24px;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+    background: #fff;
+    color: $c-text;
+    font-size: 28px;
+  }
+
+  &__error {
+    display: block;
+    margin-top: 20px;
+    padding: 16px;
+    border-radius: 12px;
+    background: #fff1f2;
+    color: $c-rose;
+    font-size: 23px;
+  }
+
+  &__submit {
+    margin-top: 28px;
+    border-radius: 16px;
+    background: $c-rose;
+    color: #fff;
+
+    &[disabled] {
+      opacity: 0.55;
+    }
+  }
+
+  &__state {
+    margin: 48px 28px;
+    padding: 26px;
+    border-radius: 16px;
+    background: $c-soft;
+    color: $c-text-sub;
+    font-size: 26px;
+
+    &--error {
+      background: #fff1f2;
+      color: $c-rose;
+    }
+  }
+}
