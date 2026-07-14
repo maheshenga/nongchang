@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, FileText, Loader2, Save, Send } from 'lucide-react';
+import { CheckCircle2, Eye, FileText, Loader2, Pencil, Save, Send } from 'lucide-react';
 import {
   legalDocumentPayloadSchema,
   type LegalDocumentPayload,
@@ -14,6 +14,7 @@ import { useApi } from '../hooks/useApi';
 import { confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentFocus, fluentInput, fluentStatusTag } from '../ui/fluent';
 import { ErrorState, LoadingState } from '../ui/state';
+import LegalDraftPreview from './legal/LegalDraftPreview';
 
 const EMPTY_DRAFT: LegalDocumentPayload = {
   operatorName: '',
@@ -42,6 +43,7 @@ export default function LegalSettings() {
   const [currentPublication, setCurrentPublication] = useState<LegalPublicationSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -132,12 +134,12 @@ export default function LegalSettings() {
           </span>
           <button
             type="button"
-            className={fluentButton('primary')}
-            disabled={publishDisabled}
-            onClick={() => void publish()}
+            className={fluentButton('secondary')}
+            aria-pressed={showPreview}
+            onClick={() => setShowPreview((previous) => !previous)}
           >
-            {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {publishing ? '发布中' : '发布当前草稿'}
+            {showPreview ? <Pencil className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showPreview ? '继续编辑' : '预览草稿'}
           </button>
         </div>
       </div>
@@ -154,7 +156,12 @@ export default function LegalSettings() {
       )}
 
       {!loading && !loadError && (
-        <form onSubmit={(event) => void save(event)} className="fluent-scrollbar flex-1 space-y-5 overflow-y-auto p-5">
+        <form onSubmit={(event) => void save(event)} className="flex min-h-0 flex-1 flex-col">
+          <div className="fluent-scrollbar flex-1 space-y-5 overflow-y-auto p-5">
+          {showPreview ? (
+            <LegalDraftPreview draft={form} currentPublication={currentPublication} />
+          ) : (
+            <>
           <section className="border border-[#E1DFDD] bg-[#FAFAFA] px-4 py-3">
             <div className="text-sm font-semibold text-[#242424]">
               {currentPublication
@@ -223,11 +230,23 @@ export default function LegalSettings() {
               </Field>
             </div>
           </section>
+            </>
+          )}
+          </div>
 
-          <div className="flex justify-end border-t border-[#E1DFDD] pt-4">
+          <div role="region" aria-label="法律草稿操作" className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-[#E1DFDD] bg-white px-5 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
             <button type="submit" className={fluentButton('primary')} disabled={saving || publishing || !dirty}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {saving ? '保存中' : '保存草稿'}
+            </button>
+            <button
+              type="button"
+              className={fluentButton('primary')}
+              disabled={publishDisabled}
+              onClick={() => void publish()}
+            >
+              {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {publishing ? '发布中' : '发布当前草稿'}
             </button>
           </div>
         </form>

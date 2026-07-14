@@ -65,6 +65,16 @@ describe('LegalSettings', () => {
     expect(await screen.findByDisplayValue('示例农业科技有限公司')).toBeTruthy();
     expect(screen.getByText('当前已发布：privacy-v1 / agreement-v1')).toBeTruthy();
 
+    fireEvent.click(screen.getByRole('button', { name: '预览草稿' }));
+    expect(screen.getByRole('region', { name: '法律草稿预览' })).toBeTruthy();
+    expect(screen.queryByLabelText('隐私政策正文')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '继续编辑' }));
+
+    const actions = screen.getByRole('region', { name: '法律草稿操作' });
+    expect(within(actions).getByRole('button', { name: '保存草稿' })).toBeTruthy();
+    expect(within(actions).getByRole('button', { name: '发布当前草稿' })).toBeTruthy();
+    expect(actions.className).toContain('sticky');
+
     const plainText = '<script>alert(1)</script>' + '隐私政策'.repeat(80);
     fireEvent.change(screen.getByLabelText('隐私政策正文'), {
       target: { value: plainText },
