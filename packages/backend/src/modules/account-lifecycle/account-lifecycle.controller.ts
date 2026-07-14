@@ -1,12 +1,26 @@
-import { Controller, Get, Res, StreamableFile } from '@nestjs/common';
-import type { AuthUser } from '@nongchang/shared';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
+import { closeAccountSchema, type AuthUser, type CloseAccountInput } from '@nongchang/shared';
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { AccountDataService } from './account-data.service';
+import { AccountLifecycleService } from './account-lifecycle.service';
 
 @Controller('auth/me')
 export class AccountLifecycleController {
-  constructor(private readonly accountData: AccountDataService) {}
+  constructor(
+    private readonly accountData: AccountDataService,
+    private readonly lifecycle: AccountLifecycleService,
+  ) {}
 
   @Get('data')
   preview(@CurrentUser() actor: AuthUser) {
@@ -23,5 +37,14 @@ export class AccountLifecycleController {
     response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     response.setHeader('Content-Length', String(file.body.byteLength));
     return new StreamableFile(file.body);
+  }
+
+  @Post('close')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async close(
+    @CurrentUser() actor: AuthUser,
+    @Body(new ZodValidationPipe(closeAccountSchema)) input: CloseAccountInput,
+  ): Promise<void> {
+    await this.lifecycle.close(actor, input);
   }
 }
