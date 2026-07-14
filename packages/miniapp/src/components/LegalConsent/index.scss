@@ -1,0 +1,68 @@
+@use '../../styles/theme.scss' as *;
+
+.legal-consent {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid $c-border;
+  border-radius: 14px;
+  background: $c-soft;
+
+  &__state {
+    display: block;
+    margin-top: 22px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: $c-soft;
+    color: $c-text-sub;
+    font-size: 23px;
+    line-height: 1.55;
+
+    &--error {
+      background: #fff1f2;
+      color: $c-rose;
+    }
+  }
+
+  &__version {
+    display: block;
+    color: $c-text-sub;
+    font-size: 21px;
+    line-height: 1.5;
+  }
+
+  &__documents {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  &__document,
+  &__retry {
+    margin: 0;
+    padding: 0;
+    min-height: 48px;
+    line-height: 48px;
+    border: 0;
+    background: transparent;
+    color: $c-primary;
+    font-size: 23px;
+  }
+
+  &__retry {
+    margin-top: 8px;
+  }
+
+  &__check {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  &__copy {
+    flex: 1;
+    color: $c-text;
+    font-size: 23px;
+    line-height: 1.55;
+  }
+}

@@ -2,6 +2,7 @@ export default {
   pages: [
     'pages/login/index',
     'pages/register/index',
+    'pages/legal/index',
     'pages/work/index',
     'pages/trace/index',
     'pages/me/index',

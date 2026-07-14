@@ -14,30 +14,53 @@ import { clearToken, setTokens } from '../store/auth';
 import { parseResponse } from './parse-response';
 import { request } from './request';
 
-export async function login(tenantCode: string, username: string, password: string): Promise<void> {
+export async function login(
+  tenantCode: string,
+  username: string,
+  password: string,
+  publicationId: string,
+): Promise<void> {
   const value = await request<unknown>({
-    url: '/auth/login', method: 'POST', data: { tenantCode, username, password }, auth: false,
+    url: '/auth/miniapp/login',
+    method: 'POST',
+    data: { tenantCode, username, password, publicationId },
+    auth: false,
   });
   setTokens(parseResponse(tokenPairSchema, value, 'auth.login'));
 }
 
-export async function loginWechat(): Promise<void> {
+export async function loginWechat(publicationId: string): Promise<void> {
   if (!WX_APPID) throw new Error('未配置微信 AppID');
   const { code } = await Taro.login();
   if (!code) throw new Error('微信登录失败,请重试');
   const value = await request<unknown>({
-    url: '/auth/wechat', method: 'POST', data: { appId: WX_APPID, code }, auth: false,
+    url: '/auth/miniapp/wechat',
+    method: 'POST',
+    data: { appId: WX_APPID, code, publicationId },
+    auth: false,
   });
   setTokens(parseResponse(tokenPairSchema, value, 'auth.wechatLogin'));
 }
 
-export async function registerWechat(displayName: string, phone?: string): Promise<WechatRegisterResponse> {
+export async function registerWechat(
+  displayName: string,
+  publicationId: string,
+  phone?: string,
+): Promise<WechatRegisterResponse> {
   if (!WX_APPID) throw new Error('未配置微信 AppID');
   const { code } = await Taro.login();
   if (!code) throw new Error('微信授权失败,请重试');
   const value = await request<unknown>({
-    url: '/auth/wechat/register', method: 'POST',
-    data: { appId: WX_APPID, code, displayName, ...(phone ? { phone } : {}) }, auth: false,
+    url: '/auth/miniapp/wechat/register',
+    method: 'POST',
+    data: {
+      appId: WX_APPID,
+      code,
+      displayName,
+      publicationId,
+      ...(phone ? { phone } : {}),
+    },
+    auth: false,
   });
   const response = parseResponse(wechatRegisterResponseSchema, value, 'auth.wechatRegister');
   clearToken();

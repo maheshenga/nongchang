@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const okResp = (data: unknown) => ({ statusCode: 200, data });
+const publicationId = '22222222-2222-4222-8222-222222222222';
 
 // 因 config/env.ts 在模块加载时读取 process.env.TARO_APP_WX_APPID,
 // 每个用例先 resetModules + stubEnv,再动态 import,确保 taro mock 与 auth 共享同一新实例。
@@ -18,7 +19,7 @@ describe('api/auth loginWechat', () => {
 
   it('throws when WX_APPID is not configured', async () => {
     const { taro, auth } = await loadFresh('');
-    await expect(auth.loginWechat()).rejects.toThrow('未配置微信 AppID');
+    await expect(auth.loginWechat(publicationId)).rejects.toThrow('未配置微信 AppID');
     expect(taro.login).not.toHaveBeenCalled();
   });
 
@@ -27,12 +28,12 @@ describe('api/auth loginWechat', () => {
     taro.login.mockResolvedValue({ code: 'jscode_123' });
     taro.request.mockResolvedValue(okResp({ accessToken: 'at_1', refreshToken: 'rt_1' }));
 
-    await auth.loginWechat();
+    await auth.loginWechat(publicationId);
 
     const arg = taro.request.mock.calls[0][0];
-    expect(arg.url).toMatch(/\/auth\/wechat$/);
+    expect(arg.url).toMatch(/\/auth\/miniapp\/wechat$/);
     expect(arg.method).toBe('POST');
-    expect(arg.data).toEqual({ appId: 'wx_test_appid', code: 'jscode_123' });
+    expect(arg.data).toEqual({ appId: 'wx_test_appid', code: 'jscode_123', publicationId });
     expect(taro.setStorageSync).toHaveBeenCalledWith('access_token', 'at_1');
     expect(taro.setStorageSync).toHaveBeenCalledWith('refresh_token', 'rt_1');
   });
@@ -41,11 +42,13 @@ describe('api/auth loginWechat', () => {
     const { taro, auth } = await loadFresh('wx_test_appid');
     taro.request.mockResolvedValue(okResp({ accessToken: 'at_2', refreshToken: 'rt_2' }));
 
-    await auth.login('DEMO', 'merchantA', 'password123');
+    await auth.login('DEMO', 'merchantA', 'password123', publicationId);
 
     const arg = taro.request.mock.calls[0][0];
-    expect(arg.url).toMatch(/\/auth\/login$/);
-    expect(arg.data).toEqual({ tenantCode: 'DEMO', username: 'merchantA', password: 'password123' });
+    expect(arg.url).toMatch(/\/auth\/miniapp\/login$/);
+    expect(arg.data).toEqual({
+      tenantCode: 'DEMO', username: 'merchantA', password: 'password123', publicationId,
+    });
     expect(taro.setStorageSync).toHaveBeenCalledWith('access_token', 'at_2');
     expect(taro.setStorageSync).toHaveBeenCalledWith('refresh_token', 'rt_2');
   });
@@ -60,11 +63,11 @@ describe('api/auth loginWechat', () => {
       data: { message: '账号或密码错误' },
     });
 
-    await expect(auth.login('DEMO', 'bad', 'wrong')).rejects.toThrow('账号或密码错误');
+    await expect(auth.login('DEMO', 'bad', 'wrong', publicationId)).rejects.toThrow('账号或密码错误');
 
     expect(taro.request).toHaveBeenCalledTimes(1);
     const arg = taro.request.mock.calls[0][0];
-    expect(arg.url).toMatch(/\/auth\/login$/);
+    expect(arg.url).toMatch(/\/auth\/miniapp\/login$/);
     expect(arg.header.Authorization).toBeUndefined();
     expect(taro.setStorageSync).not.toHaveBeenCalled();
   });
@@ -80,11 +83,12 @@ describe('api/auth loginWechat', () => {
       data: { message: '微信注册失败' },
     });
 
-    await expect(auth.registerWechat('新用户', '13900001111')).rejects.toThrow('微信注册失败');
+    await expect(auth.registerWechat('新用户', publicationId, '13900001111'))
+      .rejects.toThrow('微信注册失败');
 
     expect(taro.request).toHaveBeenCalledTimes(1);
     const arg = taro.request.mock.calls[0][0];
-    expect(arg.url).toMatch(/\/auth\/wechat\/register$/);
+    expect(arg.url).toMatch(/\/auth\/miniapp\/wechat\/register$/);
     expect(arg.header.Authorization).toBeUndefined();
     expect(taro.setStorageSync).not.toHaveBeenCalled();
   });
@@ -97,9 +101,18 @@ describe('api/auth loginWechat', () => {
     taro.login.mockResolvedValue({ code: 'jscode_register' });
     taro.request.mockResolvedValueOnce(okResp({ applicationId: 'application-1', status: 'pending' }));
 
-    const result = await auth.registerWechat('新用户', '13900001111');
+    const result = await auth.registerWechat('新用户', publicationId, '13900001111');
 
     expect(result).toEqual({ applicationId: 'application-1', status: 'pending' });
+    const arg = taro.request.mock.calls[0][0];
+    expect(arg.url).toMatch(/\/auth\/miniapp\/wechat\/register$/);
+    expect(arg.data).toEqual({
+      appId: 'wx_test_appid',
+      code: 'jscode_register',
+      displayName: '新用户',
+      phone: '13900001111',
+      publicationId,
+    });
     expect(taro.removeStorageSync).toHaveBeenCalledWith('access_token');
     expect(taro.removeStorageSync).toHaveBeenCalledWith('refresh_token');
     expect(taro.setStorageSync).not.toHaveBeenCalled();
@@ -131,7 +144,7 @@ describe('api/auth loginWechat', () => {
     const { taro, auth } = await loadFresh('wx_test_appid');
     taro.login.mockResolvedValue({ code: '' });
 
-    await expect(auth.loginWechat()).rejects.toThrow('微信登录失败');
+    await expect(auth.loginWechat(publicationId)).rejects.toThrow('微信登录失败');
     expect(taro.request).not.toHaveBeenCalled();
   });
 });
