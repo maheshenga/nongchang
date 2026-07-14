@@ -12,25 +12,31 @@ const MAX_CODES = 10_000;
 export interface BatchLabelWorkspaceProps {
   batch: ViewBatch;
   codeBalance: number | null;
+  quotaLoading: boolean;
+  quotaError: string | null;
   billingAvailable: boolean;
   generating: boolean;
   onGenerate(count: number): Promise<string[]>;
   requestConfirmation(action: PendingAction): void;
   onOpenBilling(): void;
+  onRetryQuota(): void;
   onClose(): void;
 }
 
 export function BatchLabelWorkspace({
   batch,
   codeBalance,
+  quotaLoading,
+  quotaError,
   billingAvailable,
   generating,
   onGenerate,
   requestConfirmation,
   onOpenBilling,
+  onRetryQuota,
   onClose,
 }: BatchLabelWorkspaceProps) {
-  const [amount, setAmount] = useState(100);
+  const [amount, setAmount] = useState(1);
   const [paperSize, setPaperSize] = useState('4x6');
   const [labelPadding, setLabelPadding] = useState(16);
   const [labelGap, setLabelGap] = useState(4);
@@ -46,6 +52,14 @@ export function BatchLabelWorkspace({
   const valid = Number.isInteger(amount) && amount >= 1 && amount <= MAX_CODES;
   const remaining = codeBalance === null ? null : codeBalance - amount;
   const quotaExceeded = remaining !== null && remaining < 0;
+  const quotaUnavailable = quotaLoading || quotaError !== null || codeBalance === null;
+  const quotaStatus = quotaLoading
+    ? '额度加载中'
+    : quotaError
+      ? '额度加载失败'
+      : quotaExceeded
+        ? '额度不足'
+        : '额度可用';
   const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
   const codeAt = (index: number) => codes[index] ?? `${batch.code}-预览${index + 1}`;
 
@@ -77,7 +91,7 @@ export function BatchLabelWorkspace({
       <button
         type="button"
         onClick={requestGeneration}
-        disabled={!valid || quotaExceeded || generating}
+        disabled={!valid || quotaUnavailable || quotaExceeded || generating}
         className={fluentButton('primary')}
       >
         {generating ? '生成中…' : '生成真实溯源码'}
@@ -115,27 +129,41 @@ export function BatchLabelWorkspace({
                   <h3 className="text-sm font-semibold text-[#242424]">二维码额度</h3>
                   <p className="mt-1 text-xs leading-5 text-[#605E5C]">每生成 1 枚溯源码扣减 1 个二维码额度</p>
                 </div>
-                <span className={fluentStatusTag(quotaExceeded ? 'danger' : remaining === null ? 'neutral' : 'success')}>
-                  {quotaExceeded ? '额度不足' : remaining === null ? '等待后端校验' : '额度可用'}
+                <span className={fluentStatusTag(
+                  quotaExceeded || quotaError
+                    ? 'danger'
+                    : quotaLoading || codeBalance === null
+                      ? 'neutral'
+                      : 'success'
+                )}>
+                  {quotaStatus}
                 </span>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <QuotaFact text={`当前额度 ${codeBalance === null ? '暂不可用' : codeBalance}`} />
+                <QuotaFact text={`当前额度 ${quotaLoading ? '加载中' : quotaError ? '加载失败' : codeBalance ?? '暂不可用'}`} />
                 <QuotaFact text={`本次申请 ${amount}`} />
                 <QuotaFact
                   danger={quotaExceeded}
-                  text={`预计剩余 ${remaining === null ? '暂不可用' : `${remaining}${quotaExceeded ? '（额度不足）' : ''}`}`}
+                  text={`预计剩余 ${quotaLoading ? '加载中' : quotaError ? '暂不可用' : remaining === null ? '暂不可用' : `${remaining}${quotaExceeded ? '（额度不足）' : ''}`}`}
                 />
               </div>
+              {quotaError && (
+                <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 border border-[#F1B8BD] bg-[#FDE7E9] px-3 py-2 text-xs text-[#A4262C]">
+                  <span>{quotaError}</span>
+                  <button type="button" onClick={onRetryQuota} className={fluentButton('secondary')}>
+                    重试额度
+                  </button>
+                </div>
+              )}
               {quotaExceeded && (
                 <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-[#A4262C]">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   当前申请数量超过可用额度，请减少数量或前往计费中心补充额度。
                 </p>
               )}
-              {codeBalance === null && (
+              {!quotaLoading && !quotaError && codeBalance === null && (
                 <p className="mt-3 text-xs leading-5 text-[#605E5C]">
-                  暂未取得额度汇总，提交后仍由后端执行最终额度校验，不会在页面中推测余额。
+                  暂未取得额度汇总，额度加载完成前不能生成溯源码。
                 </p>
               )}
             </section>
@@ -160,7 +188,7 @@ export function BatchLabelWorkspace({
                   min={1}
                   max={MAX_CODES}
                   value={amount}
-                  onChange={event => setAmount(Math.floor(Number(event.target.value)))}
+                  onChange={event => setAmount(Number(event.target.value))}
                   className={`${fluentInput} mt-2 w-full font-mono`}
                 />
               </label>

@@ -214,11 +214,14 @@ export default function BatchAdmin({
       <BatchLabelWorkspace
         batch={labelBatch}
         codeBalance={billing.data?.codeBalance ?? null}
+        quotaLoading={billing.loading}
+        quotaError={billing.error}
         billingAvailable={billingAvailable}
         generating={generating}
         onGenerate={handleGenerateCodes}
         requestConfirmation={requestConfirmation}
         onOpenBilling={onOpenBilling}
+        onRetryQuota={() => void billing.reload()}
         onClose={() => setLabelBatchId(null)}
       />
     )}
