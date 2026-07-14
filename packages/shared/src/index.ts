@@ -58,6 +58,19 @@ export {
 export type { CloseAccountInput, AccountDataPreview, AccountDataExport } from './dto/account-lifecycle.dto';
 
 export {
+  tenantReadinessCodeSchema,
+  tenantReadinessTargetSchema,
+  tenantReadinessCheckSchema,
+  tenantReadinessViewSchema,
+} from './dto/readiness.dto';
+export type {
+  TenantReadinessCode,
+  TenantReadinessTarget,
+  TenantReadinessCheck,
+  TenantReadinessView,
+} from './dto/readiness.dto';
+
+export {
   tenantStatusSchema,
   createTenantSchema,
   setTenantStatusSchema,

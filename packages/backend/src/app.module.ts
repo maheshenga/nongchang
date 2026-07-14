@@ -39,6 +39,7 @@ import { OperationsModule } from './modules/operations/operations.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { AccountLifecycleModule } from './modules/account-lifecycle/account-lifecycle.module';
+import { ReadinessModule } from './modules/readiness/readiness.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { AccountLifecycleModule } from './modules/account-lifecycle/account-life
     OperationsModule,
     LegalModule,
     AccountLifecycleModule,
+    ReadinessModule,
   ],
   providers: [
     ScopeService,

@@ -8,6 +8,8 @@ describe('resolveProductionMiniappEnv', () => {
     [{ TARO_APP_API: 'https://REPLACE_ME.example.com/api', TARO_APP_WX_APPID: 'wx0000000000000000' }, 'placeholder'],
     [{ TARO_APP_API: 'https://api.example.com/v1', TARO_APP_WX_APPID: 'wx0000000000000000' }, '/api'],
     [{ TARO_APP_API: 'https://api.example.com/api', TARO_APP_WX_APPID: '' }, 'TARO_APP_WX_APPID'],
+    [{ TARO_APP_API: 'https://api.example.com/api', TARO_APP_WX_APPID: 'wx0000000000000000' }, 'TARO_APP_SUPPORT_CONTACT'],
+    [{ TARO_APP_API: 'https://api.example.com/api', TARO_APP_WX_APPID: 'wx0000000000000000', TARO_APP_SUPPORT_CONTACT: ' undefined ' }, 'TARO_APP_SUPPORT_CONTACT'],
   ])('rejects invalid production environment %#', (env, message) => {
     expect(() => resolveProductionMiniappEnv(env)).toThrow(message);
   });

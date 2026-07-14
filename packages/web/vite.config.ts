@@ -1,10 +1,14 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 import { dashboardDemoManualChunk } from './src/config/manual-chunks';
+import { resolveProductionWebEnv } from './src/config/production-env';
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
+  if (mode === 'production') {
+    resolveProductionWebEnv({ ...process.env, ...loadEnv(mode, __dirname, '') });
+  }
   return {
     plugins: [react(), tailwindcss()],
     resolve: {

@@ -4,12 +4,14 @@ import { listBatches } from '../api/batches';
 import { listFarmRecords } from '../api/farm-records';
 import { listFields } from '../api/fields';
 import { getIntegrationConfig } from '../api/integration';
+import { getTenantReadiness } from '../api/readiness';
 import { listMerchants, listPendingUsers } from '../api/users';
 import { useApi } from '../hooks/useApi';
 import type { AppTab, SystemRole } from '../navigation';
 import { fluentButton } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { dashboardQuickActions, dashboardTitle } from './dashboard/dashboard-workspace';
+import TenantReadinessPanel from './dashboard/TenantReadinessPanel';
 
 const DashboardDemo = lazy(() => import('./DashboardDemo'));
 
@@ -168,6 +170,7 @@ function AgentProductionDashboard(props: DashboardFrameProps) {
 }
 
 function SystemAdminProductionDashboard(props: DashboardFrameProps) {
+  const readiness = useApi(getTenantReadiness, { cacheKey: 'tenant-readiness' });
   const batches = useApi(listBatches, { cacheKey: 'batches' });
   const fields = useApi(listFields, { cacheKey: 'fields' });
   const records = useApi(listFarmRecords, { cacheKey: 'farm-records' });
@@ -186,6 +189,13 @@ function SystemAdminProductionDashboard(props: DashboardFrameProps) {
 
   return (
     <DashboardFrame {...props}>
+      <TenantReadinessPanel
+        view={readiness.data}
+        loading={readiness.loading}
+        error={readiness.error}
+        onRetry={() => void readiness.reload()}
+        onNavigate={props.onNavigate}
+      />
       {isLoading && <LoadingState label="加载租户运营数据" />}
       {error && <ErrorState title="租户运营工作台加载失败" message={error} onRetry={reloadAll} retryLabel="重试" />}
       {!isLoading && !error && (

@@ -9,6 +9,7 @@ const apiMocks = vi.hoisted(() => ({
   listPendingUsers: vi.fn(),
   getIntegrationConfig: vi.fn(),
   getBillingSummary: vi.fn(),
+  getTenantReadiness: vi.fn(),
 }));
 const demoModuleMock = vi.hoisted(() => ({ imports: 0 }));
 
@@ -21,6 +22,7 @@ vi.mock('../api/users', () => ({
 }));
 vi.mock('../api/integration', () => ({ getIntegrationConfig: apiMocks.getIntegrationConfig }));
 vi.mock('../api/billing', () => ({ getBillingSummary: apiMocks.getBillingSummary }));
+vi.mock('../api/readiness', () => ({ getTenantReadiness: apiMocks.getTenantReadiness }));
 
 vi.mock('./DashboardDemo', () => {
   demoModuleMock.imports += 1;
@@ -93,6 +95,7 @@ beforeEach(() => {
   apiMocks.listPendingUsers.mockReset();
   apiMocks.getIntegrationConfig.mockReset();
   apiMocks.getBillingSummary.mockReset();
+  apiMocks.getTenantReadiness.mockReset();
   demoModuleMock.imports = 0;
 
   apiMocks.listBatches.mockResolvedValue([
@@ -118,6 +121,21 @@ beforeEach(() => {
         : null
   ));
   apiMocks.getBillingSummary.mockResolvedValue({ ownerType: 'MERCHANT', ownerId: 'm1', aiBalance: 8, codeBalance: 20 });
+  apiMocks.getTenantReadiness.mockResolvedValue({
+    ready: false,
+    checks: [
+      { code: 'legal', label: '法律协议已发布', ready: false, target: 'legalSettings' },
+      { code: 'wechat', label: '微信小程序已启用', ready: true, target: 'integrations' },
+      { code: 'oss', label: '对象存储已启用', ready: true, target: 'aiOssSettings' },
+      { code: 'map', label: '地图服务已启用', ready: true, target: 'integrations' },
+      { code: 'ai', label: 'AI 服务商已启用', ready: true, target: 'aiProviders' },
+      { code: 'payment', label: '支付宝支付已启用', ready: true, target: 'billing' },
+      { code: 'quota', label: '初始业务额度已配置', ready: true, target: 'billing' },
+      { code: 'apiDomain', label: '公网 API 域名已配置', ready: true },
+      { code: 'supportContact', label: '小程序客服联系方式已配置', ready: true },
+      { code: 'salesContact', label: '销售开通联系方式已配置', ready: true },
+    ],
+  });
 });
 
 describe('Dashboard truthfulness boundary', () => {
@@ -191,6 +209,8 @@ describe('Dashboard truthfulness boundary', () => {
   it('uses real system-admin data for pending, integration, and credit warnings', async () => {
     render(<Dashboard role="system_admin" onNavigate={vi.fn()} />);
 
+    expect(await screen.findByRole('heading', { name: '上线就绪检查' })).toBeTruthy();
+    expect(screen.getByText('1 项待完成')).toBeTruthy();
     expect(await screen.findByLabelText('待处理农事记录 1')).toBeTruthy();
     expect(screen.getByLabelText('待审核入驻 2')).toBeTruthy();
     expect(screen.getByLabelText('集成缺口 2')).toBeTruthy();

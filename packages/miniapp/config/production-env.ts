@@ -26,9 +26,14 @@ export function resolveProductionMiniappEnv(
     throw new Error('TARO_APP_WX_APPID must be a valid WeChat AppID');
   }
 
+  const supportContact = env.TARO_APP_SUPPORT_CONTACT?.trim() ?? '';
+  if (!supportContact || supportContact.toLowerCase() === 'undefined') {
+    throw new Error('TARO_APP_SUPPORT_CONTACT is required for a production miniapp build');
+  }
+
   return {
     apiUrl: `${url.origin}${pathname}`,
     wxAppId,
-    supportContact: env.TARO_APP_SUPPORT_CONTACT?.trim() ?? '',
+    supportContact,
   };
 }
