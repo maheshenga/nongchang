@@ -23,6 +23,7 @@ const TAB_SEGMENTS = {
   aiAssistant: 'ai-assistant',
   phenology: 'phenology',
   billing: 'billing',
+  legalSettings: 'legal-settings',
 } as const satisfies Record<AppTab, string>;
 
 const SEGMENT_TABS = new Map<string, AppTab>(

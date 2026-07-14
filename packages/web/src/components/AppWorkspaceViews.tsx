@@ -22,6 +22,7 @@ const AiAssistant = lazy(() => import('./AiAssistant'));
 const PhenologyAdmin = lazy(() => import('./PhenologyAdmin'));
 const BillingAdmin = lazy(() => import('./BillingAdmin'));
 const TenantManagement = lazy(() => import('./TenantManagement'));
+const LegalSettings = lazy(() => import('./LegalSettings'));
 
 function ViewSlot({ tab, activeTab, mountedTabs, allowedTabs, children }: {
   tab: AppTab;
@@ -93,6 +94,7 @@ export default function AppWorkspaceViews({
         {slot('aiAssistant', <AiAssistant role={role} context={aiContext} />)}
         {slot('phenology', <PhenologyAdmin />)}
         {slot('billing', <BillingAdmin />)}
+        {slot('legalSettings', <LegalSettings />)}
       </div>
     </Suspense>
   );

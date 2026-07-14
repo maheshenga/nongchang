@@ -1,6 +1,7 @@
 import {
   Building2,
   FileSpreadsheet,
+  FileText,
   Home,
   Layers,
   LayoutDashboard,
@@ -42,7 +43,8 @@ export type AppTab =
   | 'quickTemplates'
   | 'aiAssistant'
   | 'phenology'
-  | 'billing';
+  | 'billing'
+  | 'legalSettings';
 
 export type NavItem = { id: AppTab; label: string; icon: LucideIcon };
 export type NavCategory = { category: string; items: NavItem[] };
@@ -84,6 +86,7 @@ const SYSTEM_ADMIN_NAV: NavCategory[] = [
       { id: 'userGroups', label: '用户分组', icon: UserCog },
       { id: 'pendingUsers', label: '入驻审核', icon: UserCheck },
       { id: 'quickTemplates', label: '快捷模板', icon: LayoutTemplate },
+      { id: 'legalSettings', label: '法律与协议', icon: FileText },
       { id: 'settings', label: '本地偏好', icon: SettingsIcon },
     ],
   },

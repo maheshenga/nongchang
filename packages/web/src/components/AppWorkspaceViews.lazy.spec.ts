@@ -6,7 +6,7 @@ describe('workspace lazy boundaries', () => {
   it('keeps heavy workspace pages behind lazy imports', () => {
     const source = readFileSync(resolve(__dirname, 'AppWorkspaceViews.tsx'), 'utf8');
 
-    for (const component of ['FarmFields', 'AiAssistant', 'BatchAdmin', 'BillingAdmin']) {
+    for (const component of ['FarmFields', 'AiAssistant', 'BatchAdmin', 'BillingAdmin', 'LegalSettings']) {
       expect(source).toContain(`lazy(() => import('./${component}'))`);
     }
   });

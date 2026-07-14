@@ -66,6 +66,13 @@ describe('production navigation', () => {
     expect(idsFor('agent_admin')).not.toContain('pendingUsers');
   });
 
+  it('exposes legal publication settings only to system admins', () => {
+    expect(idsFor('system_admin')).toContain('legalSettings');
+    for (const role of ALL_ROLES.filter((item) => item !== 'system_admin')) {
+      expect(idsFor(role)).not.toContain('legalSettings');
+    }
+  });
+
   it('falls back to the first allowed production tab for legacy or unauthorized tab strings', () => {
     expect(firstAllowedTab('merchant_admin', 'dashboard')).toBe('overview');
     expect(firstAllowedTab('system_admin', 'dashboard')).toBe('overview');

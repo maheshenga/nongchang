@@ -8,6 +8,7 @@ describe('authenticated app route contract', () => {
     expect(tabToHash('batches')).toBe('#/app/batches');
     expect(tabToHash('memberHome')).toBe('#/app/member-home');
     expect(tabToHash('aiOssSettings')).toBe('#/app/ai-oss-settings');
+    expect(tabToHash('legalSettings')).toBe('#/app/legal-settings');
   });
 
   it('parses only known authenticated workspace routes', () => {
@@ -39,6 +40,7 @@ describe('authenticated app route contract', () => {
       'aiAssistant',
       'phenology',
       'billing',
+      'legalSettings',
     ];
 
     for (const tab of tabs) {
@@ -51,5 +53,7 @@ describe('authenticated app route contract', () => {
     expect(canonicalAllowedTab('#/app/batches', 'merchant_admin')).toBe('batches');
     expect(canonicalAllowedTab('#/app/overview', 'platform_admin')).toBe('tenants');
     expect(canonicalAllowedTab('#/app/missing', 'member')).toBe('memberHome');
+    expect(canonicalAllowedTab('#/app/legal-settings', 'system_admin')).toBe('legalSettings');
+    expect(canonicalAllowedTab('#/app/legal-settings', 'merchant_admin')).toBe('overview');
   });
 });
