@@ -81,6 +81,7 @@ It will retain only coordination responsibilities:
 - open one selected batch in `BatchLabelWorkspace`;
 - own the generation request key for that batch and count;
 - reload batches and billing after confirmed success;
+- keep a successful generation successful even if the follow-up batch or billing refresh fails;
 - show existing loading, empty, error, and toast feedback.
 
 The following `MerchantAdmin` state and behavior will be removed:
@@ -109,7 +110,7 @@ Render a compact product archive table with:
 - lifecycle status;
 - generated-code count;
 - one `配置溯源标签` action;
-- one `查看批次完整档案` navigation action.
+- one truthful `进入批次管理` navigation action. It does not claim to preserve the selected batch until a dedicated cross-page batch intent is designed.
 
 The table may use one horizontal overflow boundary as a last resort, but no nested list or side-panel scrolling remains.
 
@@ -119,7 +120,7 @@ Do not render the desktop table. Render one semantic `<article>` per batch with:
 
 - product name and lifecycle status in the header;
 - batch number and generated-code count as scan-friendly facts;
-- full-width `配置溯源标签` and `查看批次完整档案` actions;
+- full-width `配置溯源标签` and `进入批次管理` actions;
 - a stable `aria-label` containing the batch number.
 
 The list uses the page scroll only. The shared modal owns its own bounded scroll while open.
@@ -134,7 +135,7 @@ The list uses the page scroll only. The shared modal owns its own bounded scroll
 6. User selects a batch and opens the shared workspace.
 7. User chooses a valid quantity and confirms the exact debit intent.
 8. `generateCodes` receives the retained idempotency key.
-9. Success reloads both batch counts and quota, clears the request key, and opens the existing print preview.
+9. Success clears the request key, opens the existing print preview, and refreshes batch counts and quota as non-blocking follow-up work. A refresh failure must not be reported as a generation failure or hide the generated codes.
 10. Failure keeps the request key for a safe retry and reports the server error without claiming a debit outcome.
 
 ## Testing
