@@ -71,6 +71,46 @@ const MerchantRow = memo(function MerchantRow({ merchant, onEdit, onToggle }: {
   );
 });
 
+const MerchantCard = memo(function MerchantCard({ merchant, onEdit, onToggle }: {
+  merchant: MerchantListItem;
+  onEdit: (merchant: MerchantListItem) => void;
+  onToggle: (merchant: MerchantListItem) => void;
+}) {
+  return (
+    <article aria-label={`商户 ${merchant.displayName}`} className="border border-[#E1DFDD] bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-base font-semibold text-[#242424]">{merchant.displayName}</div>
+          <div className="mt-1 text-sm font-semibold text-[#323130]">{merchant.username}</div>
+          <div className="mt-0.5 text-xs text-[#605E5C]">{merchant.phone ?? '未填手机号'}</div>
+        </div>
+        {statusTag(merchant.status)}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div className="border border-[#EDEBE9] bg-[#FAFAFA] px-3 py-2">
+          <div className="text-xs text-[#605E5C]">地块</div>
+          <div className="mt-1 font-semibold text-[#242424]">{merchant.fieldCount} 个地块</div>
+        </div>
+        <div className="border border-[#EDEBE9] bg-[#FAFAFA] px-3 py-2">
+          <div className="text-xs text-[#605E5C]">确权面积</div>
+          <div className="mt-1 font-semibold text-[#242424]">{merchant.totalArea.toFixed(1)} 亩</div>
+        </div>
+      </div>
+      <div className="mt-3 text-xs text-[#605E5C]">
+        入驻 {new Date(merchant.createdAt).toLocaleDateString('zh-CN')}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => onEdit(merchant)} aria-label={`编辑商户 ${merchant.displayName}`} className={fluentButton('secondary')}>
+          <Pencil className="h-4 w-4" /> 编辑
+        </button>
+        <button type="button" onClick={() => onToggle(merchant)} aria-label={`${merchant.status === 'active' ? '停用' : '启用'}商户 ${merchant.displayName}`} className={merchant.status === 'active' ? fluentButton('danger') : fluentButton('secondary')}>
+          <Power className="h-4 w-4" /> {merchant.status === 'active' ? '停用' : '启用'}
+        </button>
+      </div>
+    </article>
+  );
+});
+
 export default function MerchantManagement() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(MANAGEMENT_PAGE_SIZE);
@@ -201,7 +241,16 @@ export default function MerchantManagement() {
             <ErrorState message={error} onRetry={() => void reload()} className="m-4" />
           )}
           {!loading && !error && (
-            <table className={`${fluentTable.table} min-w-[980px]`}>
+            <>
+            <ul aria-label="移动端商户列表" className="grid list-none gap-3 p-3 md:hidden">
+              {visibleMerchants.map(merchant => (
+                <li key={merchant.id}>
+                  <MerchantCard merchant={merchant} onEdit={openEdit} onToggle={toggleStatus} />
+                </li>
+              ))}
+              {visibleMerchants.length === 0 && <li><EmptyState title="暂无匹配商户" /></li>}
+            </ul>
+            <table className={`${fluentTable.table} hidden min-w-[980px] md:table`}>
               <thead className={fluentTable.thead}>
                 <tr>
                   <th className={fluentTable.th}>商户编号</th>
@@ -225,6 +274,7 @@ export default function MerchantManagement() {
                 )}
               </tbody>
             </table>
+            </>
           )}
         </div>
         {!error && (

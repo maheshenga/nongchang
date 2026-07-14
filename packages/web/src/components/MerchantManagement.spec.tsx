@@ -60,6 +60,19 @@ beforeEach(() => {
 });
 
 describe('MerchantManagement Fluent table', () => {
+  it('provides a complete mobile merchant card without horizontal table scrolling', async () => {
+    renderWithDialog();
+
+    const card = await screen.findByRole('article', { name: '商户 North Farm' });
+    expect(within(card).getByText('north-owner')).toBeTruthy();
+    expect(within(card).getByText('13800000001')).toBeTruthy();
+    expect(within(card).getByText('2 个地块')).toBeTruthy();
+    expect(within(card).getByText('18.5 亩')).toBeTruthy();
+    expect(within(card).getByText('正常')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: '编辑商户 North Farm' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: '停用商户 North Farm' })).toBeTruthy();
+  });
+
   it('renders merchants and filters by search text and status', async () => {
     listMerchantsMock.mockImplementation((query: { page: number; pageSize: number; search?: string }) => Promise.resolve({
       items: query.search ? [merchants[0]] : merchants,
@@ -68,29 +81,31 @@ describe('MerchantManagement Fluent table', () => {
       pageSize: query.pageSize,
     }));
     renderWithDialog();
-    await screen.findByText('North Farm');
+    const table = await screen.findByRole('table');
+    await within(table).findByText('North Farm');
 
     expect(screen.getByRole('heading', { name: '商户管理与档案' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '新增入驻' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: '企业名称' })).toBeTruthy();
-    expect(screen.getByText('South Farm')).toBeTruthy();
-    expect(screen.getByText('未填')).toBeTruthy();
+    expect(within(table).getByText('South Farm')).toBeTruthy();
+    expect(within(table).getByText('未填')).toBeTruthy();
 
     fireEvent.change(screen.getByPlaceholderText('搜索商户名称或联系人'), { target: { value: 'north' } });
     await waitFor(() => expect(listMerchantsMock).toHaveBeenLastCalledWith({ page: 1, pageSize: 50, search: 'north' }));
-    expect(await screen.findByText('North Farm')).toBeTruthy();
-    await waitFor(() => expect(screen.queryByText('South Farm')).toBeNull());
+    const filteredTable = await screen.findByRole('table');
+    expect(await within(filteredTable).findByText('North Farm')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByRole('table')).queryByText('South Farm')).toBeNull());
 
     fireEvent.change(screen.getByPlaceholderText('搜索商户名称或联系人'), { target: { value: '' } });
-    expect(await screen.findByText('South Farm')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByRole('table')).getByText('South Farm')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: '已停用' }));
-    expect(screen.queryByText('North Farm')).toBeNull();
-    expect(screen.getByText('South Farm')).toBeTruthy();
+    expect(within(screen.getByRole('table')).queryByText('North Farm')).toBeNull();
+    expect(within(screen.getByRole('table')).getByText('South Farm')).toBeTruthy();
   });
 
   it('creates a merchant user and shows the backend generated initial password', async () => {
     renderWithDialog();
-    await screen.findByText('North Farm');
+    await within(await screen.findByRole('table')).findByText('North Farm');
 
     fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
     fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
@@ -115,9 +130,10 @@ describe('MerchantManagement Fluent table', () => {
 
   it('updates a merchant with username disabled and phone nullable', async () => {
     renderWithDialog();
-    await screen.findByText('North Farm');
+    const table = await screen.findByRole('table');
+    await within(table).findByText('North Farm');
 
-    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    fireEvent.click(within(table).getByRole('button', { name: '编辑商户 North Farm' }));
     expect((screen.getByLabelText('联系人 / 用户名') as HTMLInputElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'North Updated' } });
     fireEvent.change(screen.getByLabelText('手机号码'), { target: { value: '' } });
@@ -130,15 +146,16 @@ describe('MerchantManagement Fluent table', () => {
 
   it('toggles merchant status through the real status API', async () => {
     renderWithDialog();
-    await screen.findByText('North Farm');
+    const table = await screen.findByRole('table');
+    await within(table).findByText('North Farm');
 
-    fireEvent.click(screen.getByRole('button', { name: '停用商户 North Farm' }));
+    fireEvent.click(within(table).getByRole('button', { name: '停用商户 North Farm' }));
     fireEvent.click(within(await screen.findByRole('dialog', { name: '停用商户' })).getByRole('button', { name: '停用' }));
     await waitFor(() => {
       expect(setUserStatusMock).toHaveBeenCalledWith('merchant-1', 'suspended');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '启用商户 South Farm' }));
+    fireEvent.click(within(table).getByRole('button', { name: '启用商户 South Farm' }));
     fireEvent.click(within(await screen.findByRole('dialog', { name: '启用商户' })).getByRole('button', { name: '启用' }));
     await waitFor(() => {
       expect(setUserStatusMock).toHaveBeenCalledWith('merchant-2', 'active');
