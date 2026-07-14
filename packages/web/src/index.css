@@ -37,6 +37,22 @@ textarea {
   background-clip: padding-box;
 }
 
+@media (pointer: coarse), (max-width: 767px) {
+  .fluent-control,
+  .fluent-input-control {
+    min-height: 44px;
+  }
+
+  .fluent-icon-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mobile-navigation button {
+    min-height: 44px;
+  }
+}
+
 @layer components {
   /* 隐藏滚动条但保留滚轮/触控滚动能力(侧栏导航用) */
   .no-scrollbar {

@@ -238,7 +238,7 @@ export default function App() {
             aria-label="移动导航"
             tabIndex={-1}
             onKeyDown={drawerFocus.onDialogKeyDown}
-            className="relative flex h-full w-[280px] flex-col border-r border-[#E1DFDD] bg-[#FAFAFA] shadow-xl"
+            className="mobile-navigation relative flex h-full w-[280px] flex-col border-r border-[#E1DFDD] bg-[#FAFAFA] shadow-xl"
           >
             <div className="flex h-12 items-center gap-3 border-b border-[#E1DFDD] px-4">
               <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">

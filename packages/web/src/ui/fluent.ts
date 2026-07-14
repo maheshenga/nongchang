@@ -15,19 +15,19 @@ export const fluent = {
 export const fluentFocus = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078D4]/40 focus-visible:ring-offset-1';
 
 export function fluentButton(variant: ButtonVariant = 'secondary'): string {
-  const base = `inline-flex h-8 items-center justify-center gap-1.5 rounded-[4px] border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${fluentFocus}`;
+  const base = `fluent-control inline-flex h-8 items-center justify-center gap-1.5 rounded-[4px] border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${fluentFocus}`;
   const variants: Record<ButtonVariant, string> = {
     primary: 'border-[#0078D4] bg-[#0078D4] text-white hover:bg-[#106EBE]',
     secondary: 'border-[#C8C6C4] bg-white text-[#242424] hover:bg-[#F3F2F1]',
     subtle: 'border-transparent bg-transparent text-[#242424] hover:bg-[#F3F2F1]',
     danger: 'border-[#A4262C] bg-[#A4262C] text-white hover:bg-[#8E1F25]',
-    icon: 'h-8 w-8 border-transparent bg-transparent p-0 text-[#605E5C] hover:bg-[#F3F2F1] hover:text-[#242424]',
+    icon: 'fluent-icon-control h-8 w-8 border-transparent bg-transparent p-0 text-[#605E5C] hover:bg-[#F3F2F1] hover:text-[#242424]',
   };
 
   return `${base} ${variants[variant]}`;
 }
 
-export const fluentInput = `h-8 rounded-[4px] border border-[#C8C6C4] bg-white px-3 text-sm text-[#242424] placeholder:text-[#8A8886] shadow-none transition-colors focus:border-[#0078D4] ${fluentFocus}`;
+export const fluentInput = `fluent-input-control h-8 rounded-[4px] border border-[#C8C6C4] bg-white px-3 text-sm text-[#242424] placeholder:text-[#8A8886] shadow-none transition-colors focus:border-[#0078D4] ${fluentFocus}`;
 
 export const fluentSelect = `${fluentInput} pr-8`;
 

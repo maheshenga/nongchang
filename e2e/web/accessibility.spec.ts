@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loginByApi } from './fixtures';
 
 test.use({ trace: 'off' });
@@ -12,6 +12,36 @@ async function expectNoSeriousViolations(page: Page, selector?: string) {
 }
 
 test.describe('@a11y accessibility', () => {
+  test('P2 mobile Fluent controls meet the 44 pixel touch-target floor', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginByApi(page);
+
+    const expectTouchHeight = async (locator: Locator) => {
+      const box = await locator.boundingBox();
+      expect(box, 'interactive control must have a rendered box').not.toBeNull();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    };
+
+    const menuTrigger = page.getByRole('button', { name: '打开导航' });
+    await expectTouchHeight(menuTrigger);
+    await expectTouchHeight(page.getByRole('button', { name: '账户', exact: true }));
+    await expectTouchHeight(page.getByRole('button', { name: '退出', exact: true }));
+
+    await menuTrigger.click();
+    const drawer = page.getByRole('dialog', { name: '移动导航' });
+    await expectTouchHeight(drawer.getByRole('button', { name: '关闭导航' }));
+    const drawerSearch = drawer.getByRole('combobox', { name: '全局搜索' });
+    const searchBox = await drawerSearch.boundingBox();
+    expect(searchBox?.height).toBeGreaterThanOrEqual(44);
+
+    await page.keyboard.press('Escape');
+    await page.goto('/#/app/batches');
+    await expect(page.getByRole('heading', { name: '批次全生命周期管理' })).toBeVisible();
+    await expectTouchHeight(page.getByRole('button', { name: '筛选', exact: true }));
+    const batchSearch = page.getByPlaceholder('按批次号搜索');
+    expect((await batchSearch.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  });
+
   test('public landing has no serious accessibility violations', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: '农业溯源 SaaS 平台' }).first()).toBeVisible();
