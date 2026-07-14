@@ -2,18 +2,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service';
+import { WechatIdentityService } from './wechat-identity.service';
 import { UnauthorizedException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 
 const stubIntegrations = (lookup: any = null) => ({ findTenantByWechatAppId: vi.fn().mockResolvedValue(lookup) }) as any;
+const stubWechat = (lookup: any = null) => new WechatIdentityService(stubIntegrations(lookup));
 const stubGroups = (groupId = 'g1') => ({ ensureDefault: vi.fn().mockResolvedValue({ id: groupId }) }) as any;
+const stubLegal = () => ({
+  recordConsent: vi.fn().mockResolvedValue(undefined),
+  requireCurrentPublication: vi.fn(),
+  createConsent: vi.fn().mockResolvedValue(undefined),
+}) as any;
+const publicationId = '22222222-2222-4222-8222-222222222222';
 
-const makeService = (user: any, integrations = stubIntegrations(), groups = stubGroups(), tenant: any = activeTenantRow) => {
+const makeService = (user: any, wechat = stubWechat(), groups = stubGroups(), tenant: any = activeTenantRow) => {
   const prisma = {
     tenant: { findUnique: vi.fn().mockResolvedValue(tenant) },
     user: { findUnique: vi.fn().mockResolvedValue(user) },
   } as any;
   const jwt = new JwtService({ secret: 'test' });
-  return new AuthService(prisma, jwt, integrations, groups);
+  return new AuthService(prisma, jwt, wechat, groups, stubLegal());
 };
 
 // login 现在先用机构编码查租户(含 status),再按 (tenantId, username) 查用户。
@@ -41,7 +49,7 @@ describe('AuthService.login', () => {
     await expect(svc.login({ tenantCode: 'DEMO', username: 'none', password: 'password123' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
   it('机构编码无效(租户不存在)时抛 Unauthorized', async () => {
-    const svc = makeService({ id: 'u1' }, stubIntegrations(), stubGroups(), null);
+    const svc = makeService({ id: 'u1' }, stubWechat(), stubGroups(), null);
     await expect(svc.login({ tenantCode: 'NOPE', username: 'x', password: 'password123' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
   it('status 非 active(待审核)时抛 Forbidden', async () => {
@@ -51,7 +59,7 @@ describe('AuthService.login', () => {
   });
   it('所属租户停用时抛 Forbidden(#26)', async () => {
     const hash = await bcrypt.hash('password123', 10);
-    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash }, stubIntegrations(), stubGroups(), { id: 't1', status: 'suspended' });
+    const svc = makeService({ id: 'u1', tenantId: 't1', role: 'merchant', agentId: null, status: 'active', passwordHash: hash }, stubWechat(), stubGroups(), { id: 't1', status: 'suspended' });
     await expect(svc.login({ tenantCode: 'DEMO', username: 'p', password: 'password123' })).rejects.toBeInstanceOf(ForbiddenException);
   });
   it('rejects password login when agent_admin linked agent is suspended', async () => {
@@ -70,7 +78,7 @@ describe('AuthService.login', () => {
       },
       agent: { findFirst: vi.fn().mockResolvedValue({ id: 'a-suspended', status: 'suspended' }) },
     } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     await expect(svc.login({ tenantCode: 'DEMO', username: 'agent', password: 'password123' }))
       .rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -116,12 +124,91 @@ describe('AuthService.login', () => {
   });
 });
 
+describe('AuthService.loginMiniapp', () => {
+  it('records current consent before returning password-login tokens', async () => {
+    const passwordHash = await bcrypt.hash('password123', 10);
+    const prisma = {
+      tenant: { findUnique: vi.fn().mockResolvedValue(activeTenantRow) },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u1',
+          tenantId: 't1',
+          role: 'merchant',
+          agentId: null,
+          status: 'active',
+          passwordHash,
+        }),
+      },
+    };
+    const legal = stubLegal();
+    const service = new AuthService(
+      prisma as never,
+      new JwtService({ secret: 'test' }),
+      stubWechat(),
+      stubGroups(),
+      legal,
+    );
+
+    const result = await service.loginMiniapp({
+      tenantCode: 'DEMO',
+      username: 'merchantA',
+      password: 'password123',
+      publicationId,
+    });
+
+    expect(legal.recordConsent).toHaveBeenCalledWith({
+      tenantId: 't1',
+      userId: 'u1',
+      publicationId,
+    });
+    expect(result.accessToken).toEqual(expect.any(String));
+  });
+
+  it('does not issue tokens when publication validation fails', async () => {
+    const passwordHash = await bcrypt.hash('password123', 10);
+    const prisma = {
+      tenant: { findUnique: vi.fn().mockResolvedValue(activeTenantRow) },
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u1',
+          tenantId: 't1',
+          role: 'merchant',
+          agentId: null,
+          status: 'active',
+          passwordHash,
+        }),
+      },
+    };
+    const legal = stubLegal();
+    legal.recordConsent.mockRejectedValue(
+      new ConflictException('协议版本已更新，请重新阅读并同意'),
+    );
+    const jwt = new JwtService({ secret: 'test' });
+    const signAsync = vi.spyOn(jwt, 'signAsync');
+    const service = new AuthService(
+      prisma as never,
+      jwt,
+      stubWechat(),
+      stubGroups(),
+      legal,
+    );
+
+    await expect(service.loginMiniapp({
+      tenantCode: 'DEMO',
+      username: 'merchantA',
+      password: 'password123',
+      publicationId,
+    })).rejects.toBeInstanceOf(ConflictException);
+    expect(signAsync).not.toHaveBeenCalled();
+  });
+});
+
 describe('AuthService.refresh', () => {
   // refresh 现在查库:构造带 user.findUnique 的 prisma。
   const makeRefreshSvc = (user: any) => {
     const jwt = new JwtService({ secret: 'test' });
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(user) } } as any;
-    return { svc: new AuthService(prisma, jwt, stubIntegrations(), stubGroups()), jwt };
+    return { svc: new AuthService(prisma, jwt, stubWechat(), stubGroups(), stubLegal()), jwt };
   };
   const signRt = (jwt: JwtService) => jwt.signAsync(
     { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
@@ -182,7 +269,7 @@ describe('AuthService.refresh', () => {
       },
       agent: { findFirst: vi.fn().mockResolvedValue(null) },
     } as any;
-    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, jwt, stubWechat(), stubGroups(), stubLegal());
     await expect(svc.refresh(await signRt(jwt))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -200,7 +287,7 @@ describe('AuthService.refresh', () => {
         }),
       },
     } as any;
-    const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, jwt, stubWechat(), stubGroups(), stubLegal());
     const input = await jwt.signAsync(
       { userId: 'mem1', tenantId: 't1', role: 'member', agentId: null, ownerId: null },
       { secret: 'test', expiresIn: '7d' },
@@ -237,9 +324,47 @@ function makeWechatService(opts: { lookup?: any; existingUser?: any; users?: any
   } as any;
   const integrations = stubIntegrations(opts.lookup ?? null);
   const groups = stubGroups('gDefault');
-  const svc = new AuthService(prisma, jwt, integrations, groups);
-  return { svc, prisma, integrations, groups, created };
+  const legal = stubLegal();
+  const svc = new AuthService(
+    prisma,
+    jwt,
+    new WechatIdentityService(integrations),
+    groups,
+    legal,
+  );
+  return { svc, prisma, integrations, groups, legal, created };
 }
+
+describe('AuthService.loginWechatMiniapp', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('records the current publication for the authenticated WeChat user', async () => {
+    vi.stubGlobal('fetch', wxFetch({ openid: 'OPENID123' }));
+    const { svc, legal } = makeWechatService({
+      lookup: { tenantId: 't1', secret: 's' },
+      existingUser: {
+        id: 'u9',
+        tenantId: 't1',
+        role: 'merchant',
+        agentId: null,
+        status: 'active',
+        wxOpenid: 'OPENID123',
+        tenant: activeTenant,
+      },
+    });
+
+    await expect(svc.loginWechatMiniapp({
+      code: 'fresh-code',
+      appId: 'wxX',
+      publicationId,
+    })).resolves.toMatchObject({ accessToken: expect.any(String) });
+    expect(legal.recordConsent).toHaveBeenCalledWith({
+      tenantId: 't1',
+      userId: 'u9',
+      publicationId,
+    });
+  });
+});
 
 describe('AuthService.loginWechat', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -392,6 +517,59 @@ describe('AuthService.registerWechat', () => {
   });
 });
 
+describe('AuthService.registerWechatMiniapp', () => {
+  it('creates the pending WeChat user and consent in one transaction', async () => {
+    const publication = {
+      id: publicationId,
+      tenantId: 't1',
+      privacyVersion: 'privacy-v1',
+      agreementVersion: 'agreement-v1',
+    };
+    const transaction = {
+      user: {
+        create: vi.fn().mockResolvedValue({ id: 'newu' }),
+      },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(async (work: (tx: typeof transaction) => unknown) => work(transaction)),
+    };
+    const wechat = {
+      resolve: vi.fn().mockResolvedValue({ tenantId: 't1', openid: 'REGOPENID' }),
+    };
+    const legal = stubLegal();
+    legal.requireCurrentPublication.mockResolvedValue(publication);
+    const service = new AuthService(
+      prisma as never,
+      new JwtService({ secret: 'test' }),
+      wechat as never,
+      stubGroups('gDefault'),
+      legal,
+    );
+
+    await expect(service.registerWechatMiniapp({
+      appId: 'wxX',
+      code: 'fresh-code',
+      displayName: '李四',
+      phone: '13800001111',
+      publicationId,
+    })).resolves.toEqual({ applicationId: 'newu', status: 'pending' });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(legal.requireCurrentPublication).toHaveBeenCalledWith(
+      't1',
+      publicationId,
+      transaction,
+    );
+    expect(transaction.user.create).toHaveBeenCalledTimes(1);
+    expect(legal.createConsent).toHaveBeenCalledWith(transaction, {
+      tenantId: 't1',
+      userId: 'newu',
+      publication,
+    });
+  });
+});
+
 describe('AuthService.getWechatRegistrationStatus', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
@@ -456,7 +634,7 @@ describe('AuthService.getMe', () => {
   it('返回个人资料和微信注销验证方式且不泄露敏感字段', async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '大理基地', phone: '13800001111', status: 'active', wxOpenid: 'OPENID123' });
     const prisma = { user: { findUnique } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     const me = await svc.getMe(actor);
     expect(me.username).toBe('merchantA');
     expect(me.deletionVerification).toBe('wechat');
@@ -469,7 +647,7 @@ describe('AuthService.getMe', () => {
   });
   it('账号不存在抛 Unauthorized', async () => {
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     await expect(svc.getMe(actor)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
@@ -478,7 +656,7 @@ describe('AuthService.updateMe', () => {
   it('仅写入 displayName/phone,锁定为本人 id并返回密码注销验证方式', async () => {
     const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '新名', phone: '13900002222', status: 'active', wxOpenid: null });
     const prisma = { user: { update } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     const res = await svc.updateMe(actor, { displayName: '新名', phone: '13900002222' });
     expect(res.displayName).toBe('新名');
     expect(res.deletionVerification).toBe('password');
@@ -491,7 +669,7 @@ describe('AuthService.updateMe', () => {
   it('仅传 phone 时只更新 phone(displayName 不进 data)', async () => {
     const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '旧名', phone: '13700003333', status: 'active' });
     const prisma = { user: { update } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     await svc.updateMe(actor, { phone: '13700003333' });
     expect(update.mock.calls[0][0].data).toEqual({ phone: '13700003333' });
   });
@@ -502,7 +680,7 @@ describe('AuthService.changePassword', () => {
     const oldHash = await bcrypt.hash('oldpass123', 10);
     const update = vi.fn().mockResolvedValue({});
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ passwordHash: oldHash }), update } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     const res = await svc.changePassword(actor, { oldPassword: 'oldpass123', newPassword: 'newpass456' });
     expect(res).toEqual({ ok: true });
     const newHash = update.mock.calls[0][0].data.passwordHash;
@@ -520,13 +698,13 @@ describe('AuthService.changePassword', () => {
     const oldHash = await bcrypt.hash('oldpass123', 10);
     const update = vi.fn();
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue({ passwordHash: oldHash }), update } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     await expect(svc.changePassword(actor, { oldPassword: 'wrongold', newPassword: 'newpass456' })).rejects.toBeInstanceOf(UnauthorizedException);
     expect(update).not.toHaveBeenCalled();
   });
   it('账号不存在抛 Unauthorized', async () => {
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } } as any;
-    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
+    const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubWechat(), stubGroups(), stubLegal());
     await expect(svc.changePassword(actor, { oldPassword: 'x123456', newPassword: 'y123456' })).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

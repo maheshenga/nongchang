@@ -14,9 +14,10 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import {
   loginSchema, refreshSchema, wechatLoginSchema, wechatRegisterSchema,
+  miniappLoginSchema, miniappWechatLoginSchema, miniappWechatRegisterSchema,
   updateMeSchema, changePasswordSchema,
   LoginDto, RefreshDto, WechatLoginDto, WechatRegisterDto, UpdateMeDto, ChangePasswordDto, AuthUser,
-  WebAccessTokenResponse,
+  WebAccessTokenResponse, MiniappLoginDto, MiniappWechatLoginDto, MiniappWechatRegisterDto,
 } from '@nongchang/shared';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { Public } from '../common/decorators/public.decorator';
@@ -41,6 +42,31 @@ export class AuthController {
   @Post('login')
   login(@Body(new ZodValidationPipe(loginSchema)) dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('miniapp/login')
+  loginMiniapp(@Body(new ZodValidationPipe(miniappLoginSchema)) dto: MiniappLoginDto) {
+    return this.auth.loginMiniapp(dto);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('miniapp/wechat')
+  loginWechatMiniapp(
+    @Body(new ZodValidationPipe(miniappWechatLoginSchema)) dto: MiniappWechatLoginDto,
+  ) {
+    return this.auth.loginWechatMiniapp(dto);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('miniapp/wechat/register')
+  registerWechatMiniapp(
+    @Body(new ZodValidationPipe(miniappWechatRegisterSchema)) dto: MiniappWechatRegisterDto,
+  ) {
+    return this.auth.registerWechatMiniapp(dto);
   }
 
   @Public()

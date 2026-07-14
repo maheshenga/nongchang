@@ -1,6 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
+import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoginDto } from '@nongchang/shared';
+import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
 import { AuthController } from './auth.controller';
 
 const tokenPair = { accessToken: 'access.token', refreshToken: 'refresh.token' };
@@ -10,6 +12,9 @@ describe('AuthController web sessions', () => {
   const auth = {
     login: vi.fn(),
     refresh: vi.fn(),
+    loginMiniapp: vi.fn(),
+    loginWechatMiniapp: vi.fn(),
+    registerWechatMiniapp: vi.fn(),
   };
   const response = {
     setHeader: vi.fn(),
@@ -22,6 +27,9 @@ describe('AuthController web sessions', () => {
     vi.clearAllMocks();
     auth.login.mockResolvedValue(tokenPair);
     auth.refresh.mockResolvedValue(tokenPair);
+    auth.loginMiniapp.mockResolvedValue(tokenPair);
+    auth.loginWechatMiniapp.mockResolvedValue(tokenPair);
+    auth.registerWechatMiniapp.mockResolvedValue({ applicationId: 'newu', status: 'pending' });
     controller = new AuthController(auth as never);
   });
 
@@ -65,5 +73,41 @@ describe('AuthController web sessions', () => {
       expect.stringContaining('nc_refresh=; Path=/api/auth/web; HttpOnly'),
     );
     expect(result).toBeUndefined();
+  });
+
+  it('forwards publication IDs through every dedicated miniapp auth route', async () => {
+    const publicationId = '22222222-2222-4222-8222-222222222222';
+    const passwordInput = { ...loginDto, publicationId };
+    const wechatInput = { appId: 'wxX', code: 'fresh-code', publicationId };
+    const registerInput = {
+      ...wechatInput,
+      displayName: '示例农户',
+      phone: '13800001111',
+    };
+
+    await expect(controller.loginMiniapp(passwordInput)).resolves.toEqual(tokenPair);
+    await expect(controller.loginWechatMiniapp(wechatInput)).resolves.toEqual(tokenPair);
+    await expect(controller.registerWechatMiniapp(registerInput)).resolves.toEqual({
+      applicationId: 'newu',
+      status: 'pending',
+    });
+    expect(auth.loginMiniapp).toHaveBeenCalledWith(passwordInput);
+    expect(auth.loginWechatMiniapp).toHaveBeenCalledWith(wechatInput);
+    expect(auth.registerWechatMiniapp).toHaveBeenCalledWith(registerInput);
+  });
+
+  it('keeps every miniapp auth route public and credential-throttled', () => {
+    const handlers = [
+      AuthController.prototype.loginMiniapp,
+      AuthController.prototype.loginWechatMiniapp,
+      AuthController.prototype.registerWechatMiniapp,
+    ];
+    for (const handler of handlers) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBe(true);
+      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBe(
+        process.env.NODE_ENV === 'test' ? 100_000 : 10,
+      );
+      expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
+    }
   });
 });
