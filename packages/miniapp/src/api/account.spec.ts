@@ -53,10 +53,25 @@ describe('api/account', () => {
     taro.downloadFile.mockResolvedValueOnce({ statusCode: 200, tempFilePath: '/tmp/export.json' });
     taro.saveFile.mockResolvedValueOnce({ savedFilePath: '/user-data/saved.json' });
 
-    await expect(account.exportMyData()).resolves.toBe('/user-data/saved.json');
+    await expect(account.exportMyData('json')).resolves.toBe('/user-data/saved.json');
+    expect(taro.downloadFile.mock.calls[0][0].url).toMatch(/\/auth\/me\/data\/export$/);
     expect(taro.saveFile).toHaveBeenCalledWith({
       tempFilePath: '/tmp/export.json',
       filePath: expect.stringMatching(/^\/user-data\/nongchang-account-data-\d+\.json$/),
+    });
+  });
+
+  it('requests and saves a CSV copy with a format-specific extension', async () => {
+    const { taro, store, account } = await loadFresh();
+    store.setTokens({ accessToken: makeJwt(), refreshToken: 'refresh-1' });
+    taro.downloadFile.mockResolvedValueOnce({ statusCode: 200, tempFilePath: '/tmp/export.csv' });
+    taro.saveFile.mockResolvedValueOnce({ savedFilePath: '/user-data/saved.csv' });
+
+    await expect(account.exportMyData('csv')).resolves.toBe('/user-data/saved.csv');
+    expect(taro.downloadFile.mock.calls[0][0].url).toMatch(/\/auth\/me\/data\/export\?format=csv$/);
+    expect(taro.saveFile).toHaveBeenCalledWith({
+      tempFilePath: '/tmp/export.csv',
+      filePath: expect.stringMatching(/^\/user-data\/nongchang-account-data-\d+\.csv$/),
     });
   });
 
@@ -64,11 +79,23 @@ describe('api/account', () => {
     const { taro, account } = await loadFresh();
     taro.shareFileMessage.mockResolvedValueOnce(undefined);
 
-    await account.shareMyData('/user-data/saved.json');
+    await account.shareMyData('/user-data/saved.json', 'json');
 
     expect(taro.shareFileMessage).toHaveBeenCalledWith({
       filePath: '/user-data/saved.json',
       fileName: '农场账户数据副本.json',
+    });
+  });
+
+  it('shares CSV with a format-specific human filename', async () => {
+    const { taro, account } = await loadFresh();
+    taro.shareFileMessage.mockResolvedValueOnce(undefined);
+
+    await account.shareMyData('/user-data/saved.csv', 'csv');
+
+    expect(taro.shareFileMessage).toHaveBeenCalledWith({
+      filePath: '/user-data/saved.csv',
+      fileName: '农场账户数据副本.csv',
     });
   });
 
@@ -78,7 +105,7 @@ describe('api/account', () => {
     taro.downloadFile.mockResolvedValueOnce({ statusCode: 200, tempFilePath: '/tmp/export.json' });
     taro.saveFile.mockResolvedValueOnce({ errMsg: 'saveFile:fail' });
 
-    await expect(account.exportMyData()).rejects.toThrow('数据副本保存失败');
+    await expect(account.exportMyData('json')).rejects.toThrow('数据副本保存失败');
   });
 
   it('clears local tokens only after password closure succeeds', async () => {

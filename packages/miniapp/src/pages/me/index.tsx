@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { View, Text, Input, Button } from '@tarojs/components';
+import { View, Text, Button } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import type { PublicLegalQuery } from '@nongchang/shared';
 import { getToken, clearToken } from '../../store/auth';
 import { request } from '../../api/request';
-import { getMe, updateMe, changePassword } from '../../api/auth';
+import { getMe } from '../../api/auth';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
@@ -20,6 +20,8 @@ import './index.scss';
 const LEGAL_LOOKUP: PublicLegalQuery | null = WX_APPID ? { appId: WX_APPID } : null;
 const openAccountData = () => Taro.navigateTo({ url: '/pages/account-data/index' });
 const openAccountClosure = () => Taro.navigateTo({ url: '/pages/close-account/index' });
+const openProfileEdit = () => Taro.navigateTo({ url: '/pages/profile-edit/index' });
+const openPasswordChange = () => Taro.navigateTo({ url: '/pages/password-change/index' });
 const openLegal = (kind: 'privacy' | 'agreement') => {
   if (LEGAL_LOOKUP) Taro.navigateTo({ url: buildLegalDocumentUrl(kind, LEGAL_LOOKUP) });
 };
@@ -36,17 +38,6 @@ export default function Me() {
   const [batchCount, setBatchCount] = useState<number | null>(null);
   const [fieldCount, setFieldCount] = useState<number | null>(null);
   const [fields, setFields] = useState<Field[] | null>(null);
-
-  const [editing, setEditing] = useState(false);
-  const [formName, setFormName] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  const [pwdPanel, setPwdPanel] = useState(false);
-  const [oldPwd, setOldPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
-  const [savingPwd, setSavingPwd] = useState(false);
 
   useDidShow(() => {
     const token = getToken();
@@ -113,58 +104,6 @@ export default function Me() {
     Taro.redirectTo({ url: '/pages/login/index' });
   }
 
-  function openEdit() {
-    setFormName(displayName);
-    setFormPhone(phone);
-    setPwdPanel(false);
-    setEditing(true);
-  }
-
-  async function saveProfile() {
-    if (formName.trim().length < 2) {
-      Taro.showToast({ title: '昵称至少 2 个字', icon: 'none' });
-      return;
-    }
-    setSavingProfile(true);
-    try {
-      const me = await updateMe({ displayName: formName.trim(), phone: formPhone.trim() || null });
-      setDisplayName(me.displayName);
-      setPhone(me.phone ?? '');
-      setEditing(false);
-      Taro.showToast({ title: '资料已更新', icon: 'success' });
-    } catch (e: any) {
-      Taro.showToast({ title: e?.message || '保存失败', icon: 'none' });
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  function openPwd() {
-    setOldPwd(''); setNewPwd(''); setConfirmPwd('');
-    setEditing(false);
-    setPwdPanel(true);
-  }
-
-  async function savePwd() {
-    if (newPwd.length < 6) {
-      Taro.showToast({ title: '新密码至少 6 位', icon: 'none' });
-      return;
-    }
-    if (newPwd !== confirmPwd) {
-      Taro.showToast({ title: '两次新密码不一致', icon: 'none' });
-      return;
-    }
-    setSavingPwd(true);
-    try {
-      await changePassword(oldPwd, newPwd);
-      setPwdPanel(false);
-      Taro.showToast({ title: '密码已修改', icon: 'success' });
-    } catch (e: any) {
-      Taro.showToast({ title: e?.message || '修改失败', icon: 'none' });
-    } finally {
-      setSavingPwd(false);
-    }
-  }
   const profileHeaderProps = { displayName, username, role, phone, loading: profileLoading, error: profileError };
 
   return (
@@ -175,11 +114,11 @@ export default function Me() {
 
       <View className="me__menu-section">
         <Text className="me__section-title">账号设置</Text>
-        <Button className="nc-button-reset me__item" onClick={openEdit}>
+        <Button className="nc-button-reset me__item" onClick={openProfileEdit}>
           <Text className="me__item-text">修改个人资料</Text>
           <Text className="me__item-arrow">›</Text>
         </Button>
-        <Button className="nc-button-reset me__item" onClick={openPwd}>
+        <Button className="nc-button-reset me__item" onClick={openPasswordChange}>
           <Text className="me__item-text">修改登录密码</Text>
           <Text className="me__item-arrow">›</Text>
         </Button>
@@ -209,36 +148,6 @@ export default function Me() {
           <Text className="me__item-arrow">›</Text>
         </Button>
       </View>
-
-      {editing && (
-        <View className="me__panel">
-          <Text className="me__panel-title">修改个人资料</Text>
-          <Text className="me__panel-label">昵称</Text>
-          <Input className="me__panel-input" value={formName} placeholder="请输入昵称" onInput={(e) => setFormName(e.detail.value)} />
-          <Text className="me__panel-label">手机号</Text>
-          <Input className="me__panel-input" type="number" value={formPhone} placeholder="选填" onInput={(e) => setFormPhone(e.detail.value)} />
-          <View className="me__panel-actions">
-            <Button className="me__panel-btn me__panel-btn--ghost" onClick={() => setEditing(false)}>取消</Button>
-            <Button className="me__panel-btn" loading={savingProfile} onClick={saveProfile}>保存</Button>
-          </View>
-        </View>
-      )}
-
-      {pwdPanel && (
-        <View className="me__panel">
-          <Text className="me__panel-title">修改登录密码</Text>
-          <Text className="me__panel-label">原密码</Text>
-          <Input className="me__panel-input" password value={oldPwd} placeholder="请输入原密码" onInput={(e) => setOldPwd(e.detail.value)} />
-          <Text className="me__panel-label">新密码</Text>
-          <Input className="me__panel-input" password value={newPwd} placeholder="至少 6 位" onInput={(e) => setNewPwd(e.detail.value)} />
-          <Text className="me__panel-label">确认新密码</Text>
-          <Input className="me__panel-input" password value={confirmPwd} placeholder="再次输入新密码" onInput={(e) => setConfirmPwd(e.detail.value)} />
-          <View className="me__panel-actions">
-            <Button className="me__panel-btn me__panel-btn--ghost" onClick={() => setPwdPanel(false)}>取消</Button>
-            <Button className="me__panel-btn" loading={savingPwd} onClick={savePwd}>确认修改</Button>
-          </View>
-        </View>
-      )}
 
       <Button className="nc-button-reset me__logout" onClick={logout}>
         <Text className="me__logout-text">退出登录</Text>

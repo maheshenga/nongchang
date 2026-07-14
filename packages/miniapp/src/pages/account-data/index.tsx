@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
 import { useDidShow } from '@tarojs/taro';
 import type { AccountDataPreview } from '@nongchang/shared';
-import { exportMyData, getMyData, shareMyData } from '../../api/account';
+import {
+  exportMyData,
+  getMyData,
+  shareMyData,
+  type AccountDataExportFormat,
+} from '../../api/account';
+import { accountRecordLabel, formatAccountDate } from './presentation';
 import './index.scss';
 
 const EXCLUSIONS = [
@@ -12,28 +18,23 @@ const EXCLUSIONS = [
   '不包含上传文件二进制，仅包含允许公开给本人的上传元数据。',
 ];
 
-function recordLabel(item: unknown): string {
-  const row = item as {
-    id: string;
-    name?: string;
-    batchNo?: string;
-    action?: string;
-    purpose?: string;
-    kind?: string;
-    resource?: string;
-    reason?: string;
-  };
-  return row.name || row.batchNo || row.action || row.purpose || row.kind
-    || row.reason || row.resource || row.id;
+function recordDate(item: unknown): string {
+  const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+  const value = row.recordedAt ?? row.paidAt ?? row.updatedAt ?? row.createdAt;
+  return formatAccountDate(typeof value === 'string' ? value : null);
 }
 
 export default function AccountDataPage() {
   const [data, setData] = useState<AccountDataPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<AccountDataExportFormat | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [savedFilePath, setSavedFilePath] = useState<string | null>(null);
+  const [lastExportFormat, setLastExportFormat] = useState<AccountDataExportFormat>('json');
+  const [savedFile, setSavedFile] = useState<{
+    path: string;
+    format: AccountDataExportFormat;
+  } | null>(null);
 
   async function loadData() {
     setLoading(true);
@@ -52,23 +53,24 @@ export default function AccountDataPage() {
     void loadData();
   });
 
-  async function runExport() {
-    setExporting(true);
+  async function runExport(format: AccountDataExportFormat) {
+    setExportingFormat(format);
+    setLastExportFormat(format);
     setExportError(null);
     try {
-      setSavedFilePath(await exportMyData());
+      setSavedFile({ path: await exportMyData(format), format });
     } catch (e: unknown) {
       setExportError(e instanceof Error ? e.message : '数据导出失败');
     } finally {
-      setExporting(false);
+      setExportingFormat(null);
     }
   }
 
   async function runShare() {
-    if (!savedFilePath) return;
+    if (!savedFile) return;
     setExportError(null);
     try {
-      await shareMyData(savedFilePath);
+      await shareMyData(savedFile.path, savedFile.format);
     } catch (e: unknown) {
       setExportError(e instanceof Error ? e.message : '数据分享失败');
     }
@@ -110,7 +112,31 @@ export default function AccountDataPage() {
         <Text className="account-data__title">我的数据</Text>
         <Text>机构：{data.tenant.name}（{data.tenant.code}）</Text>
         <Text>账号：{data.account.displayName}（{data.account.username}）</Text>
-        <Text>生成时间：{data.generatedAt}</Text>
+        <Text>生成时间：{formatAccountDate(data.generatedAt)}</Text>
+        <View className="account-data__export-actions">
+          <Button
+            className="account-data__export"
+            loading={exportingFormat === 'json'}
+            disabled={exportingFormat !== null}
+            onClick={() => void runExport('json')}
+          >
+            {exportError && lastExportFormat === 'json' ? '重新导出 JSON' : '导出 JSON 数据副本'}
+          </Button>
+          <Button
+            className="account-data__export account-data__export--secondary"
+            loading={exportingFormat === 'csv'}
+            disabled={exportingFormat !== null}
+            onClick={() => void runExport('csv')}
+          >
+            {exportError && lastExportFormat === 'csv' ? '重新导出 CSV' : '导出 CSV 数据副本'}
+          </Button>
+        </View>
+        {exportError && <Text className="account-data__export-error">{exportError}</Text>}
+        {savedFile && (
+          <Button className="account-data__share" onClick={() => void runShare()}>
+            分享数据副本（{savedFile.format.toUpperCase()}）
+          </Button>
+        )}
       </View>
 
       <View className="account-data__counts">
@@ -130,7 +156,10 @@ export default function AccountDataPage() {
             {category.items.length === 0 ? (
               <Text className="account-data__empty">暂无记录</Text>
             ) : category.items.map(item => (
-              <Text className="account-data__record" key={item.id}>{recordLabel(item)}</Text>
+              <View className="account-data__record" key={item.id}>
+                <Text>{accountRecordLabel(item, category.label)}</Text>
+                <Text className="account-data__record-date">{recordDate(item)}</Text>
+              </View>
             ))}
           </View>
         ))}
@@ -143,15 +172,6 @@ export default function AccountDataPage() {
         ))}
       </View>
 
-      {exportError && <Text className="account-data__export-error">{exportError}</Text>}
-      <Button className="account-data__export" loading={exporting} onClick={() => void runExport()}>
-        {exportError ? '重新导出' : '导出 JSON 数据副本'}
-      </Button>
-      {savedFilePath && (
-        <Button className="account-data__share" onClick={() => void runShare()}>
-          分享数据副本
-        </Button>
-      )}
     </View>
   );
 }

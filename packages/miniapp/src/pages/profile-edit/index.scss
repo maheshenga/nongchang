@@ -1,0 +1,92 @@
+@use '../../styles/theme.scss' as *;
+
+.account-form {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 32px 28px 56px;
+  background: $c-bg;
+
+  &__intro,
+  &__card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__intro {
+    margin-bottom: 24px;
+  }
+
+  &__title {
+    font-size: 38px;
+    font-weight: 700;
+    color: $c-text;
+  }
+
+  &__description,
+  &__state {
+    margin-top: 12px;
+    font-size: 26px;
+    line-height: 1.6;
+    color: $c-text-sub;
+  }
+
+  &__card {
+    padding: 32px 28px;
+    background: #fff;
+    border: 1px solid $c-border;
+    border-radius: 20px;
+    box-shadow: $shadow-soft;
+  }
+
+  &__label {
+    margin: 20px 0 10px;
+    font-size: 26px;
+    font-weight: 600;
+    color: $c-text;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  &__input {
+    min-height: 88px;
+    box-sizing: border-box;
+    padding: 20px 24px;
+    font-size: 28px;
+    color: $c-text;
+    background: $c-bg;
+    border: 1px solid $c-border;
+    border-radius: 14px;
+  }
+
+  &__error {
+    display: block;
+    margin-top: 20px;
+    padding: 20px 24px;
+    font-size: 26px;
+    color: $c-rose;
+    background: #fff1f2;
+    border-radius: 14px;
+  }
+
+  &__submit,
+  &__secondary {
+    min-height: 88px;
+    margin-top: 28px;
+    border-radius: 14px;
+    font-size: 30px;
+    font-weight: 700;
+  }
+
+  &__submit {
+    color: #fff;
+    background: linear-gradient(135deg, $c-primary 0%, $c-primary-dark 100%);
+  }
+
+  &__secondary {
+    color: $c-primary-dark;
+    background: #fff;
+    border: 1px solid $c-primary;
+  }
+}

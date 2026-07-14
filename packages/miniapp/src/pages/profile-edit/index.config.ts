@@ -1,0 +1,1 @@
+export default { navigationBarTitleText: '修改个人资料' };

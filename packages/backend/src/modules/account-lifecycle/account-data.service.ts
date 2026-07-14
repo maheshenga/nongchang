@@ -13,6 +13,7 @@ import {
   EXPORT_EXCLUSIONS,
   EXPORT_ROW_LIMIT,
   PREVIEW_LIMIT,
+  buildAccountDataCsv,
   toAccountAiOperation,
   toAccountBatch,
   toAccountCreditAccount,
@@ -23,6 +24,7 @@ import {
   toAccountSupply,
   toAccountSupplyIssue,
   toAccountUpload,
+  type AccountDataExportFormat,
 } from './account-data.model';
 
 const accountSelect = {
@@ -83,7 +85,10 @@ export class AccountDataService {
     });
   }
 
-  async export(actor: AuthUser): Promise<{ fileName: string; body: Buffer }> {
+  async export(
+    actor: AuthUser,
+    format: AccountDataExportFormat = 'json',
+  ): Promise<{ fileName: string; body: Buffer }> {
     const [identity, creditAccount] = await Promise.all([
       this.loadIdentity(actor),
       this.loadCreditAccount(actor),
@@ -103,13 +108,15 @@ export class AccountDataService {
       data,
       exclusions: EXPORT_EXCLUSIONS,
     });
-    const json = JSON.stringify(payload, null, 2);
-    if (Buffer.byteLength(json, 'utf8') > EXPORT_BYTE_LIMIT) {
+    const serialized = format === 'csv'
+      ? buildAccountDataCsv(payload)
+      : JSON.stringify(payload, null, 2);
+    if (Buffer.byteLength(serialized, 'utf8') > EXPORT_BYTE_LIMIT) {
       await this.rejectExport(actor.tenantId, '导出文件');
     }
     return {
-      fileName: `nongchang-account-data-${new Date().toISOString().slice(0, 10)}.json`,
-      body: Buffer.from(json, 'utf8'),
+      fileName: `nongchang-account-data-${new Date().toISOString().slice(0, 10)}.${format}`,
+      body: Buffer.from(serialized, 'utf8'),
     };
   }
 

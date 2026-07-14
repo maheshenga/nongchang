@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Login from '../../src/pages/login';
 import Batch from '../../src/pages/batch';
 import Me from '../../src/pages/me';
+import AccountData from '../../src/pages/account-data';
+import PasswordChange from '../../src/pages/password-change';
+import ProfileEdit from '../../src/pages/profile-edit';
 import Register from '../../src/pages/register';
 import Trace from '../../src/pages/trace';
 import Usage from '../../src/pages/usage';
@@ -10,10 +13,13 @@ import Work from '../../src/pages/work';
 import {
   getWechatRegistrationStatus,
   getMe,
+  changePassword,
   login,
   loginWechat,
   registerWechat,
+  updateMe,
 } from '../../src/api/auth';
+import { exportMyData, getMyData, shareMyData } from '../../src/api/account';
 import { listBatches, listFarmRecords, listFields } from '../../src/api/farm';
 import { getBillingSummary, listLedger } from '../../src/api/billing';
 import { request } from '../../src/api/request';
@@ -23,6 +29,8 @@ import { getPublicLegal } from '../../src/api/legal';
 import {
   __setRouterParams,
   getStorageSync,
+  navigateBack,
+  navigateTo,
   setStorageSync,
   switchTab,
 } from '@tarojs/taro';
@@ -71,6 +79,12 @@ vi.mock('../../src/api/quickTemplate', () => ({
 
 vi.mock('../../src/api/trace', () => ({
   listTraceEvents: vi.fn(),
+}));
+
+vi.mock('../../src/api/account', () => ({
+  getMyData: vi.fn(),
+  exportMyData: vi.fn(),
+  shareMyData: vi.fn(),
 }));
 
 vi.mock('../../src/api/legal', () => ({
@@ -340,5 +354,114 @@ describe('miniapp critical rendered flows', () => {
     fireEvent.click(screen.getByRole('button', { name: /溯源记录/ }));
 
     expect(switchTab).toHaveBeenCalledWith({ url: '/pages/trace/index' });
+  });
+
+  it('opens dedicated account setting pages and completes their existing forms', async () => {
+    const profile = {
+      id: 'user-1',
+      tenantId: 'tenant-1',
+      username: 'zhangsan',
+      role: 'merchant' as const,
+      agentId: null,
+      displayName: '张三',
+      phone: '13800000000',
+      status: 'active',
+      deletionVerification: 'password' as const,
+    };
+    vi.mocked(getMe).mockResolvedValue(profile);
+    vi.mocked(updateMe).mockResolvedValue({ ...profile, displayName: '张三丰' });
+    vi.mocked(changePassword).mockResolvedValue({ ok: true });
+    setStorageSync('access_token', 'test-token');
+
+    const mePage = render(<Me />);
+    fireEvent.click(await screen.findByRole('button', { name: /修改个人资料/ }));
+    expect(navigateTo).toHaveBeenCalledWith({ url: '/pages/profile-edit/index' });
+    fireEvent.click(screen.getByRole('button', { name: /修改登录密码/ }));
+    expect(navigateTo).toHaveBeenCalledWith({ url: '/pages/password-change/index' });
+    expect(mePage.container.querySelector('.me__panel')).toBeNull();
+    mePage.unmount();
+
+    const profilePage = render(<ProfileEdit />);
+    fireEvent.change(await screen.findByDisplayValue('张三'), { target: { value: ' 张三丰 ' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存资料' }));
+    await waitFor(() => expect(updateMe).toHaveBeenCalledWith({
+      displayName: '张三丰',
+      phone: '13800000000',
+    }));
+    expect(navigateBack).toHaveBeenCalled();
+    profilePage.unmount();
+
+    render(<PasswordChange />);
+    fireEvent.change(screen.getByPlaceholderText('请输入原密码'), { target: { value: 'old-password' } });
+    fireEvent.change(screen.getByPlaceholderText('至少 6 位'), { target: { value: 'new-password' } });
+    fireEvent.change(screen.getByPlaceholderText('再次输入新密码'), { target: { value: 'new-password' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认修改' }));
+    await waitFor(() => expect(changePassword).toHaveBeenCalledWith('old-password', 'new-password'));
+    expect(navigateBack).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a profile-edit load failure recoverable', async () => {
+    vi.mocked(getMe)
+      .mockRejectedValueOnce(new Error('资料暂时不可用'))
+      .mockResolvedValueOnce({
+        id: 'user-1', tenantId: 'tenant-1', username: 'zhangsan', role: 'merchant',
+        agentId: null, displayName: '张三', phone: null, status: 'active',
+        deletionVerification: 'password',
+      });
+
+    render(<ProfileEdit />);
+
+    const retry = await screen.findByRole('button', { name: '重新加载账户' });
+    expect(screen.getByRole('alert').textContent).toContain('资料暂时不可用');
+    fireEvent.click(retry);
+    expect(await screen.findByDisplayValue('张三')).toBeTruthy();
+  });
+
+  it('renders human account-data labels and supports retryable JSON and CSV exports', async () => {
+    vi.mocked(getMyData).mockResolvedValue({
+      generatedAt: '2026-07-14T09:00:00.000Z',
+      tenant: { id: 'tenant-1', code: 'DEMO', name: '示例机构' },
+      account: {
+        id: 'user-1', tenantId: 'tenant-1', username: 'zhangsan', role: 'merchant',
+        agentId: null, displayName: '张三', phone: null, status: 'active',
+        deletionVerification: 'password',
+      },
+      counts: {
+        fields: 0, batches: 0, farmRecords: 0, supplies: 0, supplyIssues: 0,
+        uploads: 1, aiOperations: 0, creditOrders: 0, creditLedgers: 0,
+      },
+      recent: {
+        fields: [], batches: [], farmRecords: [], supplies: [], supplyIssues: [],
+        uploads: [{
+          id: 'opaque-upload-id', purpose: '', url: null, sizeBytes: '128', status: 'ACTIVE',
+          createdAt: '2026-07-14T09:00:00.000Z',
+        }],
+        aiOperations: [], creditOrders: [], creditAccount: null,
+      },
+      recentLimit: 20,
+    });
+    vi.mocked(exportMyData)
+      .mockRejectedValueOnce(new Error('弱网导致导出失败'))
+      .mockResolvedValueOnce('/user-data/account.json')
+      .mockResolvedValueOnce('/user-data/account.csv');
+    vi.mocked(shareMyData).mockResolvedValue(undefined);
+
+    render(<AccountData />);
+
+    expect(await screen.findByText('未命名上传记录')).toBeTruthy();
+    expect(screen.queryByText('opaque-upload-id')).toBeNull();
+    expect(screen.queryByText('2026-07-14T09:00:00.000Z')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 JSON 数据副本' }));
+    expect(await screen.findByText('弱网导致导出失败')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '重新导出 JSON' }));
+    expect(await screen.findByRole('button', { name: '分享数据副本（JSON）' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '分享数据副本（JSON）' }));
+    expect(shareMyData).toHaveBeenCalledWith('/user-data/account.json', 'json');
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 CSV 数据副本' }));
+    expect(await screen.findByRole('button', { name: '分享数据副本（CSV）' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '分享数据副本（CSV）' }));
+    expect(shareMyData).toHaveBeenCalledWith('/user-data/account.csv', 'csv');
   });
 });

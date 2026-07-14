@@ -4,6 +4,7 @@ import {
   EXPORT_EXCLUSIONS,
   EXPORT_ROW_LIMIT,
   PREVIEW_LIMIT,
+  escapeCsvCell,
   toAccountAiOperation,
   toAccountBatch,
   toAccountCreditAccount,
@@ -90,6 +91,15 @@ describe('account data safe mapping', () => {
     expect(EXPORT_BYTE_LIMIT).toBe(10 * 1024 * 1024);
     expect(EXPORT_EXCLUSIONS).toContain(
       '不包含上传文件二进制，仅包含允许公开给本人的上传元数据。',
+    );
+  });
+
+  it('escapes CSV cells containing commas, newlines, and quotes', () => {
+    expect(escapeCsvCell('一号田,北区\n温室 "A"')).toBe('"一号田,北区\n温室 ""A"""');
+    expect(escapeCsvCell('普通文本')).toBe('普通文本');
+    expect(escapeCsvCell(null)).toBe('');
+    expect(escapeCsvCell('=HYPERLINK("https://example.com")')).toBe(
+      '"\'=HYPERLINK(""https://example.com"")"',
     );
   });
 });

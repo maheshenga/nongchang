@@ -26,10 +26,10 @@ describe('AccountLifecycleController', () => {
     const response = { setHeader: vi.fn() };
     const controller = new AccountLifecycleController(service as never, {} as never);
 
-    const result = await controller.export(actor, response as never);
+    const result = await controller.export(actor, {}, response as never);
 
     expect(result).toBeInstanceOf(StreamableFile);
-    expect(service.export).toHaveBeenCalledWith(actor);
+    expect(service.export).toHaveBeenCalledWith(actor, 'json');
     expect(response.setHeader).toHaveBeenCalledWith(
       'Content-Type', 'application/json; charset=utf-8',
     );
@@ -37,6 +37,26 @@ describe('AccountLifecycleController', () => {
       'Content-Disposition', 'attachment; filename="account-data.json"',
     );
     expect(response.setHeader).toHaveBeenCalledWith('Content-Length', String(body.byteLength));
+  });
+
+  it('returns an explicitly requested CSV export with format-aware headers', async () => {
+    const body = Buffer.from('\ufeff类别,名称,状态,发生时间,详情', 'utf8');
+    const service = {
+      preview: vi.fn(),
+      export: vi.fn().mockResolvedValue({ fileName: 'account-data.csv', body }),
+    };
+    const response = { setHeader: vi.fn() };
+    const controller = new AccountLifecycleController(service as never, {} as never);
+
+    await controller.export(actor, { format: 'csv' }, response as never);
+
+    expect(service.export).toHaveBeenCalledWith(actor, 'csv');
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Content-Type', 'text/csv; charset=utf-8',
+    );
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Content-Disposition', 'attachment; filename="account-data.csv"',
+    );
   });
 
   it('passes validated strong proof to closure and returns no body', async () => {

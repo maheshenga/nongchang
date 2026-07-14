@@ -81,6 +81,17 @@
     line-height: 1.55;
   }
 
+  &__record {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__record-date {
+    margin-top: 4px;
+    color: $c-text-sub;
+    font-size: 21px;
+  }
+
   &__empty {
     color: $c-text-sub;
   }
@@ -92,6 +103,23 @@
     border-radius: 16px;
     background: $c-primary;
     color: #fff;
+    min-height: 88px;
+  }
+
+  &__export-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  &__export {
+    margin-top: 12px;
+
+    &--secondary {
+      border: 1px solid $c-primary;
+      background: #fff;
+      color: $c-primary;
+    }
   }
 
   &__share,

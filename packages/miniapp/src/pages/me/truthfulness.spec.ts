@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const sourcePath = join(dirname(fileURLToPath(import.meta.url)), 'index.tsx');
 const source = readFileSync(sourcePath, 'utf8');
+const appConfigSource = readFileSync(join(dirname(sourcePath), '../../app.config.ts'), 'utf8');
 const profileHeaderSource = readFileSync(join(dirname(sourcePath), 'MeProfileHeader.tsx'), 'utf8');
 const legalAccountSource = readFileSync(join(dirname(sourcePath), 'MeLegalAccountSection.tsx'), 'utf8');
 
@@ -30,5 +31,15 @@ describe('Me page truthful copy', () => {
     expect(legalAccountSource).toContain('canSelfClose(roleCode)');
     expect(source).not.toContain('蓝牙传感设备配置');
     expect(source).not.toContain('comingSoon');
+  });
+
+  it('opens dedicated profile and password pages without appending edit panels', () => {
+    expect(source).toContain("Taro.navigateTo({ url: '/pages/profile-edit/index' })");
+    expect(source).toContain("Taro.navigateTo({ url: '/pages/password-change/index' })");
+    expect(source).not.toContain('editing &&');
+    expect(source).not.toContain('pwdPanel &&');
+    expect(source).not.toContain('<Input');
+    expect(appConfigSource).toContain("'pages/profile-edit/index'");
+    expect(appConfigSource).toContain("'pages/password-change/index'");
   });
 });

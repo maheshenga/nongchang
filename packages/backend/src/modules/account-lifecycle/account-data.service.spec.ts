@@ -160,4 +160,22 @@ describe('AccountDataService', () => {
       '不包含上传文件二进制，仅包含允许公开给本人的上传元数据。',
     );
   });
+
+  it('returns an escaped UTF-8 BOM CSV attachment without changing export scope', async () => {
+    const { prisma, service } = makeService();
+    prisma.field.findMany.mockResolvedValue([{
+      id: 'field-1', name: '一号田,北区\n温室 "A"', area: 1.5, createdAt,
+    }]);
+
+    const file = await service.export(actor, 'csv');
+    const csv = file.body.toString('utf8');
+
+    expect(file.fileName).toMatch(/^nongchang-account-data-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    expect(csv).toContain('类别,名称,状态,发生时间,详情');
+    expect(csv).toContain('"一号田,北区\n温室 ""A"""');
+    expect(prisma.field.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenantId: 't1', ownerId: 'u1' },
+    }));
+  });
 });

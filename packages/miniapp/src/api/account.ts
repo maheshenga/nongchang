@@ -9,6 +9,8 @@ import { clearToken } from '../store/auth';
 import { parseResponse } from './parse-response';
 import { downloadAuthenticated, request } from './request';
 
+export type AccountDataExportFormat = 'json' | 'csv';
+
 export async function getMyData(): Promise<AccountDataPreview> {
   return parseResponse(
     accountDataPreviewSchema,
@@ -17,9 +19,12 @@ export async function getMyData(): Promise<AccountDataPreview> {
   );
 }
 
-export async function exportMyData(): Promise<string> {
-  const tempFilePath = await downloadAuthenticated('/auth/me/data/export');
-  const filePath = `${Taro.env.USER_DATA_PATH}/nongchang-account-data-${Date.now()}.json`;
+export async function exportMyData(format: AccountDataExportFormat = 'json'): Promise<string> {
+  const url = format === 'json'
+    ? '/auth/me/data/export'
+    : '/auth/me/data/export?format=csv';
+  const tempFilePath = await downloadAuthenticated(url);
+  const filePath = `${Taro.env.USER_DATA_PATH}/nongchang-account-data-${Date.now()}.${format}`;
   const saved = await Taro.saveFile({ tempFilePath, filePath });
   if (!('savedFilePath' in saved) || !saved.savedFilePath) {
     throw new Error('数据副本保存失败');
@@ -27,8 +32,11 @@ export async function exportMyData(): Promise<string> {
   return saved.savedFilePath;
 }
 
-export async function shareMyData(filePath: string): Promise<void> {
-  await Taro.shareFileMessage({ filePath, fileName: '农场账户数据副本.json' });
+export async function shareMyData(
+  filePath: string,
+  format: AccountDataExportFormat = 'json',
+): Promise<void> {
+  await Taro.shareFileMessage({ filePath, fileName: `农场账户数据副本.${format}` });
 }
 
 export async function closeMyAccount(input: CloseAccountInput): Promise<void> {

@@ -25,7 +25,11 @@ describe('My Data page workflow', () => {
     expect(source).toContain('exportMyData');
     expect(source).toContain('shareMyData');
     expect(source).toContain('导出 JSON 数据副本');
+    expect(source).toContain('导出 CSV 数据副本');
     expect(source).toContain('重新导出');
     expect(source).toContain('分享数据副本');
+    expect(source).toContain('formatAccountDate');
+    expect(source).toContain('accountRecordLabel');
+    expect(source).not.toContain('|| row.id');
   });
 });
