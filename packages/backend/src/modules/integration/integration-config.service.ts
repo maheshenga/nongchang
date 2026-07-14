@@ -117,6 +117,14 @@ export class IntegrationConfigService {
     return { tenantId: row.tenantId, secret: this.enc.decrypt(row.secretEnc) };
   }
 
+  async findEnabledWechatTenantId(appId: string): Promise<string | null> {
+    const row = await this.prisma.integrationConfig.findFirst({
+      where: { provider: 'wechat', appId, enabled: true },
+      select: { tenantId: true },
+    });
+    return row?.tenantId ?? null;
+  }
+
   // 讯飞内部调用:解密凭证(仅启用)
   async getEnabledXfyun(tenantId: string): Promise<XfyunCredentials | null> {
     const row = await this.findRow(tenantId, 'xfyun');

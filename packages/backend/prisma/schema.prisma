@@ -39,6 +39,9 @@ model Tenant {
   aiOperations       AiOperation[]
   uploadAssets       UploadAsset[]
   uploadQuotaUsage   UploadQuotaUsage?
+  legalSettings      LegalSettings?
+  legalPublications  LegalPublication[]
+  legalConsents      LegalConsent[]
 
   @@map("tenants")
 }
@@ -58,22 +61,22 @@ model Agent {
 }
 
 model User {
-  id             String        @id @default(uuid())
-  tenantId       String        @map("tenant_id")
+  id             String         @id @default(uuid())
+  tenantId       String         @map("tenant_id")
   role           Role
-  agentId        String?       @map("agent_id")
+  agentId        String?        @map("agent_id")
   username       String
-  passwordHash   String        @map("password_hash")
+  passwordHash   String         @map("password_hash")
   phone          String?
-  wxOpenid       String?       @map("wx_openid")
-  displayName    String        @map("display_name")
-  status         String        @default("active")
-  sessionVersion Int           @default(0) @map("session_version")
-  groupId        String?       @map("group_id")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  tenant         Tenant        @relation(fields: [tenantId], references: [id])
-  agent          Agent?        @relation(fields: [agentId], references: [id])
-  group          UserGroup?    @relation(fields: [groupId], references: [id])
+  wxOpenid       String?        @map("wx_openid")
+  displayName    String         @map("display_name")
+  status         String         @default("active")
+  sessionVersion Int            @default(0) @map("session_version")
+  groupId        String?        @map("group_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  tenant         Tenant         @relation(fields: [tenantId], references: [id])
+  agent          Agent?         @relation(fields: [agentId], references: [id])
+  group          UserGroup?     @relation(fields: [groupId], references: [id])
   // 反向引用:支撑 owner/operator 外键(onDelete 默认 Restrict,挡住删除仍被引用的用户)。
   ownedFields    Field[]
   ownedBatches   Batch[]
@@ -81,6 +84,7 @@ model User {
   ownedSupplies  Supply[]
   supplyIssues   SupplyIssue[]
   uploadAssets   UploadAsset[]
+  legalConsents  LegalConsent[]
 
   @@unique([tenantId, username])
   @@unique([tenantId, wxOpenid])
@@ -401,6 +405,69 @@ enum Role {
   member
 }
 
+model LegalSettings {
+  id                   String            @id @default(uuid())
+  tenantId             String            @unique @map("tenant_id")
+  operatorName         String            @map("operator_name")
+  contactAddress       String            @map("contact_address")
+  privacyContact       String            @map("privacy_contact")
+  contactPhone         String?           @map("contact_phone")
+  contactEmail         String?           @map("contact_email")
+  privacyVersion       String            @map("privacy_version")
+  agreementVersion     String            @map("agreement_version")
+  effectiveDate        DateTime          @map("effective_date") @db.Date
+  privacyPolicyText    String            @map("privacy_policy_text") @db.Text
+  userAgreementText    String            @map("user_agreement_text") @db.Text
+  currentPublicationId String?           @unique @map("current_publication_id")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  currentPublication   LegalPublication? @relation("CurrentLegalPublication", fields: [currentPublicationId], references: [id], onDelete: Restrict)
+
+  @@map("legal_settings")
+}
+
+model LegalPublication {
+  id                String         @id @default(uuid())
+  tenantId          String         @map("tenant_id")
+  operatorName      String         @map("operator_name")
+  contactAddress    String         @map("contact_address")
+  privacyContact    String         @map("privacy_contact")
+  contactPhone      String?        @map("contact_phone")
+  contactEmail      String?        @map("contact_email")
+  privacyVersion    String         @map("privacy_version")
+  agreementVersion  String         @map("agreement_version")
+  effectiveDate     DateTime       @map("effective_date") @db.Date
+  privacyPolicyText String         @map("privacy_policy_text") @db.Text
+  userAgreementText String         @map("user_agreement_text") @db.Text
+  publishedAt       DateTime       @default(now()) @map("published_at")
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  currentFor        LegalSettings? @relation("CurrentLegalPublication")
+  consents          LegalConsent[]
+
+  @@unique([tenantId, privacyVersion, agreementVersion])
+  @@index([tenantId, publishedAt])
+  @@map("legal_publications")
+}
+
+model LegalConsent {
+  id               String           @id @default(uuid())
+  tenantId         String           @map("tenant_id")
+  userId           String           @map("user_id")
+  publicationId    String           @map("publication_id")
+  privacyVersion   String           @map("privacy_version")
+  agreementVersion String           @map("agreement_version")
+  client           String           @default("miniapp")
+  acceptedAt       DateTime         @default(now()) @map("accepted_at")
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  publication      LegalPublication @relation(fields: [publicationId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, publicationId, client])
+  @@index([tenantId, userId, acceptedAt])
+  @@map("legal_consents")
+}
+
 enum CreditOwnerType {
   PLATFORM
   AGENT
@@ -500,20 +567,20 @@ model CreditReservation {
 }
 
 model AiOperation {
-  id            String             @id @default(uuid())
-  tenantId      String             @map("tenant_id")
-  userId        String             @map("user_id")
-  providerId    String?            @map("provider_id")
-  kind          String
-  operationKey  String             @map("operation_key")
-  reservationId String?            @unique @map("reservation_id")
-  reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
-  status        AiOperationStatus  @default(RESERVED)
-  errorCategory String?            @map("error_category")
-  resultEnvelope Json?             @map("result_envelope")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  tenant        Tenant             @relation(fields: [tenantId], references: [id])
+  id             String             @id @default(uuid())
+  tenantId       String             @map("tenant_id")
+  userId         String             @map("user_id")
+  providerId     String?            @map("provider_id")
+  kind           String
+  operationKey   String             @map("operation_key")
+  reservationId  String?            @unique @map("reservation_id")
+  reservation    CreditReservation? @relation(fields: [reservationId], references: [id])
+  status         AiOperationStatus  @default(RESERVED)
+  errorCategory  String?            @map("error_category")
+  resultEnvelope Json?              @map("result_envelope")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, operationKey])
   @@index([tenantId, status, createdAt])

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { IntegrationConfigService } from './integration-config.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
@@ -24,7 +24,8 @@ function makePrisma() {
       findFirst: async ({ where }: any) => (
         rows.find(r =>
           (where.appId === undefined || r.appId === where.appId) &&
-          (where.provider === undefined || r.provider === where.provider)
+          (where.provider === undefined || r.provider === where.provider) &&
+          (where.enabled === undefined || r.enabled === where.enabled)
         ) ?? null
       ),
       upsert: async ({ where, create, update }: any) => {
@@ -89,6 +90,23 @@ describe('IntegrationConfigService', () => {
   it('findTenantByWechatAppId 未启用返回 null', async () => {
     await svc.upsertWechat(user, { appId: 'wxAPP', secret: 'SECRET1234', enabled: false });
     expect(await svc.findTenantByWechatAppId('wxAPP')).toBeNull();
+  });
+
+  it('findEnabledWechatTenantId returns only the enabled AppID tenant', async () => {
+    await svc.upsertWechat(user, { appId: 'wxAPP', secret: 'SECRET1234', enabled: true });
+    const findFirst = vi.spyOn(prisma.integrationConfig, 'findFirst');
+
+    expect(await svc.findEnabledWechatTenantId('wxAPP')).toBe('t1');
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { provider: 'wechat', appId: 'wxAPP', enabled: true },
+      select: { tenantId: true },
+    });
+  });
+
+  it('findEnabledWechatTenantId rejects a disabled WeChat integration', async () => {
+    await svc.upsertWechat(user, { appId: 'wxAPP', secret: 'SECRET1234', enabled: false });
+
+    expect(await svc.findEnabledWechatTenantId('wxAPP')).toBeNull();
   });
 
   it('getEnabled 讯飞解密供内部调用', async () => {
