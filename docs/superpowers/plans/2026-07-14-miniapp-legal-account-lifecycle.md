@@ -38,6 +38,10 @@
 - Create: `packages/shared/src/dto/account-lifecycle.dto.spec.ts`
 - Modify: `packages/shared/src/dto/auth.dto.ts`
 - Modify: `packages/shared/src/index.ts`
+- Modify: `packages/backend/src/auth/auth.service.ts`
+- Modify: `packages/backend/src/auth/auth.service.spec.ts`
+- Modify: `packages/web/src/auth/auth-context.spec.tsx`
+- Modify: `packages/web/src/components/ProfileSettings.spec.tsx`
 
 **Interfaces:**
 - Produces `LegalDocumentPayload`, `LegalSettingsView`, `PublicLegalQuery`, `PublicLegalResponse`, and `LegalPublicationSummary`.
@@ -403,12 +407,25 @@ corepack pnpm@10.33.2 --filter @nongchang/shared build
 
 Expected: all shared tests pass and TypeScript emits the package without errors.
 
-- [ ] **Step 9: Commit the shared contract boundary**
+- [ ] **Step 9: Keep existing profile consumers compiled at the new contract boundary**
 
-Run `git diff --check`, inspect only the six planned files, then commit:
+Because `deletionVerification` is required, update `AuthService.getMe` and `updateMe` in the same task. Select `wxOpenid` only to derive `'wechat' | 'password'`, destructure it before returning, and test that the raw value and `passwordHash` remain absent. Add `deletionVerification: 'password'` to typed Web profile fixtures. Verify:
 
 ```powershell
-git add -- packages/shared/src/dto/legal.dto.ts packages/shared/src/dto/legal.dto.spec.ts packages/shared/src/dto/account-lifecycle.dto.ts packages/shared/src/dto/account-lifecycle.dto.spec.ts packages/shared/src/dto/auth.dto.ts packages/shared/src/index.ts
+corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/auth/auth.service.spec.ts
+corepack pnpm@10.33.2 --filter @nongchang/backend build
+corepack pnpm@10.33.2 --filter web exec vitest run src/auth/auth-context.spec.tsx src/components/ProfileSettings.spec.tsx
+corepack pnpm@10.33.2 --filter web lint
+```
+
+Expected: backend profile tests/build and Web profile tests/typecheck pass without exposing OpenID.
+
+- [ ] **Step 10: Commit the shared contract boundary**
+
+Run `git diff --check`, inspect only the planned files, then commit:
+
+```powershell
+git add -- packages/shared/src/dto/legal.dto.ts packages/shared/src/dto/legal.dto.spec.ts packages/shared/src/dto/account-lifecycle.dto.ts packages/shared/src/dto/account-lifecycle.dto.spec.ts packages/shared/src/dto/auth.dto.ts packages/shared/src/index.ts packages/backend/src/auth/auth.service.ts packages/backend/src/auth/auth.service.spec.ts packages/web/src/auth/auth-context.spec.tsx packages/web/src/components/ProfileSettings.spec.tsx docs/superpowers/plans/2026-07-14-miniapp-legal-account-lifecycle.md
 git commit -m "feat(shared): define legal account lifecycle contracts"
 ```
 
@@ -1437,18 +1454,16 @@ git commit -m "feat(backend): expose scoped account data export"
 - Modify: `packages/backend/src/modules/account-lifecycle/account-lifecycle.controller.ts`
 - Modify: `packages/backend/src/modules/account-lifecycle/account-lifecycle.controller.spec.ts`
 - Modify: `packages/backend/src/modules/account-lifecycle/account-lifecycle.module.ts`
-- Modify: `packages/backend/src/auth/auth.service.ts`
-- Modify: `packages/backend/src/auth/auth.service.spec.ts`
 - Create: `packages/backend/test/account-closure.e2e-spec.ts`
 
 **Interfaces:**
 - Produces `AccountLifecycleService.close(actor, input): Promise<void>`.
 - Produces authenticated `POST /auth/me/close` returning `204`.
-- Extends safe profile output with derived `deletionVerification` while keeping raw OpenID absent.
+- Consumes the safe `deletionVerification` profile boundary completed in Task 1.
 
-- [ ] **Step 1: Write failing safe-profile and closure tests**
+- [ ] **Step 1: Write failing closure tests**
 
-Update `AuthService.getMe` tests to require `deletionVerification` and verify `wxOpenid` is selected only for derivation but absent from the result. Add lifecycle tests for password success/failure, WeChat success/mismatch, method mismatch, administrator rejection, anonymization fields, retained identity fields, and cache invalidation.
+Add lifecycle tests for password success/failure, WeChat success/mismatch, method mismatch, administrator rejection, anonymization fields, retained identity fields, and cache invalidation. Keep the Task 1 profile tests unchanged as the verification-method contract.
 
 The successful update assertion must be:
 
@@ -1476,17 +1491,17 @@ Also assert `tenantId`, `role`, and `agentId` are not present in the update data
 - [ ] **Step 2: Run lifecycle tests and verify RED**
 
 ```powershell
-corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/auth/auth.service.spec.ts src/modules/account-lifecycle/account-lifecycle.service.spec.ts src/modules/account-lifecycle/account-lifecycle.controller.spec.ts
+corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/modules/account-lifecycle/account-lifecycle.service.spec.ts src/modules/account-lifecycle/account-lifecycle.controller.spec.ts
 ```
 
 Expected: missing service/route/profile field failures.
 
-- [ ] **Step 3: Derive the verification method safely**
+- [ ] **Step 3: Reuse the safe verification method**
 
-Change the profile select in `getMe` and `updateMe` to include `wxOpenid`, then map through one helper:
+Use the Task 1 `MeProfileView.deletionVerification` contract in the miniapp. The backend lifecycle service still loads the current user directly and never trusts a client-supplied verification method. The existing safe mapper remains:
 
 ```ts
-private toMeProfile(user: SafeProfileRow): MeProfileView {
+private toMeProfile(user: MeProfileRow): MeProfileView {
   return {
     id: user.id,
     tenantId: user.tenantId,
@@ -1550,7 +1565,7 @@ Delete the field before deleting the anonymized user during cleanup.
 - [ ] **Step 8: Run tests and verify GREEN**
 
 ```powershell
-corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/auth/auth.service.spec.ts src/modules/account-lifecycle/account-lifecycle.service.spec.ts src/modules/account-lifecycle/account-lifecycle.controller.spec.ts
+corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/modules/account-lifecycle/account-lifecycle.service.spec.ts src/modules/account-lifecycle/account-lifecycle.controller.spec.ts
 $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public'
 corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run -c vitest.e2e.config.ts test/account-closure.e2e-spec.ts
 ```
@@ -1560,7 +1575,7 @@ Expected: focused tests and closure E2E pass.
 - [ ] **Step 9: Commit secure account closure**
 
 ```powershell
-git add -- packages/backend/src/modules/account-lifecycle packages/backend/src/auth/auth.service.ts packages/backend/src/auth/auth.service.spec.ts packages/backend/test/account-closure.e2e-spec.ts
+git add -- packages/backend/src/modules/account-lifecycle packages/backend/test/account-closure.e2e-spec.ts
 git commit -m "feat(backend): anonymize closed accounts"
 ```
 

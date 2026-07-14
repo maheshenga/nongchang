@@ -29,6 +29,7 @@ const profile: MeProfileView = {
   displayName: '大理基地',
   phone: '13800001111',
   status: 'active',
+  deletionVerification: 'password',
 };
 
 const updatedProfile: MeProfileView = {

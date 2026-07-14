@@ -1,7 +1,61 @@
 export { Role, Permission, BatchStatus, TraceEventType, FarmRecordSource } from './enums';
 
-export { loginSchema, refreshSchema, webAccessTokenResponseSchema, tokenPairSchema, meProfileViewSchema, updateMeSchema, changePasswordSchema } from './dto/auth.dto';
-export type { LoginDto, RefreshDto, WebAccessTokenResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from './dto/auth.dto';
+export {
+  loginSchema,
+  miniappLoginSchema,
+  miniappWechatLoginSchema,
+  miniappWechatRegisterSchema,
+  refreshSchema,
+  webAccessTokenResponseSchema,
+  tokenPairSchema,
+  meProfileViewSchema,
+  updateMeSchema,
+  changePasswordSchema,
+} from './dto/auth.dto';
+export type {
+  LoginDto,
+  MiniappLoginDto,
+  MiniappWechatLoginDto,
+  MiniappWechatRegisterDto,
+  RefreshDto,
+  WebAccessTokenResponse,
+  MeProfileView,
+  UpdateMeDto,
+  ChangePasswordDto,
+} from './dto/auth.dto';
+
+export {
+  legalDocumentPayloadSchema,
+  legalPublicationSummarySchema,
+  legalSettingsViewSchema,
+  publicLegalQuerySchema,
+  publicLegalResponseSchema,
+} from './dto/legal.dto';
+export type {
+  LegalDocumentPayload,
+  LegalPublicationSummary,
+  LegalSettingsView,
+  PublicLegalQuery,
+  PublicLegalResponse,
+  ConfiguredPublicLegal,
+} from './dto/legal.dto';
+
+export {
+  closeAccountSchema,
+  accountFieldSchema,
+  accountBatchSchema,
+  accountFarmRecordSchema,
+  accountSupplySchema,
+  accountSupplyIssueSchema,
+  accountUploadSchema,
+  accountAiOperationSchema,
+  accountCreditOrderSchema,
+  accountCreditLedgerSchema,
+  accountCreditAccountSchema,
+  accountDataPreviewSchema,
+  accountDataExportSchema,
+} from './dto/account-lifecycle.dto';
+export type { CloseAccountInput, AccountDataPreview, AccountDataExport } from './dto/account-lifecycle.dto';
 
 export {
   tenantStatusSchema,

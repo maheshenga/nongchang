@@ -453,17 +453,19 @@ describe('AuthService.getWechatRegistrationStatus', () => {
 const actor = { userId: 'u1', tenantId: 't1', role: 'merchant' as any, agentId: null, ownerId: 'u1' };
 
 describe('AuthService.getMe', () => {
-  it('返回个人资料且 select 不含 passwordHash', async () => {
-    const findUnique = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '大理基地', phone: '13800001111', status: 'active' });
+  it('返回个人资料和微信注销验证方式且不泄露敏感字段', async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '大理基地', phone: '13800001111', status: 'active', wxOpenid: 'OPENID123' });
     const prisma = { user: { findUnique } } as any;
     const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
     const me = await svc.getMe(actor);
     expect(me.username).toBe('merchantA');
+    expect(me.deletionVerification).toBe('wechat');
     expect((me as any).passwordHash).toBeUndefined();
-    // 校验 select 显式排除敏感字段(不查 passwordHash / wxOpenid)
+    expect((me as any).wxOpenid).toBeUndefined();
+    // passwordHash 不查；wxOpenid 只用于服务端派生验证方式，不进入返回值。
     const sel = findUnique.mock.calls[0][0].select;
     expect(sel.passwordHash).toBeUndefined();
-    expect(sel.wxOpenid).toBeUndefined();
+    expect(sel.wxOpenid).toBe(true);
   });
   it('账号不存在抛 Unauthorized', async () => {
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(null) } } as any;
@@ -473,15 +475,18 @@ describe('AuthService.getMe', () => {
 });
 
 describe('AuthService.updateMe', () => {
-  it('仅写入 displayName/phone,锁定为本人 id', async () => {
-    const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '新名', phone: '13900002222', status: 'active' });
+  it('仅写入 displayName/phone,锁定为本人 id并返回密码注销验证方式', async () => {
+    const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '新名', phone: '13900002222', status: 'active', wxOpenid: null });
     const prisma = { user: { update } } as any;
     const svc = new AuthService(prisma, new JwtService({ secret: 'test' }), stubIntegrations(), stubGroups());
     const res = await svc.updateMe(actor, { displayName: '新名', phone: '13900002222' });
     expect(res.displayName).toBe('新名');
+    expect(res.deletionVerification).toBe('password');
+    expect((res as any).wxOpenid).toBeUndefined();
     const arg = update.mock.calls[0][0];
     expect(arg.where).toEqual({ id: 'u1' });
     expect(arg.data).toEqual({ displayName: '新名', phone: '13900002222' });
+    expect(arg.select.wxOpenid).toBe(true);
   });
   it('仅传 phone 时只更新 phone(displayName 不进 data)', async () => {
     const update = vi.fn().mockResolvedValue({ id: 'u1', tenantId: 't1', username: 'merchantA', role: 'merchant', agentId: null, displayName: '旧名', phone: '13700003333', status: 'active' });

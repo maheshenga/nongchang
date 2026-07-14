@@ -20,6 +20,18 @@ interface WxSessionResponse {
   errmsg?: string;
 }
 
+interface MeProfileRow {
+  id: string;
+  tenantId: string;
+  username: string;
+  role: string;
+  agentId: string | null;
+  displayName: string;
+  phone: string | null;
+  status: string;
+  wxOpenid: string | null;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -175,10 +187,10 @@ export class AuthService {
   async getMe(actor: AuthUser): Promise<MeProfileView> {
     const user = await this.prisma.user.findUnique({
       where: { id: actor.userId },
-      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true },
+      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true, wxOpenid: true },
     });
     if (!user) throw new UnauthorizedException('账号不存在');
-    return { ...user, agentId: user.agentId ?? null, phone: user.phone ?? null };
+    return this.toMeProfile(user);
   }
 
   async updateMe(actor: AuthUser, dto: UpdateMeDto): Promise<MeProfileView> {
@@ -187,9 +199,19 @@ export class AuthService {
     if (dto.phone !== undefined) data.phone = dto.phone;
     const user = await this.prisma.user.update({
       where: { id: actor.userId }, data,
-      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true },
+      select: { id: true, tenantId: true, username: true, role: true, agentId: true, displayName: true, phone: true, status: true, wxOpenid: true },
     });
-    return { ...user, agentId: user.agentId ?? null, phone: user.phone ?? null };
+    return this.toMeProfile(user);
+  }
+
+  private toMeProfile(user: MeProfileRow): MeProfileView {
+    const { wxOpenid, ...profile } = user;
+    return {
+      ...profile,
+      agentId: user.agentId,
+      phone: user.phone,
+      deletionVerification: wxOpenid ? 'wechat' : 'password',
+    };
   }
 
   async changePassword(actor: AuthUser, dto: ChangePasswordDto): Promise<{ ok: true }> {

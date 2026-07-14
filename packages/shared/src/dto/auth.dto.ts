@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { wechatLoginSchema, wechatRegisterSchema } from './integration.dto';
 export const loginSchema = z.object({
   // 机构编码:username 改为租户内唯一后,密码登录需 (tenantCode + username) 共同定位用户。
   tenantCode: z.string().min(1).max(64),
@@ -6,6 +7,24 @@ export const loginSchema = z.object({
   password: z.string().min(6).max(128),
 });
 export type LoginDto = z.infer<typeof loginSchema>;
+
+const publicationIdSchema = z.string().uuid();
+
+export const miniappLoginSchema = loginSchema.extend({
+  publicationId: publicationIdSchema,
+}).strict();
+export type MiniappLoginDto = z.infer<typeof miniappLoginSchema>;
+
+export const miniappWechatLoginSchema = wechatLoginSchema.extend({
+  publicationId: publicationIdSchema,
+}).strict();
+export type MiniappWechatLoginDto = z.infer<typeof miniappWechatLoginSchema>;
+
+export const miniappWechatRegisterSchema = wechatRegisterSchema.extend({
+  publicationId: publicationIdSchema,
+}).strict();
+export type MiniappWechatRegisterDto = z.infer<typeof miniappWechatRegisterSchema>;
+
 export const refreshSchema = z.object({ refreshToken: z.string().min(10) });
 export type RefreshDto = z.infer<typeof refreshSchema>;
 
@@ -28,7 +47,8 @@ export const meProfileViewSchema = z.object({
   displayName: z.string(),
   phone: z.string().nullable(),
   status: z.string(),
-});
+  deletionVerification: z.enum(['password', 'wechat']),
+}).strict();
 export type MeProfileView = z.infer<typeof meProfileViewSchema>;
 
 // 自助改资料:仅放开 displayName / phone,至少提供一项。

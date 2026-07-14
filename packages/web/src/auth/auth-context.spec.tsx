@@ -54,6 +54,7 @@ const profileA: MeProfileView = {
   displayName: 'Merchant A',
   phone: null,
   status: 'active',
+  deletionVerification: 'password',
 };
 
 const profileB: MeProfileView = {
