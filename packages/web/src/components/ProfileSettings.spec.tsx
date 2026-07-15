@@ -85,7 +85,7 @@ describe('ProfileSettings Fluent account modal', () => {
       expect(updateMeMock).toHaveBeenCalledWith({ displayName: '大理基地新版', phone: '13900002222' });
     });
     expect(updateProfileMock).toHaveBeenCalledWith(updatedProfile);
-    expect(screen.getByText('资料已更新')).toBeTruthy();
+    expect(await screen.findByText('资料已更新')).toBeTruthy();
   });
 
   it('validates password changes before calling the API', async () => {
