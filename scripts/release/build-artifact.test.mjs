@@ -43,6 +43,22 @@ test('runtime dependency copy rewrites temporary pnpm-style links inside the art
   assert.equal(await readFile(join(copiedLink, 'index.js'), 'utf8'), 'module.exports = 1;\n');
 });
 
+test('runtime dependency copy removes only the pnpm backend self-link that escapes the deployment tree', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-artifact-links-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, 'source');
+  const workspaceBackend = join(root, 'workspace', 'backend');
+  const selfLink = join(source, '.pnpm', 'node_modules', '@nongchang', 'backend');
+  const destination = join(root, 'destination');
+  await mkdir(dirname(selfLink), { recursive: true });
+  await mkdir(workspaceBackend, { recursive: true });
+  await symlink(workspaceBackend, selfLink, process.platform === 'win32' ? 'junction' : 'dir');
+
+  await artifactModule.copyPortableDependencyTree(source, destination);
+
+  await assert.rejects(() => lstat(join(destination, '.pnpm', 'node_modules', '@nongchang', 'backend')));
+});
+
 test('release artifacts refuse a dirty worktree', () => {
   assert.throws(() => assertCleanWorktree(' M packages/backend/src/main.ts\n'), /clean worktree/i);
   assert.doesNotThrow(() => assertCleanWorktree(''));

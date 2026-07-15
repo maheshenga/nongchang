@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const COREPACK = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 const BACKEND_REQUIRE = createRequire(join(REPO_ROOT, 'packages/backend/package.json'));
+const PNPM_BACKEND_SELF_LINK = '.pnpm/node_modules/@nongchang/backend';
 
 const REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'backend/src/main.js',
@@ -119,11 +120,16 @@ async function rebaseDependencySymlinks(sourceRoot, destinationRoot, current = s
 
     const target = await readlink(sourcePath);
     const resolvedTarget = resolve(dirname(sourcePath), target);
+    const relativeSourcePath = relative(sourceRoot, sourcePath).split(sep).join('/');
+    const destinationPath = join(destinationRoot, relative(sourceRoot, sourcePath));
     if (!isPathWithin(sourceRoot, resolvedTarget)) {
+      if (relativeSourcePath === PNPM_BACKEND_SELF_LINK) {
+        await unlink(destinationPath);
+        continue;
+      }
       throw new Error(`dependency symlink escapes the deployment tree: ${relative(sourceRoot, sourcePath)}`);
     }
 
-    const destinationPath = join(destinationRoot, relative(sourceRoot, sourcePath));
     const destinationTarget = join(destinationRoot, relative(sourceRoot, resolvedTarget));
     const portableTarget = relative(dirname(destinationPath), destinationTarget) || '.';
     await unlink(destinationPath);
