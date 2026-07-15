@@ -22,11 +22,14 @@ function run(command, args, env = {}) {
 export function resolveMigrationRuntime(root, platform = process.platform, pathExists = existsSync) {
   const paths = platform === 'win32' ? win32 : posix;
   const artifactSchema = paths.join(root, 'prisma', 'schema.prisma');
+  const sourceSchema = paths.join(root, 'packages', 'backend', 'prisma', 'schema.prisma');
+  const prismaBinary = platform === 'win32' ? 'prisma.cmd' : 'prisma';
+  const isArtifact = pathExists(artifactSchema);
   return {
-    command: paths.join(root, 'node_modules', '.bin', platform === 'win32' ? 'prisma.cmd' : 'prisma'),
-    schema: pathExists(artifactSchema)
-      ? artifactSchema
-      : paths.join(root, 'packages', 'backend', 'prisma', 'schema.prisma'),
+    command: isArtifact
+      ? paths.join(root, 'node_modules', '.bin', prismaBinary)
+      : paths.join(root, 'packages', 'backend', 'node_modules', '.bin', prismaBinary),
+    schema: isArtifact ? artifactSchema : sourceSchema,
   };
 }
 

@@ -12,10 +12,18 @@ test('migration preflight uses the artifact-local Prisma CLI and schema without 
   });
 });
 
-test('repository execution falls back to the source Prisma schema', () => {
+test('repository execution falls back to the source Prisma CLI and schema', () => {
   const runtime = resolveMigrationRuntime('C:\\repo', 'win32', () => false);
   assert.deepEqual(runtime, {
-    command: 'C:\\repo\\node_modules\\.bin\\prisma.cmd',
+    command: 'C:\\repo\\packages\\backend\\node_modules\\.bin\\prisma.cmd',
     schema: 'C:\\repo\\packages\\backend\\prisma\\schema.prisma',
+  });
+});
+
+test('Linux repository execution uses the workspace Prisma CLI required by release CI', () => {
+  const runtime = resolveMigrationRuntime('/home/runner/work/nongchang/nongchang', 'linux', () => false);
+  assert.deepEqual(runtime, {
+    command: '/home/runner/work/nongchang/nongchang/packages/backend/node_modules/.bin/prisma',
+    schema: '/home/runner/work/nongchang/nongchang/packages/backend/prisma/schema.prisma',
   });
 });
