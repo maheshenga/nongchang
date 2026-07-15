@@ -31,7 +31,7 @@ test('billing is reachable through one normal navigation item without a duplicat
   await expect(page.getByRole('button', { name: /Open billing resources|打开计费资源/ })).toHaveCount(0);
   await billingNavigation.click();
 
-  await expect(page.getByRole('heading', { name: '计费中心', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '额度管理', exact: true })).toBeVisible();
 });
 
 test('profile loading uses a neutral label and never flashes the raw user id', async ({ page }) => {
@@ -80,13 +80,13 @@ test('workspace route survives reload and browser history navigation', async ({ 
   await expect(page).toHaveURL(/#\/app\/records$/);
   await page.reload();
   await expect(page).toHaveURL(/#\/app\/records$/);
-  await expect(page.getByRole('heading', { name: '农事实操', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '田间工作台', exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: '生产总览', exact: true }).click();
   await expect(page).toHaveURL(/#\/app\/overview$/);
   await page.goBack();
   await expect(page).toHaveURL(/#\/app\/records$/);
-  await expect(page.getByRole('heading', { name: '农事实操', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '田间工作台', exact: true })).toBeVisible();
 });
 
 test('menu trigger is mobile-only and desktop navigation stays persistent', async ({ page }) => {

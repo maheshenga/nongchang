@@ -6,11 +6,21 @@ rule_files:
   - /etc/prometheus/alerts.yml
 
 scrape_configs:
-  - job_name: nongchang-backend
+  - job_name: nongchang-api
     metrics_path: /api/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics-bearer-token
     static_configs:
-      - targets: [host.docker.internal:3001]
+      - targets: [127.0.0.1:9091]
+
+  - job_name: nongchang-worker
+    metrics_path: /api/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics-bearer-token
+    static_configs:
+      - targets: [127.0.0.1:3003]
 
 # Production deployments must keep /api/metrics off the public ingress.
-# If METRICS_BEARER_TOKEN is configured, add an authorization.credentials_file
-# entry backed by the deployment secret store rather than checking a token in.
+# The credentials file contains only the bearer-token value and must be mode 600.

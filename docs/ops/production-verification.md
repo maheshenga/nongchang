@@ -11,6 +11,8 @@ Run before committing production-hardening changes:
 ```powershell
 $env:TARO_APP_API='https://api.ci.invalid/api'
 $env:TARO_APP_WX_APPID='wx0000000000000000'
+$env:TARO_APP_SUPPORT_CONTACT='support@ci.invalid'
+$env:VITE_PUBLIC_SALES_CONTACT='sales@ci.invalid'
 corepack pnpm@10.33.2 verify:local
 ```
 
@@ -20,7 +22,7 @@ This expands to:
 - web typecheck and monorepo-wide warning-free ESLint
 - `pnpm test:unit`
 - web and production miniapp builds
-- `pnpm audit --prod --audit-level high`
+- production dependency enumeration plus the npm bulk advisory budget gate
 
 The miniapp build rejects missing variables, non-HTTPS API URLs, placeholder hosts,
 API paths that do not end in `/api`, and malformed WeChat AppIDs. Replace the CI
@@ -55,6 +57,8 @@ Run the full gate:
 $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public'
 $env:TARO_APP_API='https://api.ci.invalid/api'
 $env:TARO_APP_WX_APPID='wx0000000000000000'
+$env:TARO_APP_SUPPORT_CONTACT='support@ci.invalid'
+$env:VITE_PUBLIC_SALES_CONTACT='sales@ci.invalid'
 corepack pnpm@10.33.2 verify:production
 ```
 
@@ -68,6 +72,8 @@ $env:E2E_BILLING_USERNAME='<seed-agent-user>'
 corepack pnpm@10.33.2 test:browser
 corepack pnpm@10.33.2 test:accessibility
 ```
+
+If another local workload already owns port `3001`, set `E2E_BACKEND_PORT` to an unused loopback port before both commands. Playwright passes the same URL to the NestJS process and the Vite proxy; CI keeps the default `3001`.
 
 These gates start the real NestJS and Vite services against seeded PostGIS. The UI login/logout test disables tracing, screenshots, and video because it types a password. Authenticated critical flows and accessibility checks also disable tracing so session cookies and access-token responses are not written into trace archives. Other screenshots and videos are retained only for failures.
 

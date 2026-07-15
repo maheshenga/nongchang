@@ -9,7 +9,7 @@
     "typecheck:web": "pnpm --filter web lint",
     "build:web": "pnpm --filter web build",
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
-    "audit:prod": "pnpm audit --prod --audit-level high && node scripts/release/check-advisory-budget.mjs",
+    "audit:prod": "node scripts/release/check-advisory-budget.mjs",
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:shared && pnpm --filter @nongchang/shared test && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
     "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e",
@@ -23,9 +23,15 @@
     "backup:restore": "node scripts/restore-postgres.mjs",
     "backup:verify-restore": "node scripts/verify-backup-restore.mjs",
     "release:artifact": "node scripts/release/build-artifact.mjs",
+    "release:verify-artifact": "node scripts/release/verify-artifact.mjs",
     "release:preflight": "node scripts/release/migration-preflight.mjs",
+    "release:server-preflight": "node scripts/release/server-preflight.mjs",
     "release:smoke": "node scripts/release/smoke.mjs",
-    "release:rollback": "node scripts/release/rollback.mjs"
+    "release:render-nginx": "node scripts/release/render-nginx.mjs",
+    "release:deploy-state": "node scripts/release/deploy-state.mjs",
+    "release:switch": "node scripts/release/switch-release.mjs",
+    "release:rollback": "node scripts/release/rollback.mjs",
+    "release:test": "node --test scripts/lib/backup-format.test.mjs scripts/release/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

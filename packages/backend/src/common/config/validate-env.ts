@@ -10,6 +10,7 @@ import { readRedisUrl, readRuntimeStateDriver } from '../runtime/runtime-state.t
 import { readOperationsWorkerConcurrency } from '../../modules/operations/operations.constants';
 import { readDatabaseRuntimeConfig } from './database-runtime.config';
 import { readTelemetryConfig } from '../../telemetry/telemetry.config';
+import { readListenHost } from '../network/listen-host';
 
 // 已知的开发占位值,生产环境绝不允许沿用。
 const WEAK_SECRETS = new Set([
@@ -58,6 +59,7 @@ export function validateEnv(): void {
   }
 
   parseTrustProxyHops(process.env);
+  readListenHost(process.env);
   readUploadQuotaLimits(process.env);
   readUploadPendingMaxAgeMinutes(process.env);
   if (readRuntimeStateDriver(process.env) === 'redis') readRedisUrl(process.env);

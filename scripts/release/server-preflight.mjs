@@ -1,0 +1,163 @@
+import { resolve4 } from 'node:dns/promises';
+import { stat, statfs } from 'node:fs/promises';
+import net from 'node:net';
+import { freemem } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
+import tls from 'node:tls';
+import { fileURLToPath } from 'node:url';
+
+const GiB = 1024 ** 3;
+const ALLOWED_API_PORTS = new Set([3001, 3002]);
+
+export function assertReleaseSha(value) {
+  if (!/^[0-9a-f]{40}$/.test(value ?? '')) throw new Error('release requires a lowercase 40-character Git SHA');
+}
+
+export function assertDnsTarget(addresses, targetIp) {
+  if (!addresses.length) throw new Error('DNS returned no A records for the production hostname');
+  const unexpected = [...new Set(addresses)].filter((address) => address !== targetIp);
+  if (unexpected.length) {
+    throw new Error(`DNS does not point exclusively to ${targetIp}; unexpected A record(s): ${unexpected.join(', ')}`);
+  }
+}
+
+function matchesDnsName(pattern, hostname) {
+  const normalizedPattern = pattern.trim().toLowerCase();
+  const normalizedHost = hostname.trim().toLowerCase();
+  if (normalizedPattern === normalizedHost) return true;
+  if (!normalizedPattern.startsWith('*.')) return false;
+  const suffix = normalizedPattern.slice(2);
+  return normalizedHost.endsWith(`.${suffix}`)
+    && normalizedHost.split('.').length === suffix.split('.').length + 1;
+}
+
+export function assertCertificateNames(names, hostname) {
+  if (!names.some((name) => matchesDnsName(name, hostname))) {
+    throw new Error(`TLS certificate does not cover ${hostname}; certificate name(s): ${names.join(', ') || 'none'}`);
+  }
+}
+
+export function assertCandidatePortAvailability({ port, available }) {
+  if (!ALLOWED_API_PORTS.has(Number(port))) throw new Error('candidate API port must be 3001 or 3002');
+  if (!available) throw new Error(`candidate API port ${port} is already in use`);
+}
+
+export function assertCapacity({
+  freeDiskBytes,
+  availableMemoryBytes,
+  artifactBytes,
+  backupBytes,
+}) {
+  if (availableMemoryBytes < GiB) throw new Error('at least 1 GiB available memory is required before deployment');
+  if (freeDiskBytes < 10 * GiB) throw new Error('at least 10 GiB free disk is required before deployment');
+  const workingSetBytes = artifactBytes * 2 + backupBytes;
+  if (freeDiskBytes < workingSetBytes) {
+    throw new Error('free disk cannot hold the artifact, extracted release, and new backup');
+  }
+}
+
+function parseArgs(argv) {
+  const options = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--') continue;
+    const key = argv[index];
+    const value = argv[++index];
+    if (key === '--hostname') options.hostname = value;
+    else if (key === '--target-ip') options.targetIp = value;
+    else if (key === '--candidate-port') options.candidatePort = Number(value);
+    else if (key === '--artifact') options.artifact = value;
+    else if (key === '--release-root') options.releaseRoot = value;
+    else if (key === '--backup-bytes') options.backupBytes = Number(value);
+    else if (key === '--expected-sha') options.expectedSha = value;
+    else throw new Error(`unknown server preflight argument: ${key}`);
+  }
+  for (const name of ['hostname', 'targetIp', 'artifact', 'releaseRoot', 'expectedSha']) {
+    if (!options[name]) throw new Error(`--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} is required`);
+  }
+  for (const name of ['artifact', 'releaseRoot']) {
+    if (!isAbsolute(options[name])) throw new Error(`--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} must be absolute`);
+    options[name] = resolve(options[name]);
+  }
+  if (!Number.isSafeInteger(options.backupBytes) || options.backupBytes <= 0) throw new Error('--backup-bytes must be a positive integer');
+  assertCandidatePortAvailability({ port: options.candidatePort, available: true });
+  assertReleaseSha(options.expectedSha);
+  return options;
+}
+
+function certificateNames(peer) {
+  const names = String(peer.subjectaltname ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.startsWith('DNS:'))
+    .map((item) => item.slice(4));
+  if (peer.subject?.CN) names.push(peer.subject.CN);
+  return [...new Set(names)];
+}
+
+function readCertificate(targetIp, hostname) {
+  return new Promise((resolveCertificate, reject) => {
+    const socket = tls.connect(tlsConnectionOptions(targetIp, hostname));
+    socket.setTimeout(10_000);
+    socket.once('secureConnect', () => {
+      const peer = socket.getPeerCertificate();
+      socket.end();
+      if (!peer?.raw) reject(new Error('TLS endpoint returned no certificate'));
+      else resolveCertificate(peer);
+    });
+    socket.once('timeout', () => socket.destroy(new Error('TLS certificate check timed out')));
+    socket.once('error', reject);
+  });
+}
+
+export function tlsConnectionOptions(targetIp, hostname) {
+  return { host: targetIp, port: 443, servername: hostname, rejectUnauthorized: true };
+}
+
+function isPortAvailable(port) {
+  return new Promise((resolveAvailability) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolveAvailability(false));
+    server.listen({ host: '127.0.0.1', port, exclusive: true }, () => {
+      server.close(() => resolveAvailability(true));
+    });
+  });
+}
+
+export async function runServerPreflight(options) {
+  const addresses = await resolve4(options.hostname);
+  assertDnsTarget(addresses, options.targetIp);
+  const peer = await readCertificate(options.targetIp, options.hostname);
+  assertCertificateNames(certificateNames(peer), options.hostname);
+  const now = Date.now();
+  if (now < Date.parse(peer.valid_from) || now > Date.parse(peer.valid_to)) throw new Error('TLS certificate is not currently valid');
+  const available = await isPortAvailable(options.candidatePort);
+  assertCandidatePortAvailability({ port: options.candidatePort, available });
+  const [artifact, filesystem] = await Promise.all([stat(options.artifact), statfs(options.releaseRoot)]);
+  const freeDiskBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+  const availableMemoryBytes = freemem();
+  assertCapacity({
+    freeDiskBytes,
+    availableMemoryBytes,
+    artifactBytes: artifact.size,
+    backupBytes: options.backupBytes,
+  });
+  return {
+    status: 'ok',
+    hostname: options.hostname,
+    targetIp: options.targetIp,
+    candidatePort: options.candidatePort,
+    expectedSha: options.expectedSha,
+    freeDiskBytes,
+    availableMemoryBytes,
+  };
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  runServerPreflight(parseArgs(process.argv.slice(2)))
+    .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
+    .catch((error) => {
+      process.stderr.write(`server preflight failed: ${error.message}\n`);
+      process.exitCode = 1;
+    });
+}

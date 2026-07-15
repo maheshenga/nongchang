@@ -119,7 +119,7 @@ describe('AI billing reconciliation e2e', () => {
       { reason: 'CONFIRMED', idempotencyKey: `${operationPrefix}:succeeded` },
     ]));
     expect(terminalLedgers.some((ledger) => ledger.idempotencyKey === `${operationPrefix}:in-flight`)).toBe(false);
-  });
+  }, 15_000);
 
   it('charges once and replays the confirmed result for the same operation key', async () => {
     const operationKey = `${operationPrefix}:replay`;

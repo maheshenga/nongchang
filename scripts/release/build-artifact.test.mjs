@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
-import { assertCleanWorktree, verifyArtifactManifest } from './build-artifact.mjs';
+import * as artifactModule from './build-artifact.mjs';
+import {
+  assertCleanWorktree,
+  assertLinuxArtifactHost,
+  assertRequiredArtifactEntries,
+  requiredArtifactEntries,
+  verifyArtifactManifest,
+} from './build-artifact.mjs';
+
+test('generated Prisma client is located next to the resolved @prisma/client package in pnpm installs', () => {
+  assert.equal(typeof artifactModule.generatedPrismaClientDirectory, 'function');
+  const clientPackage = resolve(
+    'node_modules/.pnpm/@prisma+client@6.19.0/node_modules/@prisma/client/package.json',
+  );
+  assert.equal(
+    artifactModule.generatedPrismaClientDirectory(clientPackage),
+    resolve(dirname(clientPackage), '../..', '.prisma/client'),
+  );
+});
 
 test('release artifacts refuse a dirty worktree', () => {
   assert.throws(() => assertCleanWorktree(' M packages/backend/src/main.ts\n'), /clean worktree/i);
@@ -19,4 +38,44 @@ test('artifact manifest verification rejects Git SHA or hash drift', () => {
     /hash mismatch/i,
   );
   assert.doesNotThrow(() => verifyArtifactManifest(manifest, 'abc123', manifest.files));
+});
+
+test('production artifact contract includes every server and miniapp runtime input', () => {
+  const required = requiredArtifactEntries();
+  for (const path of [
+    'backend/src/main.js',
+    'web/index.html',
+    'miniapp/app.js',
+    'shared/index.js',
+    'prisma/schema.prisma',
+    'packages/backend/package.json',
+    'packages/shared/package.json',
+    'node_modules/@prisma/client/package.json',
+    'node_modules/.prisma/client/schema.prisma',
+    'node_modules/prisma/package.json',
+    'node_modules/.bin/prisma',
+    'ops/pgbouncer/pgbouncer.ini',
+    'ops/data-stack/compose.production.yml',
+    'ops/pm2/ecosystem.config.cjs',
+    'ops/nginx/farm.qingyouai.com.conf.template',
+    'ops/logrotate/nongchang',
+    'ops/runtime/production.env.example',
+    'scripts/release/switch-release.mjs',
+    'scripts/release/verify-artifact.mjs',
+    'scripts/lib/backup-format.mjs',
+    'scripts/backup-postgres.mjs',
+  ]) {
+    assert.ok(required.includes(path), `missing artifact contract path: ${path}`);
+  }
+  assert.doesNotThrow(() => assertRequiredArtifactEntries(required));
+  assert.throws(
+    () => assertRequiredArtifactEntries(required.filter((path) => path !== 'miniapp/app.js')),
+    /miniapp\/app\.js/,
+  );
+});
+
+test('immutable runtime artifacts are built only on Linux x64', () => {
+  assert.doesNotThrow(() => assertLinuxArtifactHost('linux', 'x64'));
+  assert.throws(() => assertLinuxArtifactHost('win32', 'x64'), /Linux x64/i);
+  assert.throws(() => assertLinuxArtifactHost('linux', 'arm64'), /Linux x64/i);
 });

@@ -36,10 +36,44 @@ export function validateAdvisoryBudget(budget, advisories, now = new Date()) {
   if (entries.size > 0) throw new Error(`stale advisory budget entries: ${[...entries.keys()].join(', ')}`);
 }
 
-function runAudit() {
+export function collectPackageVersions(projects) {
+  const packages = new Map();
+  const visit = (dependencies = {}) => {
+    for (const [name, dependency] of Object.entries(dependencies ?? {})) {
+      const version = dependency?.version;
+      if (typeof version === 'string' && !/^(?:link|workspace|file):/.test(version)) {
+        if (!packages.has(name)) packages.set(name, new Set());
+        packages.get(name).add(version);
+      }
+      visit(dependency?.dependencies);
+      visit(dependency?.optionalDependencies);
+    }
+  };
+  for (const project of projects) {
+    visit(project.dependencies);
+    visit(project.optionalDependencies);
+  }
+  return Object.fromEntries([...packages.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, versions]) => [name, [...versions].sort()]));
+}
+
+export function normalizeBulkAdvisories(report) {
+  const advisories = [];
+  for (const [packageName, entries] of Object.entries(report ?? {})) {
+    for (const entry of entries ?? []) {
+      const advisory = String(entry.url ?? '').match(/GHSA-[a-z0-9-]+/i)?.[0];
+      if (!advisory) throw new Error(`registry advisory for ${packageName} has no GitHub advisory ID`);
+      advisories.push({ package: packageName, advisory, severity: entry.severity });
+    }
+  }
+  return advisories;
+}
+
+function runDependencyList() {
   const command = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
-  return new Promise((resolveAudit, reject) => {
-    const child = spawn(command, ['pnpm@10.33.2', 'audit', '--prod', '--json'], {
+  return new Promise((resolveList, reject) => {
+    const child = spawn(command, ['pnpm@10.33.2', '-r', 'list', '--prod', '--json', '--depth', 'Infinity'], {
       cwd: REPO_ROOT,
       windowsHide: true,
       shell: process.platform === 'win32',
@@ -53,24 +87,39 @@ function runAudit() {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (code) => {
-      if (code !== 0 && code !== 1) reject(new Error(`pnpm audit failed: ${stderr.trim().slice(0, 2_000)}`));
-      else resolveAudit(JSON.parse(stdout));
+      if (code !== 0) reject(new Error(`production dependency listing failed: ${stderr.trim().slice(0, 2_000)}`));
+      else resolveList(JSON.parse(stdout));
     });
   });
 }
 
+async function runBulkAudit(packageVersions) {
+  const registry = process.env.npm_config_registry?.trim() || 'https://registry.npmjs.org/';
+  const endpoint = new URL('-/npm/v1/security/advisories/bulk', registry.endsWith('/') ? registry : `${registry}/`);
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(packageVersions),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`bulk advisory registry request failed with HTTP ${response.status}`);
+  return response.json();
+}
+
 export async function checkCurrentAdvisoryBudget() {
-  const [audit, budget] = await Promise.all([
-    runAudit(),
+  const [projects, budget] = await Promise.all([
+    runDependencyList(),
     readFile(resolve(REPO_ROOT, 'docs/ops/dependency-advisory-budget.json'), 'utf8').then(JSON.parse),
   ]);
-  const advisories = Object.values(audit.advisories ?? {}).map((item) => ({
-    package: item.module_name,
-    advisory: item.github_advisory_id,
-    severity: item.severity,
-  }));
+  const packageVersions = collectPackageVersions(projects);
+  const advisories = normalizeBulkAdvisories(await runBulkAudit(packageVersions));
   validateAdvisoryBudget(budget, advisories);
-  return audit.metadata?.vulnerabilities;
+  return {
+    packagesChecked: Object.keys(packageVersions).length,
+    advisories: advisories.length,
+    high: advisories.filter((item) => item.severity === 'high').length,
+    critical: advisories.filter((item) => item.severity === 'critical').length,
+  };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

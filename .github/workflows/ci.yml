@@ -47,8 +47,11 @@ jobs:
       APP_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       TARO_APP_API: https://api.ci.invalid/api
       TARO_APP_WX_APPID: wx0000000000000000
+      TARO_APP_SUPPORT_CONTACT: support@ci.invalid
+      VITE_PUBLIC_SALES_CONTACT: sales@ci.invalid
       REDIS_URL: redis://127.0.0.1:56379
       RUNTIME_STATE_DRIVER: redis
+      BACKUP_ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +64,15 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+
+      - name: Enable PostgreSQL observability extensions
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" psql -U nongchang -d nongchang -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
+          docker restart "$POSTGRES_CONTAINER_ID"
+          until docker exec "$POSTGRES_CONTAINER_ID" pg_isready -U nongchang -d nongchang; do sleep 2; done
+          docker exec -i "$POSTGRES_CONTAINER_ID" psql -U nongchang -d nongchang -v ON_ERROR_STOP=1 < ops/postgres/enable-observability.sql
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -87,6 +99,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
         run: pnpm verify:production
+
+      - name: Release controls and database recovery gates
+        run: |
+          pnpm release:test
+          pnpm --filter @nongchang/backend db:query-plans
+          pnpm backup:verify-restore -- --output-dir "$RUNNER_TEMP/nongchang-backup-drill"
 
   browser:
     runs-on: ubuntu-latest
@@ -123,6 +141,8 @@ jobs:
       APP_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
       TARO_APP_API: https://api.ci.invalid/api
       TARO_APP_WX_APPID: wx0000000000000000
+      TARO_APP_SUPPORT_CONTACT: support@ci.invalid
+      VITE_PUBLIC_SALES_CONTACT: sales@ci.invalid
       E2E_TENANT_CODE: DEMO
       E2E_USERNAME: merchantA
       E2E_PASSWORD: password123

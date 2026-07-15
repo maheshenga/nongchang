@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateAdvisoryBudget } from './check-advisory-budget.mjs';
+import {
+  collectPackageVersions,
+  normalizeBulkAdvisories,
+  validateAdvisoryBudget,
+} from './check-advisory-budget.mjs';
 
 const validEntry = {
   package: 'tool', advisory: 'GHSA-aaaa-bbbb-cccc', owner: 'platform',
@@ -32,4 +36,37 @@ test('high or critical advisories and overlong exceptions fail closed', () => {
     [{ package: 'tool', advisory: validEntry.advisory, severity: 'moderate' }],
     new Date('2026-07-13T00:00:00Z'),
   ), /90 days/i);
+});
+
+test('bulk audit input contains every resolved production dependency version and skips workspace links', () => {
+  const versions = collectPackageVersions([{
+    name: '@nongchang/backend',
+    dependencies: {
+      express: {
+        version: '5.1.0',
+        dependencies: { qs: { version: '6.14.0' } },
+      },
+      '@nongchang/shared': { version: 'link:../shared' },
+    },
+    optionalDependencies: { sharp: { version: '0.34.0' } },
+  }]);
+  assert.deepEqual(versions, {
+    express: ['5.1.0'],
+    qs: ['6.14.0'],
+    sharp: ['0.34.0'],
+  });
+});
+
+test('bulk registry advisories normalize GitHub advisory IDs for the existing budget policy', () => {
+  assert.deepEqual(normalizeBulkAdvisories({
+    lodash: [{
+      id: 1106913,
+      url: 'https://github.com/advisories/GHSA-35jh-r3h4-6jhm',
+      severity: 'high',
+    }],
+  }), [{ package: 'lodash', advisory: 'GHSA-35jh-r3h4-6jhm', severity: 'high' }]);
+  assert.throws(
+    () => normalizeBulkAdvisories({ lodash: [{ id: 1, url: 'https://invalid.example/1', severity: 'high' }] }),
+    /GitHub advisory ID/,
+  );
 });

@@ -9,6 +9,7 @@ const KEYS = [
   'UPLOAD_PENDING_MAX_AGE_MINUTES', 'RUNTIME_STATE_DRIVER', 'REDIS_URL',
   'OPERATIONS_WORKER_CONCURRENCY',
   'OTEL_SERVICE_NAME', 'OTEL_EXPORTER_OTLP_ENDPOINT', 'METRICS_BEARER_TOKEN',
+  'HOST',
 ];
 
 let snapshot: Record<string, string | undefined>;
@@ -111,6 +112,11 @@ describe('validateEnv runtime safety limits', () => {
 
   it('keeps safe non-production defaults usable', () => {
     expect(() => validateEnv()).not.toThrow();
+  });
+
+  it('rejects a wildcard application listen address', () => {
+    process.env.HOST = '0.0.0.0';
+    expect(() => validateEnv()).toThrow(/HOST.*127\.0\.0\.1/);
   });
 
   it('requires REDIS_URL when production uses distributed runtime state', () => {

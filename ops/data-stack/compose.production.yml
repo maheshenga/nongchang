@@ -1,0 +1,134 @@
+name: nongchang-production
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.5
+    container_name: nongchang-postgis
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - track_io_timing=on
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nongchang}
+      POSTGRES_USER: ${POSTGRES_USER:-nongchang_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APP_DATABASE_USER: ${APP_DATABASE_USER:-nongchang_app}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?set APP_DATABASE_PASSWORD}
+      MIGRATION_DATABASE_USER: ${MIGRATION_DATABASE_USER:-nongchang_migrator}
+      MIGRATION_DATABASE_PASSWORD: ${MIGRATION_DATABASE_PASSWORD:?set MIGRATION_DATABASE_PASSWORD}
+      BACKUP_DATABASE_USER: ${BACKUP_DATABASE_USER:-nongchang_backup}
+      BACKUP_DATABASE_PASSWORD: ${BACKUP_DATABASE_PASSWORD:?set BACKUP_DATABASE_PASSWORD}
+    ports:
+      - "127.0.0.1:5544:5432"
+    volumes:
+      - nongchang_postgis_data:/var/lib/postgresql/data
+      - ../postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-nongchang-roles.sh:ro
+      - ../postgres/enable-observability.sql:/docker-entrypoint-initdb.d/20-observability.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 1536m
+    cpus: "1.5"
+    logging: &bounded-logs
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks: [nongchang_data]
+
+  redis:
+    image: redis:7.4.5-alpine
+    container_name: nongchang-redis
+    restart: unless-stopped
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    command:
+      - sh
+      - -ec
+      - >-
+        exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+        --maxmemory 256mb --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:56380:6379"
+    volumes:
+      - nongchang_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 384m
+    cpus: "0.5"
+    logging: *bounded-logs
+    networks: [nongchang_data]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.24.1-p0
+    container_name: nongchang-pgbouncer
+    restart: unless-stopped
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    ports:
+      - "127.0.0.1:56432:6432"
+    volumes:
+      - ../pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ${PGBOUNCER_AUTH_FILE:?set PGBOUNCER_AUTH_FILE}:/etc/pgbouncer/userlist.txt:ro
+    command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U $${APP_DATABASE_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 128m
+    cpus: "0.25"
+    logging: *bounded-logs
+    networks: [nongchang_data]
+
+  prometheus:
+    image: prom/prometheus:v3.4.2
+    container_name: nongchang-prometheus
+    profiles: [monitoring]
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+      - --web.listen-address=127.0.0.1:59090
+    volumes:
+      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ${METRICS_BEARER_TOKEN_FILE:?set METRICS_BEARER_TOKEN_FILE}:/run/secrets/metrics-bearer-token:ro
+      - nongchang_prometheus_data:/prometheus
+    mem_limit: 256m
+    cpus: "0.25"
+    logging: *bounded-logs
+
+networks:
+  nongchang_data:
+    name: nongchang-production-data
+
+volumes:
+  nongchang_postgis_data:
+    name: nongchang-production-postgis
+  nongchang_redis_data:
+    name: nongchang-production-redis
+  nongchang_prometheus_data:
+    name: nongchang-production-prometheus

@@ -2,7 +2,7 @@ groups:
   - name: nongchang-platform
     rules:
       - alert: NongchangReadinessUnavailable
-        expr: up{job="nongchang-backend"} == 0
+        expr: up{job=~"nongchang-api|nongchang-worker"} == 0
         for: 2m
         labels: { severity: critical }
         annotations:

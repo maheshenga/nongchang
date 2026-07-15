@@ -1,0 +1,81 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name farm.qingyouai.com;
+    return 301 https://$host$request_uri;
+}
+
+# Host-local Prometheus entrypoint. It follows the same active blue/green include
+# without exposing the worker or application ports to the network.
+server {
+    listen 127.0.0.1:9091;
+    server_name localhost;
+
+    location = /api/metrics {
+        include /www/wwwroot/farm.qingyouai.com/shared/active-api.conf;
+        proxy_http_version 1.1;
+        proxy_set_header Host farm.qingyouai.com;
+        proxy_set_header X-Forwarded-For 127.0.0.1;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header X-Request-Id $request_id;
+    }
+
+    location / {
+        return 404;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name farm.qingyouai.com;
+
+    ssl_certificate /www/server/panel/vhost/cert/farm.qingyouai.com/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/farm.qingyouai.com/privkey.pem;
+
+    root /www/wwwroot/farm.qingyouai.com/current/web;
+    index index.html;
+    client_max_body_size 12m;
+    client_body_timeout 30s;
+    client_header_timeout 15s;
+    keepalive_timeout 65s;
+    send_timeout 60s;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self)" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; connect-src 'self' https:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self' https://*.alipay.com https://*.alipaydev.com" always;
+
+    location = /api/metrics {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+        include /www/wwwroot/farm.qingyouai.com/shared/active-api.conf;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+    }
+
+    location /api/ {
+        include /www/wwwroot/farm.qingyouai.com/shared/active-api.conf;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_buffering off;
+        proxy_intercept_errors off;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

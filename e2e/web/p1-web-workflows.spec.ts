@@ -73,6 +73,7 @@ test('merchant trace generation shows quota math and blocks an insufficient requ
 
   const dialog = page.getByRole('dialog', { name: '溯源码标签配置' });
   await expect(dialog.getByText('当前额度 50', { exact: true })).toBeVisible();
+  await dialog.getByRole('spinbutton', { name: '预设批量总数' }).fill('100');
   await expect(dialog.getByText('本次申请 100', { exact: true })).toBeVisible();
   await expect(dialog.getByText('预计剩余 -50（额度不足）', { exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: '生成真实溯源码', exact: true })).toBeDisabled();

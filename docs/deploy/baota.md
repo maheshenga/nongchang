@@ -1,181 +1,187 @@
-# 宝塔(Baota)部署指南
+# 农场系统宝塔生产部署指南
 
-本指南面向本仓库(pnpm workspace 单仓多包):`packages/backend`(NestJS)、`packages/web`(Vite + React)、`packages/shared`(共享类型/枚举)。在宝塔面板的 Linux 服务器上按下列步骤部署。
+本指南只适用于 `farm.qingyouai.com` 在现有宝塔服务器 `47.103.96.48` 上的首次上线。目标是新增一套隔离的 Nongchang 运行时，不复用、不重启也不修改服务器上已有的网站、PM2 应用、PostgreSQL、Redis 或 Docker 容器。
 
-## 1. 安装 PostgreSQL 并启用 PostGIS
+生产拓扑固定为：宝塔 Nginx 对外开放 80/443；API blue/green 分别监听 `127.0.0.1:3001/3002`；唯一 worker 监听 `127.0.0.1:3003`；专用 PostGIS、Redis、PgBouncer 分别绑定 `127.0.0.1:5544/56380/56432`。服务器只运行 CI 产出的 Linux x64 不可变归档，不拉源码、不安装依赖、不现场构建。
 
-1. 宝塔「软件商店」安装 PostgreSQL(建议 14+)。
-2. 创建数据库与专用用户:
-   ```sql
-   CREATE DATABASE nongchang;
-   CREATE USER nongchang_app WITH PASSWORD '替换为强密码';
-   GRANT ALL PRIVILEGES ON DATABASE nongchang TO nongchang_app;
-   ```
-3. 连接到 `nongchang` 库,启用 PostGIS 扩展:
-   ```sql
-   \c nongchang
-   CREATE EXTENSION postgis;
-   ```
-   (若软件商店无 PostGIS,可通过系统包管理器安装 `postgresql-XX-postgis-3` 后再执行。)
+## 1. 上线前安全处理
 
-## 2. Node 环境
+1. 立即轮换曾经通过聊天或工单传递过的 root 密码。不要把新密码写入仓库、Shell 历史或部署日志。
+2. 新建专用部署用户，安装 SSH 公钥并验证宝塔控制台的紧急入口；确认可恢复后，关闭 root 密码登录和普通用户密码登录。
+3. 在阿里云安全组限制 SSH 和宝塔面板只允许管理员固定 IP。公网应用只开放 80/443；3001、3002、3003、5544、56380、56432 不得加入安全组。
+4. 使用宝塔计划任务或系统配置创建 2 GiB swap，作为 OOM 保险而非日常容量。确认 `swapon --show`、`free -h` 和 `df -h /` 正常。
+5. 记录服务器上现有 `pm2 ls`、`docker ps`、Nginx 站点和监听端口清单。后续命令只能操作 `nongchang-*` 进程/容器和本站目录。
+6. 将归档内 `ops/logrotate/nongchang` 安装到 `/etc/logrotate.d/nongchang` 并运行 `logrotate --debug /etc/logrotate.d/nongchang`；该规则只处理本站 `shared/logs`，不改变已有 PM2 应用日志策略。
 
-1. 宝塔「Node 版本管理器」安装 Node 20+ 并设为默认。
-2. 全局安装 pnpm:
-   ```bash
-   npm i -g pnpm
-   ```
+## 2. DNS 与 TLS
 
-## 3. 拉取代码并构建后端
+先在 DNS 控制台添加唯一 A 记录：
 
-在项目根目录执行:
+```text
+farm.qingyouai.com -> 47.103.96.48
+```
 
-Before deploying a production-hardening branch, run the non-e2e gate from the repository root:
+从至少两个公共解析器确认结果只有该 IP；本地代理返回的 `198.18.x.x` fake-IP 不能作为公网生效证据：
 
 ```bash
-pnpm verify:local
+dig +short A farm.qingyouai.com @1.1.1.1
+dig +short A farm.qingyouai.com @8.8.8.8
 ```
 
-For the full local release gate, including PostGIS e2e setup, follow [docs/ops/production-verification.md](../ops/production-verification.md).
+解析生效后再通过宝塔为 `farm.qingyouai.com` 申请证书并启用自动续期。证书 SAN/CN 必须覆盖该域名；服务器上原有 `fcy.qingyouai.com` 证书不能复用。安装 `ops/nginx/farm.qingyouai.com.conf.template` 前，先把 `ops/nginx/active-api.conf.example` 复制为 `/www/wwwroot/farm.qingyouai.com/shared/active-api.conf`，然后要求：
 
 ```bash
-pnpm install
-pnpm build:shared
-pnpm build:backend
-psql "$DATABASE_URL" -f packages/backend/prisma/audit-data-consistency.sql
-pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 migrate dev
-```
-`audit-data-consistency.sql` 应返回 0 行。若返回跨商家/跨租户脏数据或重复微信 appId,先备份并清洗数据,再执行迁移。
-可选:初始化演示数据:
-```bash
-pnpm --filter @nongchang/backend prisma:seed
+/www/server/nginx/sbin/nginx -t -c /www/server/nginx/conf/nginx.conf
+curl --fail --resolve farm.qingyouai.com:443:47.103.96.48 https://farm.qingyouai.com/
 ```
 
-After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
+`curl --resolve` 只能证明目标服务器站点和证书；DNS 未传播时仍不得正式切流。
 
-The tenant-consistency migration repeats the SQL audit as a preflight. If deployment
-reports a stable `tenant_consistency_*` name, back up and repair the corresponding
-historical rows first. Never bypass the release by disabling foreign keys or constraint
-triggers.
-
-Preview AI credit reconciliation before executing it:
+## 3. 目录、运行时与机密文件
 
 ```bash
-pnpm --filter @nongchang/backend billing:recover-reservations -- --older-than-minutes=60 --limit=100
+install -d -m 0750 /www/wwwroot/farm.qingyouai.com/{incoming,releases,shared,backups}
+install -d -m 0750 /www/wwwroot/farm.qingyouai.com/shared/offsite-staging
 ```
 
-Only after reviewing candidates should an operator add `--execute --resource=AI`.
-`REVIEW_REQUIRED` means the provider outcome is ambiguous and the credit balance is
-intentionally unchanged; compare provider telemetry and the credit ledger before a
-controlled manual decision. Never automatically release these rows.
+通过宝塔安装独立 Node.js 20，记录 `node` 和 `pm2` 的绝对路径。必须确认 `node --version` 为 20.x；不要把服务器全局 Node 24 改成本站运行时，也不要重启已有 PM2 应用。
 
-Preview stale pending upload assets without changing OSS or database state:
+从发布归档中的模板创建以下文件，权限均为 `600`：
+
+- `shared/production.env`：参考 `ops/runtime/production.env.example`；
+- `shared/data-stack.env`：参考 `ops/data-stack/data-stack.env.example`；
+- `shared/pgbouncer-userlist.txt`：只包含应用用户及其强密码，格式为 `"nongchang_app" "<APP_DATABASE_PASSWORD>"`；
+- `shared/metrics-bearer-token`：只包含与 `METRICS_BEARER_TOKEN` 相同的 token 值，供本机 Prometheus 读取；
+- 备份加密密钥：保存在独立密钥系统，不能与备份文件放在同一位置。
+
+至少分别生成 PostgreSQL owner、应用、迁移、备份、Redis、JWT access、JWT refresh、应用加密、指标和备份加密密钥。URL 中的用户名/密码必须进行 URL 编码。关键连接关系为：
+
+```dotenv
+DATABASE_URL=postgresql://nongchang_app:<encoded-app-password>@127.0.0.1:56432/nongchang?schema=public&pgbouncer=true&connection_limit=10&pool_timeout=10
+DIRECT_DATABASE_URL=postgresql://nongchang_migrator:<encoded-migration-password>@127.0.0.1:5544/nongchang?schema=public
+REDIS_URL=redis://default:<encoded-redis-password>@127.0.0.1:56380/0
+```
+
+生产必须保持 `NODE_ENV=production`、`HOST=127.0.0.1`、`RUNTIME_STATE_DRIVER=redis`、`ALLOW_MANUAL_PAY=false`、`TRUST_PROXY_HOPS=1`。`DEPLOYED_GIT_SHA` 由发布脚本注入，不在共享环境文件中固定。
+
+## 4. 接收并验证不可变归档
+
+CI/tag release 同时提供 `nongchang-<sha>.tar.gz` 和 `nongchang-<sha>.manifest.json`。将二者传到 `incoming`，完整 SHA 必须是 40 位小写十六进制：
 
 ```bash
-pnpm --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --limit 100
+ROOT=/www/wwwroot/farm.qingyouai.com
+SHA=<40-character-git-sha>
+ARCHIVE="$ROOT/incoming/nongchang-$SHA.tar.gz"
+MANIFEST="$ROOT/incoming/nongchang-$SHA.manifest.json"
+RELEASE="$ROOT/releases/$SHA"
+
+test "$(jq -r .gitSha "$MANIFEST")" = "$SHA"
+test "$(jq -r .archive)" = "$(basename "$ARCHIVE")"
+echo "$(jq -r .archiveSha256 "$MANIFEST")  $ARCHIVE" | sha256sum --check --strict
+tar -tzf "$ARCHIVE" | awk '/(^\/|(^|\/)\.\.($|\/))/{bad=1} END{exit bad}'
+install -d -m 0750 "$RELEASE"
+tar --extract --gzip --file "$ARCHIVE" --directory "$RELEASE" --no-same-owner --no-same-permissions
+node "$RELEASE/scripts/release/verify-artifact.mjs" \
+  --archive "$ARCHIVE" --manifest "$MANIFEST" --release-dir "$RELEASE" --expected-sha "$SHA"
 ```
 
-Only after reviewing the dry-run count, add `--execute`. Execution attempts OSS deletion first and then releases the durable reservation. A non-zero exit status means at least one asset still needs investigation; rerunning is safe because terminal assets are released idempotently.
+任何文件集或哈希不一致都要删除该候选目录并停止；不得在服务器上重新构建或 `pnpm install` 修补归档。
 
-## 4. PM2 管理器启动后端
+## 5. 启动隔离数据栈
 
-宝塔「PM2 管理器」添加项目:
-
-- 启动文件:`packages/backend/dist/src/main.js`
-  > 注意:`nest build` 实际产出在 `dist/src/`,而非 `dist/main.js`。务必使用 `dist/src/main.js`。
-- 运行目录(工作目录):`packages/backend`
-- 监听端口:`3001`
-- 在 `packages/backend/.env` 配置环境变量,至少包含:
-  ```env
-  DATABASE_URL=postgresql://nongchang_app:密码@127.0.0.1:5432/nongchang
-  JWT_SECRET=强随机值
-  JWT_REFRESH_SECRET=另一个强随机值
-  PORT=3001
-  ALLOW_MANUAL_PAY=false
-  TRUST_PROXY_HOPS=1
-  UPLOAD_DAILY_BYTES_LIMIT=104857600
-  UPLOAD_ACTIVE_BYTES_LIMIT=5368709120
-  UPLOAD_PENDING_MAX_AGE_MINUTES=60
-  ```
-
-`TRUST_PROXY_HOPS=1` 对应“客户端 → 单层 Nginx → Node”。如果前面还有 CDN/WAF，必须按实际可信代理层数调整；不要为了让任意 `X-Forwarded-For` 生效而填大值。应用仅信任右侧已声明的代理链，限流和扫码 IP 记录据此识别真实客户端。
-
-### PM2 与健康探针职责
-
-后端提供两个无需认证但受限流保护的探针：
+首次启动时，`ops/postgres/init-roles.sh` 会创建 PostGIS 扩展以及相互分离的 app、migration、backup 角色。该初始化脚本只在空数据卷第一次启动时执行；已有卷修改密码或权限必须走受审计的 SQL 变更，不能假设重启会重跑初始化。
 
 ```bash
-curl --fail --silent http://127.0.0.1:3001/api/health/live
-curl --fail --silent http://127.0.0.1:3001/api/health/ready
+set -a
+. "$ROOT/shared/data-stack.env"
+set +a
+docker compose --env-file "$ROOT/shared/data-stack.env" \
+  -f "$RELEASE/ops/data-stack/compose.production.yml" config --quiet
+docker compose --env-file "$ROOT/shared/data-stack.env" \
+  -f "$RELEASE/ops/data-stack/compose.production.yml" --profile monitoring up -d
+docker ps --filter name=nongchang-
 ```
 
-- `/api/health/live` 表示 Node 进程仍可响应，可用于 PM2/宝塔的进程存活告警。只有进程退出或 liveness 持续失败时才应按 PM2 重启策略处理。
-- `/api/health/ready` 会实际执行 PostgreSQL `SELECT 1`。返回 `200 {"status":"ready"}` 时实例才应接收流量；返回 `503 {"status":"not_ready"}` 时，负载均衡或发布脚本应把实例从流量池摘除。
-- 短暂数据库故障导致的 readiness `503` 不等于 Node 进程失活。不要仅因为一次或短时 readiness 失败就重启 PM2；数据库恢复后探针会自动恢复为 `200`。
-
-建议在宝塔「计划任务」或外部监控中每 30 秒检查 liveness，并在发布切流前连续检查 readiness。单实例部署无法真正“摘流”时，应让 Nginx 保留 `503`，进入维护页或由上游负载均衡停止转发，而不是伪造 `200`。
-
-## 5. 构建前端
+必须验证 PostGIS 可用、Redis 未认证请求失败且认证后成功、PgBouncer 健康：
 
 ```bash
-pnpm --filter web build
-```
-产物在 `packages/web/dist`。在宝塔为站点设置网站根目录指向该目录。
-
-## 6. Nginx 反向代理
-
-后端已设置全局前缀 `api`,因此 `/api/` 直接转发到 3001 端口。在站点配置中加入:
-
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:3001;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Request-Id $http_x_request_id;
-}
-location / {
-    try_files $uri $uri/ /index.html;
-}
+docker exec nongchang-postgis pg_isready -U nongchang_owner -d nongchang
+docker exec nongchang-postgis psql -U nongchang_owner -d nongchang -Atc "show shared_preload_libraries; select extname from pg_extension where extname in ('postgis','pg_stat_statements') order by 1"
+redis-cli -h 127.0.0.1 -p 56380 ping                       # 必须返回 NOAUTH
+redis-cli --no-auth-warning -h 127.0.0.1 -p 56380 -a "$REDIS_PASSWORD" ping
+PGPASSWORD="$APP_DATABASE_PASSWORD" psql -h 127.0.0.1 -p 56432 -U nongchang_app -d nongchang -c 'select 1'
 ```
 
-`/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，未提供或格式非法时自动生成 UUID，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
+## 6. 备份、迁移与原子发布
 
-发布或停止时，PM2 应发送 `SIGTERM` 并给进程留出优雅退出时间。应用收到关闭信号后会先把 readiness 切为 `503 not_ready`，再等待 Nest/Prisma 关闭；负载均衡必须先摘流，不能继续把新请求送入正在排空的实例。
+从 `shared/production.env` 加载变量，但不要打印环境：
 
-### 结构化请求日志
-
-后端会向标准输出写入每个已完成请求的一条 JSON 日志，PM2/宝塔应采集并轮转该输出。稳定字段为：
-
-- `requestId`、`method`、`path`、`status`、`durationMs`
-- 登录请求可识别调用方时，额外包含 `tenantId`、`userId`
-
-日志采用白名单构造，禁止记录 Authorization、Cookie、请求/响应 body、查询参数中的密钥、AI 提示词/图片/音频内容，以及微信、讯飞、地图、支付、对象存储等集成密钥。排障时使用 `X-Request-Id` 关联日志，不要临时打开 body 或 header 全量打印。
-
-在同一个 HTTPS `server` 块中加入以下响应头。Web 管理端与 `/api` 必须保持同源，
-这样 `nc_refresh` HttpOnly Cookie 才只会发送到 `/api/auth/web`：
-
-```nginx
-add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-add_header X-Content-Type-Options "nosniff" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self)" always;
-add_header X-Frame-Options "DENY" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; connect-src 'self' https:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self' https://*.alipay.com https://*.alipaydev.com" always;
+```bash
+set -a
+. "$ROOT/shared/production.env"
+set +a
 ```
 
-不要给 `script-src` 添加 `'unsafe-inline'`。当前页面中的 `application/ld+json`
-是结构化数据而非可执行脚本。发布后应在浏览器控制台确认无 CSP 违规，并完成登录、
-静默刷新、主要管理页面加载和支付宝跳转的冒烟验证。
+先运行服务器预检。首次使用 3001，后续必须选择 `deploy-state.json` 中 activePort 的另一端口：
 
-## 7. 安全提醒
+```bash
+node "$RELEASE/scripts/release/server-preflight.mjs" \
+  --hostname farm.qingyouai.com --target-ip 47.103.96.48 \
+  --candidate-port 3001 --artifact "$ARCHIVE" --release-root "$ROOT" \
+  --backup-bytes 5368709120 --expected-sha "$SHA"
+```
 
-- `JWT_SECRET` / `JWT_REFRESH_SECRET` 使用强随机值,例如:
-  ```bash
-  openssl rand -base64 48
-  ```
-- PostgreSQL 仅监听 `127.0.0.1`,不对公网开放。
-- `.env` 不入库(已在 `.gitignore` 中通过 `.env*` 排除)。
-- Keep `ALLOW_MANUAL_PAY=false` in production. The backend env validator rejects `ALLOW_MANUAL_PAY=true` when `NODE_ENV=production`.
-- 定期备份数据库(宝塔「计划任务」可配置定时 `pg_dump`)。
+在任何迁移前创建加密备份，验证校验和并成功复制到 OSS 或另一台主机；只保留在本机不算完成：
+
+```bash
+DATABASE_URL="$DIRECT_DATABASE_URL" BACKUP_ENCRYPTION_KEY='<runtime-only-key>' \
+  node "$RELEASE/scripts/backup-postgres.mjs" --output-dir "$ROOT/backups" --retention 3
+(cd "$ROOT/backups" && sha256sum --check '<timestamp>.sha256')
+# 执行已批准的加密离机复制，并在远端核对 SHA-256；成功前不要迁移。
+```
+
+迁移只直连 PostGIS，不经过 PgBouncer：
+
+```bash
+node "$RELEASE/scripts/release/migration-preflight.mjs"
+DATABASE_URL="$DIRECT_DATABASE_URL" "$RELEASE/node_modules/.bin/prisma" \
+  migrate deploy --schema "$RELEASE/prisma/schema.prisma"
+```
+
+切换脚本会启动 inactive API、校验 readiness 和 Git SHA、执行候选烟测、暂存 Nginx include/current 链接、`nginx -t`、reload 和公网烟测。公网烟测失败会自动恢复旧 include/current 并清理候选进程；成功后才写 `deploy-state.json`、停止旧 API、重启唯一 worker，并保护 current/previous/known-stable 三个版本：
+
+```bash
+export NONGCHANG_SMOKE_ACCESS_TOKEN='<short-lived-read-only-token>'
+node "$RELEASE/scripts/release/switch-release.mjs" \
+  --release-root "$ROOT" --candidate-port 3001 --candidate-sha "$SHA" \
+  --node-bin /absolute/path/to/node20 --pm2-bin /absolute/path/to/pm2 \
+  --nginx-bin /www/server/nginx/sbin/nginx \
+  --nginx-conf /www/server/nginx/conf/nginx.conf \
+  --hostname farm.qingyouai.com --trace-code '<known-public-trace-code>'
+unset NONGCHANG_SMOKE_ACCESS_TOKEN
+```
+
+切换后检查 `pm2 ls`，只能有一个 blue/green API 在线和一个 `nongchang-worker` 在线；检查公网 live/ready 返回候选 SHA。若脚本报告“traffic is active but post-switch lifecycle failed”，API 已切换但 worker 或旧进程收尾失败，发布状态为 degraded，必须立即修复并确认队列积压恢复，不能把该次发布标记成功。
+
+发布锁为 `$ROOT/deploy.lock`。正常退出会自动删除；若机器或进程异常退出导致锁残留，必须先确认没有发布/回滚进程、核对 `deploy-state.json`、PM2、Nginx include 和 `current/previous` 一致，再由两人复核后删除锁，不能直接用 `rm -f` 绕过并发保护。
+
+## 7. 上线验收
+
+系统管理员后台“上线就绪检查”的 10 项必须全部通过：
+
+1. 法律协议已发布；
+2. 微信小程序已启用；
+3. 对象存储已启用；
+4. 地图服务已启用；
+5. AI 服务商已启用；
+6. 支付宝支付已启用；
+7. 初始业务额度已配置；
+8. 公网 API 域名已配置；
+9. 小程序客服联系方式已配置；
+10. 销售开通联系方式已配置。
+
+“配置存在”不等于真实可用。发布接受前必须使用生产租户和受控小额/测试资源完成：微信真机登录和静默刷新、OSS 拍照上传与读取、天地图地块定位、AI 文本和图片诊断、讯飞语音（若启用）、支付宝沙箱或批准的小额支付/回调、公开溯源码跨网络扫码、农事记录/批次/地块/账单只读路径、一个 worker 任务完成并让队列指标回落。记录请求 ID、时间、租户、结果和 provider 侧证据，但不得记录 token、Cookie、图片、语音、提示词或密钥。
+
+外部监控至少覆盖 HTTPS live/ready、磁盘、PostGIS、Redis、队列积压、PM2 重启、备份年龄和证书到期；必须实际触发一次测试告警并确认值班人员收到。
+
+发布、回滚和灾备的逐次操作见 [release-runbook.md](../ops/release-runbook.md) 与 [disaster-recovery.md](../ops/disaster-recovery.md)。

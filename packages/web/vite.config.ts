@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     resolveProductionWebEnv(env);
   }
   const demoDashboardEnabled = env.VITE_ENABLE_DEMO_DASHBOARD === 'true';
+  const backendProxyTarget = env.VITE_BACKEND_PROXY_TARGET?.trim() || 'http://127.0.0.1:3001';
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -42,7 +43,7 @@ export default defineConfig(({ mode }) => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
-        '/api': { target: 'http://localhost:3001', changeOrigin: true },
+        '/api': { target: backendProxyTarget, changeOrigin: true },
       },
     },
   };

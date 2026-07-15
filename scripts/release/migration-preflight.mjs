@@ -1,14 +1,15 @@
 import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, posix, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPostgresTool } from '../lib/postgres-tools.mjs';
 
-const COREPACK = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-function run(command, args) {
+function run(command, args, env = {}) {
   return new Promise((resolveRun, reject) => {
     const child = spawn(command, args, {
-      env: process.env,
+      env: { ...process.env, ...env },
       windowsHide: true,
       shell: process.platform === 'win32' && command.endsWith('.cmd'),
       stdio: 'inherit',
@@ -18,9 +19,20 @@ function run(command, args) {
   });
 }
 
+export function resolveMigrationRuntime(root, platform = process.platform, pathExists = existsSync) {
+  const paths = platform === 'win32' ? win32 : posix;
+  const artifactSchema = paths.join(root, 'prisma', 'schema.prisma');
+  return {
+    command: paths.join(root, 'node_modules', '.bin', platform === 'win32' ? 'prisma.cmd' : 'prisma'),
+    schema: pathExists(artifactSchema)
+      ? artifactSchema
+      : paths.join(root, 'packages', 'backend', 'prisma', 'schema.prisma'),
+  };
+}
+
 export async function migrationPreflight() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error('DATABASE_URL is required');
+  const databaseUrl = process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error('DIRECT_DATABASE_URL or DATABASE_URL is required');
   const consistency = await runPostgresTool('psql', [
     '--tuples-only', '--no-align', '--set', 'ON_ERROR_STOP=1',
     '--command', `
@@ -33,7 +45,8 @@ export async function migrationPreflight() {
   ], { databaseUrl });
   const report = JSON.parse(consistency.split(/\r?\n/).find((line) => line.trim().startsWith('{')));
   if (Object.values(report).some((value) => Number(value) !== 0)) throw new Error('migration consistency preflight failed');
-  await run(COREPACK, ['pnpm@10.33.2', '--filter', '@nongchang/backend', 'exec', 'prisma', 'migrate', 'status']);
+  const runtime = resolveMigrationRuntime(REPO_ROOT);
+  await run(runtime.command, ['migrate', 'status', '--schema', runtime.schema], { DATABASE_URL: databaseUrl });
   return report;
 }
 
