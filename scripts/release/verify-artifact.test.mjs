@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -76,6 +76,38 @@ test('server verification rejects archive, SHA, embedded manifest, and file-set 
     await assert.rejects(
       () => verifyReleaseArtifact({ archive, manifestFile, releaseDir: release, expectedGitSha: gitSha }),
       /payload file set mismatch/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('server verification rejects a payload symlink that escapes the immutable release', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
+  try {
+    const gitSha = 'd'.repeat(40);
+    const archive = join(root, `nongchang-${gitSha}.tar.gz`);
+    const release = join(root, gitSha);
+    const manifestFile = join(root, `nongchang-${gitSha}.manifest.json`);
+    const escapedTarget = join(root, 'ci-temporary-deployment.js');
+    const payloadLink = join(release, 'node_modules', 'package.js');
+    await mkdir(join(release, 'node_modules'), { recursive: true });
+    await writeFile(archive, 'archive');
+    await writeFile(escapedTarget, 'temporary deployment package');
+    await symlink(escapedTarget, payloadLink);
+    const files = { 'node_modules/package.js': sha256(`symlink:${await readlink(payloadLink)}`) };
+    const payloadManifest = { schemaVersion: 1, gitSha, files };
+    const manifest = {
+      ...payloadManifest,
+      archive: `nongchang-${gitSha}.tar.gz`,
+      archiveSha256: sha256('archive'),
+    };
+    await writeFile(join(release, 'artifact-manifest.json'), JSON.stringify(payloadManifest));
+    await writeFile(manifestFile, JSON.stringify(manifest));
+
+    await assert.rejects(
+      () => verifyReleaseArtifact({ archive, manifestFile, releaseDir: release, expectedGitSha: gitSha }),
+      /symlink target.*release/i,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

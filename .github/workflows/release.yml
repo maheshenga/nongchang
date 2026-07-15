@@ -78,6 +78,18 @@ jobs:
       - run: pnpm audit:prod
       - run: pnpm release:test
       - run: pnpm release:artifact -- --output-dir "$RUNNER_TEMP/nongchang-release"
+      - name: Verify immutable artifact archive
+        run: |
+          archive="$RUNNER_TEMP/nongchang-release/nongchang-${GITHUB_SHA}.tar.gz"
+          manifest="$RUNNER_TEMP/nongchang-release/nongchang-${GITHUB_SHA}.manifest.json"
+          release="$RUNNER_TEMP/nongchang-release-verify/${GITHUB_SHA}"
+          mkdir -p "$release"
+          tar --extract --gzip --file "$archive" --directory "$release" --no-same-owner --no-same-permissions
+          node "$release/scripts/release/verify-artifact.mjs" \
+            --archive "$archive" \
+            --manifest "$manifest" \
+            --release-dir "$release" \
+            --expected-sha "$GITHUB_SHA"
       - uses: actions/upload-artifact@v4
         with:
           name: nongchang-${{ github.sha }}

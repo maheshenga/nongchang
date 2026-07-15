@@ -98,7 +98,7 @@ test('environment templates contain names but no committed secret values', async
   assert.doesNotMatch(`${dataEnv}\n${runtimeEnv}`, /password123|replace-with-real-secret|BEGIN (?:RSA )?PRIVATE KEY/i);
 });
 
-test('tag release runs the canonical production, browser, backup, query-plan, audit, and release-script gates', async () => {
+test('tag release runs the canonical production, browser, backup, query-plan, audit, and archive verification gates', async () => {
   const workflow = await read('.github/workflows/release.yml');
   for (const command of [
     'pnpm verify:production',
@@ -109,6 +109,8 @@ test('tag release runs the canonical production, browser, backup, query-plan, au
     'pnpm audit:prod',
     'pnpm release:test',
   ]) assert.match(workflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(workflow, /Verify immutable artifact archive/);
+  assert.match(workflow, /verify-artifact\.mjs/);
 });
 
 test('browser harness can move its loopback backend without stopping unrelated services', async () => {

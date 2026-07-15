@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstat, readdir, readFile, readlink } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertReleaseSha } from './server-preflight.mjs';
 
@@ -34,6 +34,19 @@ function assertManifestShape(manifest, expectedGitSha) {
   }
 }
 
+function assertPortableSymlink(releaseDir, path, target) {
+  const resolvedTarget = resolve(dirname(path), target);
+  const releaseRelativeTarget = relative(releaseDir, resolvedTarget);
+  if (
+    isAbsolute(target)
+    || releaseRelativeTarget === '..'
+    || releaseRelativeTarget.startsWith(`..${sep}`)
+    || isAbsolute(releaseRelativeTarget)
+  ) {
+    throw new Error(`artifact symlink target must stay within the immutable release: ${relative(releaseDir, path)}`);
+  }
+}
+
 export async function verifyReleaseArtifact(options) {
   const { archive, manifestFile, releaseDir, expectedGitSha } = options;
   for (const [label, path] of Object.entries({ archive, manifestFile, releaseDir })) {
@@ -59,7 +72,10 @@ export async function verifyReleaseArtifact(options) {
   const expectedPaths = Object.keys(external.files).sort();
   if (JSON.stringify(paths) !== JSON.stringify(expectedPaths)) throw new Error('artifact payload file set mismatch');
   for (const path of expectedPaths) {
-    if (await sha256File(join(releaseDir, path)) !== external.files[path]) {
+    const payloadPath = join(releaseDir, path);
+    const info = await lstat(payloadPath);
+    if (info.isSymbolicLink()) assertPortableSymlink(releaseDir, payloadPath, await readlink(payloadPath));
+    if (await sha256File(payloadPath) !== external.files[path]) {
       throw new Error(`artifact payload hash mismatch: ${path}`);
     }
   }
