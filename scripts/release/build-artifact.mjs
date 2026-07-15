@@ -103,6 +103,10 @@ async function sha256File(path) {
   return hash.digest('hex');
 }
 
+export async function copyPortableDependencyTree(source, destination) {
+  await cp(source, destination, { recursive: true, dereference: true });
+}
+
 async function listFiles(root, current = root) {
   const entries = await readdir(current, { withFileTypes: true });
   const files = [];
@@ -171,7 +175,7 @@ export async function buildArtifact(options) {
       if (!(await stat(join(REPO_ROOT, source)).catch(() => null))) throw new Error(`missing release input: ${source}`);
       await cp(join(REPO_ROOT, source), join(payload, target), { recursive: true });
     }
-    await cp(join(deployment, 'node_modules'), join(payload, 'node_modules'), { recursive: true });
+    await copyPortableDependencyTree(join(deployment, 'node_modules'), join(payload, 'node_modules'));
     const prismaClientPackage = BACKEND_REQUIRE.resolve('@prisma/client/package.json');
     const generatedPrismaClient = generatedPrismaClientDirectory(prismaClientPackage);
     await cp(generatedPrismaClient, join(payload, 'node_modules/.prisma/client'), { recursive: true });

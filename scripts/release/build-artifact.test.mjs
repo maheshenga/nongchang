@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { dirname, resolve } from 'node:path';
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import * as artifactModule from './build-artifact.mjs';
 import {
@@ -19,6 +21,23 @@ test('generated Prisma client is located next to the resolved @prisma/client pac
     artifactModule.generatedPrismaClientDirectory(clientPackage),
     resolve(dirname(clientPackage), '../..', '.prisma/client'),
   );
+});
+
+test('runtime dependency copy dereferences temporary pnpm-style links', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-artifact-links-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, 'source');
+  const temporaryPackage = join(root, 'temporary-deployment', 'package');
+  const destination = join(root, 'destination');
+  await mkdir(source, { recursive: true });
+  await mkdir(temporaryPackage, { recursive: true });
+  await writeFile(join(temporaryPackage, 'index.js'), 'module.exports = 1;\n');
+  await symlink(temporaryPackage, join(source, 'package'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  await artifactModule.copyPortableDependencyTree(source, destination);
+
+  assert.equal(await readFile(join(destination, 'package', 'index.js'), 'utf8'), 'module.exports = 1;\n');
+  assert.equal((await lstat(join(destination, 'package'))).isSymbolicLink(), false);
 });
 
 test('release artifacts refuse a dirty worktree', () => {
