@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { cp, lstat, mkdtemp, mkdir, readlink, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, mkdir, readlink, readdir, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,8 +103,39 @@ async function sha256File(path) {
   return hash.digest('hex');
 }
 
+function isPathWithin(root, candidate) {
+  const pathFromRoot = relative(root, candidate);
+  return pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && !isAbsolute(pathFromRoot));
+}
+
+async function rebaseDependencySymlinks(sourceRoot, destinationRoot, current = sourceRoot) {
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const sourcePath = join(current, entry.name);
+    if (entry.isDirectory()) {
+      await rebaseDependencySymlinks(sourceRoot, destinationRoot, sourcePath);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+
+    const target = await readlink(sourcePath);
+    const resolvedTarget = resolve(dirname(sourcePath), target);
+    if (!isPathWithin(sourceRoot, resolvedTarget)) {
+      throw new Error(`dependency symlink escapes the deployment tree: ${relative(sourceRoot, sourcePath)}`);
+    }
+
+    const destinationPath = join(destinationRoot, relative(sourceRoot, sourcePath));
+    const destinationTarget = join(destinationRoot, relative(sourceRoot, resolvedTarget));
+    const portableTarget = relative(dirname(destinationPath), destinationTarget) || '.';
+    await unlink(destinationPath);
+    await symlink(portableTarget, destinationPath, (await stat(sourcePath)).isDirectory() ? 'dir' : 'file');
+  }
+}
+
 export async function copyPortableDependencyTree(source, destination) {
-  await cp(source, destination, { recursive: true, dereference: true });
+  const sourceRoot = resolve(source);
+  const destinationRoot = resolve(destination);
+  await cp(sourceRoot, destinationRoot, { recursive: true });
+  await rebaseDependencySymlinks(sourceRoot, destinationRoot);
 }
 
 async function listFiles(root, current = root) {
