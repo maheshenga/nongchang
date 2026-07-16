@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, request, setOnAuthExpired } from './request';
+import { ApiError, refreshWebSession, request, setOnAuthExpired } from './request';
 import { clearAccessToken, getAccessToken, setAccessToken } from '../auth/token-store';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -76,6 +76,67 @@ describe('request', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(getAccessToken()).toBeNull();
     expect(onExpired).toHaveBeenCalledOnce();
+  });
+
+  it('does not refresh or retry when a protected request becomes unauthorized after logout', async () => {
+    let resolveProtectedResponse!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveProtectedResponse = resolve; }))
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'resurrected-access' }))
+      .mockResolvedValueOnce(jsonResponse([{ id: 'b1' }]));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = request<{ id: string }[]>('/batches');
+    clearAccessToken();
+    resolveProtectedResponse(jsonResponse({ message: 'expired' }, 401));
+
+    await expect(pending).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('does not expire a newer login when an older refresh fails', async () => {
+    const onExpired = vi.fn();
+    setOnAuthExpired(onExpired);
+    let resolveRefresh!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    })));
+
+    const pendingRefresh = refreshWebSession();
+    clearAccessToken();
+    setAccessToken('new-login-access');
+    resolveRefresh(jsonResponse({ message: 'expired' }, 401));
+
+    await expect(pendingRefresh).resolves.toBeNull();
+    expect(getAccessToken()).toBe('new-login-access');
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it('does not expire a newer login when a stale retry returns 401', async () => {
+    const onExpired = vi.fn();
+    setOnAuthExpired(onExpired);
+    let resolveRetry!: (response: Response) => void;
+    let signalRetryStarted!: () => void;
+    const retryStarted = new Promise<void>((resolve) => { signalRetryStarted = resolve; });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'refreshed-access' }))
+      .mockImplementationOnce(() => {
+        signalRetryStarted();
+        return new Promise<Response>((resolve) => { resolveRetry = resolve; });
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pendingRequest = request('/batches');
+    await retryStarted;
+    clearAccessToken();
+    setAccessToken('new-login-access');
+    resolveRetry(jsonResponse({ message: 'expired' }, 401));
+
+    await expect(pendingRequest).rejects.toMatchObject({ status: 401 });
+    expect(getAccessToken()).toBe('new-login-access');
+    expect(onExpired).not.toHaveBeenCalled();
   });
 
   it('throws ApiError with the backend message on non-401 errors', async () => {

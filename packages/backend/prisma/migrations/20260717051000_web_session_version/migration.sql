@@ -1,0 +1,2 @@
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "web_session_version" INTEGER NOT NULL DEFAULT 0;

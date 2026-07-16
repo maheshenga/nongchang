@@ -27,6 +27,7 @@ describe('auth model helpers', () => {
       agentId: 'agent-1',
       ownerId: 'merchant-1',
       sessionVersion: 3,
+      sessionKind: 'generic',
     });
 
     expect(toAuthUser({
@@ -41,6 +42,7 @@ describe('auth model helpers', () => {
       agentId: null,
       ownerId: null,
       sessionVersion: 0,
+      sessionKind: 'generic',
     });
 
     expect(toAuthUser({

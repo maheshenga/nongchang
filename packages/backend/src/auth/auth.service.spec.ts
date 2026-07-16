@@ -102,6 +102,7 @@ describe('AuthService.login', () => {
     const payload = new JwtService({ secret: 'test' }).verify(res.accessToken, { secret: 'test' }) as any;
 
     expect(payload.sessionVersion).toBe(3);
+    expect(payload.sessionKind).toBe('generic');
     expect(payload.exp - payload.iat).toBe(15 * 60);
   });
 
@@ -124,7 +125,14 @@ describe('AuthService.refresh', () => {
     return { svc: new AuthService(prisma, jwt, stubIntegrations(), stubGroups()), jwt };
   };
   const signRt = (jwt: JwtService) => jwt.signAsync(
-    { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
+    {
+      userId: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      ownerId: 'u1',
+      sessionKind: 'generic',
+    },
     { secret: 'test', expiresIn: '7d' },
   );
 
@@ -133,6 +141,49 @@ describe('AuthService.refresh', () => {
     const res = await svc.refresh(await signRt(jwt));
     expect(res.accessToken).toBeTypeOf('string');
     expect(res.refreshToken).toBeTypeOf('string');
+  });
+  it('rejects a legacy refresh token without sessionKind', async () => {
+    const { svc, jwt } = makeRefreshSvc({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      tenant: activeTenant,
+    });
+    const legacyToken = await jwt.signAsync(
+      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1' },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await expect(svc.refresh(legacyToken)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('rejects a web refresh token without webSessionVersion', async () => {
+    const { svc, jwt } = makeRefreshSvc({
+      id: 'u1',
+      tenantId: 't1',
+      role: 'merchant',
+      agentId: null,
+      status: 'active',
+      sessionVersion: 0,
+      webSessionVersion: 0,
+      tenant: activeTenant,
+    });
+    const incompleteWebToken = await jwt.signAsync(
+      {
+        userId: 'u1',
+        tenantId: 't1',
+        role: 'merchant',
+        agentId: null,
+        ownerId: 'u1',
+        sessionVersion: 0,
+        sessionKind: 'web',
+      },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await expect(svc.refresh(incompleteWebToken, true))
+      .rejects.toBeInstanceOf(UnauthorizedException);
   });
   it('无效 refresh token 抛 Unauthorized', async () => {
     const { svc } = makeRefreshSvc(null);
@@ -161,7 +212,15 @@ describe('AuthService.refresh', () => {
       tenant: activeTenant,
     });
     const stale = await jwt.signAsync(
-      { userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1', sessionVersion: 1 },
+      {
+        userId: 'u1',
+        tenantId: 't1',
+        role: 'merchant',
+        agentId: null,
+        ownerId: 'u1',
+        sessionVersion: 1,
+        sessionKind: 'generic',
+      },
       { secret: 'test', expiresIn: '7d' },
     );
 
@@ -202,7 +261,14 @@ describe('AuthService.refresh', () => {
     } as any;
     const svc = new AuthService(prisma, jwt, stubIntegrations(), stubGroups());
     const input = await jwt.signAsync(
-      { userId: 'mem1', tenantId: 't1', role: 'member', agentId: null, ownerId: null },
+      {
+        userId: 'mem1',
+        tenantId: 't1',
+        role: 'member',
+        agentId: null,
+        ownerId: null,
+        sessionKind: 'generic',
+      },
       { secret: 'test', expiresIn: '7d' },
     );
 
@@ -211,6 +277,66 @@ describe('AuthService.refresh', () => {
 
     expect(payload.role).toBe('member');
     expect(payload.ownerId).toBeNull();
+  });
+});
+
+describe('AuthService.revokeWebSession', () => {
+  it('increments only the matching web session version', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const svc = new AuthService(
+      { user: { updateMany } } as any,
+      jwt,
+      stubIntegrations(),
+      stubGroups(),
+    );
+    const refreshToken = await jwt.signAsync(
+      {
+        userId: 'u1',
+        tenantId: 't1',
+        role: 'merchant',
+        agentId: null,
+        ownerId: 'u1',
+        sessionVersion: 2,
+        webSessionVersion: 5,
+        sessionKind: 'web',
+      },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await svc.revokeWebSession(refreshToken);
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1', sessionVersion: 2, webSessionVersion: 5 },
+      data: { webSessionVersion: { increment: 1 } },
+    });
+  });
+
+  it('does not let a generic refresh token revoke a web session', async () => {
+    const jwt = new JwtService({ secret: 'test' });
+    const updateMany = vi.fn();
+    const svc = new AuthService(
+      { user: { updateMany } } as any,
+      jwt,
+      stubIntegrations(),
+      stubGroups(),
+    );
+    const genericRefreshToken = await jwt.signAsync(
+      {
+        userId: 'u1',
+        tenantId: 't1',
+        role: 'merchant',
+        agentId: null,
+        ownerId: 'u1',
+        sessionVersion: 2,
+        sessionKind: 'generic',
+      },
+      { secret: 'test', expiresIn: '7d' },
+    );
+
+    await svc.revokeWebSession(genericRefreshToken);
+
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });
 

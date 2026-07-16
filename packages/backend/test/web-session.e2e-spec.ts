@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
@@ -63,6 +64,64 @@ describe('web HttpOnly session e2e', () => {
     expect(setCookie?.[0]).toContain('Path=/api/auth/web');
   });
 
+  it('rejects a web refresh token at the generic refresh endpoint', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/api/auth/web/login')
+      .send({ tenantCode, username, password })
+      .expect(201);
+    const webRefreshToken = cookieValue(login.headers['set-cookie'] as string[] | undefined, 'nc_refresh');
+    expect(webRefreshToken).toEqual(expect.any(String));
+
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({ refreshToken: webRefreshToken })
+      .expect(401);
+  });
+
+  it('rejects a generic refresh token at the web cookie endpoint', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ tenantCode, username, password })
+      .expect(201);
+
+    const rejectedRefresh = await request(app.getHttpServer())
+      .post('/api/auth/web/refresh')
+      .set('Cookie', `nc_refresh=${login.body.refreshToken}`)
+      .expect(401);
+
+    expect((rejectedRefresh.headers['set-cookie'] as string[] | undefined)?.[0]).toContain('Max-Age=0');
+  });
+
+  it('rejects untyped access and refresh tokens issued before the session cutover', async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const legacyPayload = {
+      userId: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      agentId: user.agentId,
+      ownerId: user.id,
+      sessionVersion: user.sessionVersion,
+    };
+    const jwt = new JwtService();
+    const legacyAccessToken = await jwt.signAsync(legacyPayload, {
+      secret: process.env.JWT_SECRET,
+      expiresIn: '15m',
+    });
+    const legacyRefreshToken = await jwt.signAsync(legacyPayload, {
+      secret: process.env.JWT_REFRESH_SECRET,
+      expiresIn: '7d',
+    });
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${legacyAccessToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({ refreshToken: legacyRefreshToken })
+      .expect(401);
+  });
+
   it('refreshes and rotates the cookie, then logout expires it', async () => {
     const agent = request.agent(app.getHttpServer());
     const login = await agent
@@ -82,6 +141,34 @@ describe('web HttpOnly session e2e', () => {
     await agent.post('/api/auth/web/refresh').expect(401);
   });
 
+  it('rejects a refresh cookie captured before logout so a late response cannot recreate the web session', async () => {
+    const agent = request.agent(app.getHttpServer());
+    await agent
+      .post('/api/auth/web/login')
+      .send({ tenantCode, username, password })
+      .expect(201);
+    const refresh = await agent.post('/api/auth/web/refresh').expect(201);
+    const staleCookie = cookieValue(refresh.headers['set-cookie'] as string[] | undefined, 'nc_refresh');
+    expect(staleCookie).toEqual(expect.any(String));
+
+    await agent.post('/api/auth/web/logout').expect(204);
+    const rejectedRefresh = await request(app.getHttpServer())
+      .post('/api/auth/web/refresh')
+      .set('Cookie', `nc_refresh=${staleCookie}`)
+      .expect(401);
+
+    expect((rejectedRefresh.headers['set-cookie'] as string[] | undefined)?.[0]).toContain('Max-Age=0');
+  });
+
+  it('expires a malformed refresh cookie at the HTTP boundary', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/web/refresh')
+      .set('Cookie', 'nc_refresh=%')
+      .expect(401);
+
+    expect((response.headers['set-cookie'] as string[] | undefined)?.[0]).toContain('Max-Age=0');
+  });
+
   it('rejects an old refresh cookie after a password change increments sessionVersion', async () => {
     const agent = request.agent(app.getHttpServer());
     const login = await agent
@@ -95,6 +182,7 @@ describe('web HttpOnly session e2e', () => {
       .send({ oldPassword: password, newPassword: 'new-password-456' })
       .expect(201);
 
-    await agent.post('/api/auth/web/refresh').expect(401);
+    const rejectedRefresh = await agent.post('/api/auth/web/refresh').expect(401);
+    expect((rejectedRefresh.headers['set-cookie'] as string[] | undefined)?.[0]).toContain('Max-Age=0');
   });
 });

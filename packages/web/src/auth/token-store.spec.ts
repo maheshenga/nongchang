@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAccessToken, getAccessToken, setAccessToken } from './token-store';
 
 describe('memory-only access token store', () => {
@@ -20,5 +20,16 @@ describe('memory-only access token store', () => {
 
     expect(getAccessToken()).toBeNull();
     expect(localStorage.length).toBe(0);
+  });
+
+  it('removes legacy persisted token keys when the store initializes', async () => {
+    localStorage.setItem('nc_access_token', 'legacy-access');
+    localStorage.setItem('nc_refresh_token', 'legacy-refresh');
+
+    vi.resetModules();
+    await import('./token-store');
+
+    expect(localStorage.getItem('nc_access_token')).toBeNull();
+    expect(localStorage.getItem('nc_refresh_token')).toBeNull();
   });
 });

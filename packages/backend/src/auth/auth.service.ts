@@ -6,7 +6,15 @@ import { LoginDto, TokenPair, AuthUser, Role, WechatLoginDto, WechatRegisterDto,
 import { PrismaService } from '../prisma/prisma.service';
 import { IntegrationConfigService } from '../modules/integration/integration-config.service';
 import { UserGroupService } from '../modules/user-group/user-group.service';
-import { canRefreshSession, isKnownRole, toAuthUser } from './auth.model';
+import {
+  canRefreshSession,
+  canRefreshWebSession,
+  isKnownRole,
+  toAuthUser,
+  toWebSessionAuthUser,
+  type SessionAuthUser,
+  type SessionTokenClaims,
+} from './auth.model';
 
 const WX_SESSION_URL = 'https://api.weixin.qq.com/sns/jscode2session';
 const WX_TIMEOUT_MS = 8000;
@@ -28,7 +36,7 @@ export class AuthService {
     private groups: UserGroupService,
   ) {}
 
-  async login(dto: LoginDto): Promise<TokenPair> {
+  async login(dto: LoginDto, web = false): Promise<TokenPair> {
     // username 仅租户内唯一,故先用机构编码(全局唯一)定位租户,再按 (tenantId, username) 复合键查用户。
     const tenant = await this.prisma.tenant.findUnique({
       where: { code: dto.tenantCode },
@@ -47,7 +55,7 @@ export class AuthService {
     if (tenant.status !== 'active') throw new ForbiddenException('所属机构已停用');
     await this.assertActiveAgent(user);
 
-    return this.issueTokens(toAuthUser(user));
+    return this.issueTokens(web ? toWebSessionAuthUser(user) : toAuthUser(user));
   }
 
   async loginWechat(dto: WechatLoginDto): Promise<TokenPair> {
@@ -120,13 +128,20 @@ export class AuthService {
     return data.openid;
   }
 
-  async refresh(refreshToken: string): Promise<TokenPair> {
-    let payload: AuthUser;
+  async refresh(refreshToken: string, web = false): Promise<TokenPair> {
+    let payload: SessionTokenClaims;
     try {
-      payload = await this.jwt.verifyAsync<AuthUser>(refreshToken, {
+      payload = await this.jwt.verifyAsync<SessionTokenClaims>(refreshToken, {
         secret: process.env.JWT_REFRESH_SECRET,
       });
     } catch {
+      throw new UnauthorizedException('刷新令牌无效');
+    }
+    const expectedSessionKind = web ? 'web' : 'generic';
+    if (payload.sessionKind !== expectedSessionKind) {
+      throw new UnauthorizedException('刷新令牌无效');
+    }
+    if (web && !Number.isInteger(payload.webSessionVersion)) {
       throw new UnauthorizedException('刷新令牌无效');
     }
     // 查库吊销 + 刷新:用户被停用/删除或租户停用则拒绝;
@@ -139,8 +154,32 @@ export class AuthService {
     if (!canRefreshSession(user, tokenVersion)) {
       throw new UnauthorizedException('刷新令牌无效');
     }
+    if (web && !canRefreshWebSession(user, tokenVersion, payload.webSessionVersion ?? 0)) {
+      throw new UnauthorizedException('刷新令牌无效');
+    }
     await this.assertActiveAgent(user);
-    return this.issueTokens(toAuthUser(user));
+    return this.issueTokens(web ? toWebSessionAuthUser(user) : toAuthUser(user));
+  }
+
+  async revokeWebSession(refreshToken: string): Promise<void> {
+    let payload: SessionTokenClaims;
+    try {
+      payload = await this.jwt.verifyAsync<SessionTokenClaims>(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+    } catch {
+      return;
+    }
+    if (payload.sessionKind !== 'web' || !Number.isInteger(payload.webSessionVersion)) return;
+
+    await this.prisma.user.updateMany({
+      where: {
+        id: payload.userId,
+        sessionVersion: payload.sessionVersion ?? 0,
+        webSessionVersion: payload.webSessionVersion ?? 0,
+      },
+      data: { webSessionVersion: { increment: 1 } },
+    });
   }
 
   // ── 个人账号(/auth/me)── 任意已登录角色自助查看/维护本人资料。
@@ -188,7 +227,7 @@ export class AuthService {
     if (!agent || agent.status !== 'active') throw new ForbiddenException('Linked agent is suspended');
   }
 
-  private async issueTokens(user: AuthUser): Promise<TokenPair> {
+  private async issueTokens(user: SessionAuthUser): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(user, {
       secret: process.env.JWT_SECRET, expiresIn: '15m', jwtid: randomUUID(),
     });

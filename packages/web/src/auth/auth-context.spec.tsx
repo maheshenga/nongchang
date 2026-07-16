@@ -104,6 +104,23 @@ describe('AuthProvider', () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
+  it('does not restore a bootstrap session after logout clears it', async () => {
+    let resolveRefresh!: (token: string | null) => void;
+    refreshWebSessionMock.mockReturnValue(new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => result.current.logout());
+    await act(async () => resolveRefresh(accessA));
+
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+    expect(result.current.user).toBeNull();
+    expect(result.current.profile).toBeNull();
+    expect(getAccessToken()).toBeNull();
+  });
+
   it('logs in with the web endpoint and stores only the access token in memory', async () => {
     refreshWebSessionMock.mockResolvedValue(null);
     webLoginMock.mockResolvedValue({ accessToken: accessA });
