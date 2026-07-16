@@ -1,21 +1,40 @@
-import type { TokenPair } from '@nongchang/shared';
+const LEGACY_TOKEN_KEYS = ['nc_access_token', 'nc_refresh_token'];
 
-const ACCESS_KEY = 'nc_access_token';
-const REFRESH_KEY = 'nc_refresh_token';
-
-export function getTokens(): TokenPair | null {
-  const accessToken = localStorage.getItem(ACCESS_KEY);
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
-  if (!accessToken || !refreshToken) return null;
-  return { accessToken, refreshToken };
+function removeLegacyPersistedTokens(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    for (const key of LEGACY_TOKEN_KEYS) localStorage.removeItem(key);
+  } catch {
+    // Storage may be unavailable in restricted browser contexts.
+  }
 }
 
-export function setTokens(tokens: TokenPair): void {
-  localStorage.setItem(ACCESS_KEY, tokens.accessToken);
-  localStorage.setItem(REFRESH_KEY, tokens.refreshToken);
+removeLegacyPersistedTokens();
+
+let accessToken: string | null = null;
+let accessTokenGeneration = 0;
+
+export function getAccessToken(): string | null {
+  return accessToken;
 }
 
-export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+export function getAccessTokenGeneration(): number {
+  return accessTokenGeneration;
+}
+
+export function setAccessToken(next: string): void {
+  accessToken = next;
+  accessTokenGeneration += 1;
+}
+
+export function setAccessTokenIfCurrent(next: string, expectedGeneration: number): boolean {
+  if (accessTokenGeneration !== expectedGeneration) return false;
+  accessToken = next;
+  accessTokenGeneration += 1;
+  return true;
+}
+
+export function clearAccessToken(): void {
+  accessToken = null;
+  accessTokenGeneration += 1;
 }

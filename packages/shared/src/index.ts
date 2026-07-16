@@ -1,7 +1,21 @@
 export { Role, Permission, BatchStatus, TraceEventType, FarmRecordSource } from './enums';
 
-export { loginSchema, refreshSchema, meProfileViewSchema, updateMeSchema, changePasswordSchema } from './dto/auth.dto';
-export type { LoginDto, RefreshDto, MeProfileView, UpdateMeDto, ChangePasswordDto } from './dto/auth.dto';
+export {
+  loginSchema,
+  refreshSchema,
+  webAccessTokenResponseSchema,
+  meProfileViewSchema,
+  updateMeSchema,
+  changePasswordSchema,
+} from './dto/auth.dto';
+export type {
+  LoginDto,
+  RefreshDto,
+  WebAccessTokenResponse,
+  MeProfileView,
+  UpdateMeDto,
+  ChangePasswordDto,
+} from './dto/auth.dto';
 
 export {
   tenantStatusSchema,

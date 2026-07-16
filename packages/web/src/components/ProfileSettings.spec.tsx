@@ -6,6 +6,7 @@ const getMeMock = vi.fn();
 const updateMeMock = vi.fn();
 const changePasswordMock = vi.fn();
 const updateProfileMock = vi.fn();
+const logoutMock = vi.fn();
 
 vi.mock('../api/auth', () => ({
   getMe: () => getMeMock(),
@@ -14,7 +15,7 @@ vi.mock('../api/auth', () => ({
 }));
 
 vi.mock('../auth/auth-context', () => ({
-  useAuth: () => ({ updateProfile: updateProfileMock }),
+  useAuth: () => ({ updateProfile: updateProfileMock, logout: logoutMock }),
 }));
 
 import ProfileSettings from './ProfileSettings';
@@ -52,6 +53,7 @@ beforeEach(() => {
   getMeMock.mockResolvedValue(profile);
   updateMeMock.mockResolvedValue(updatedProfile);
   changePasswordMock.mockResolvedValue({ ok: true });
+  logoutMock.mockResolvedValue(undefined);
 });
 
 describe('ProfileSettings Fluent account modal', () => {
@@ -124,6 +126,7 @@ describe('ProfileSettings Fluent account modal', () => {
     await waitFor(() => {
       expect(changePasswordMock).toHaveBeenCalledWith({ oldPassword: 'old-pass', newPassword: 'new-pass' });
     });
+    expect(logoutMock).toHaveBeenCalledOnce();
     expect(screen.getByText('密码已修改')).toBeTruthy();
     expect((screen.getByLabelText('原密码') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('新密码') as HTMLInputElement).value).toBe('');

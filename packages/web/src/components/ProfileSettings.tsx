@@ -31,7 +31,7 @@ function tabClass(active: boolean): string {
 
 export default function ProfileSettings({ onClose }: { onClose: () => void }) {
   const meApi = useApi(getMe);
-  const { updateProfile } = useAuth();
+  const { updateProfile, logout } = useAuth();
   const [localMe, setLocalMe] = useState<MeProfileView | null>(null);
   const me: MeProfileView | null = localMe ?? meApi.data;
   const [tab, setTab] = useState<'profile' | 'password'>('profile');
@@ -75,7 +75,7 @@ export default function ProfileSettings({ onClose }: { onClose: () => void }) {
             setLocalMe(updated);
             updateProfile(updated);
           }} />}
-          {me && tab === 'password' && <PasswordForm />}
+          {me && tab === 'password' && <PasswordForm onPasswordChanged={logout} />}
         </div>
       </div>
     </div>
@@ -146,7 +146,7 @@ function ProfileForm({ me, onSaved }: { me: MeProfileView; onSaved: (me: MeProfi
   );
 }
 
-function PasswordForm() {
+function PasswordForm({ onPasswordChanged }: { onPasswordChanged: () => Promise<void> }) {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -173,6 +173,7 @@ function PasswordForm() {
     setSubmitting(true);
     try {
       await changePassword({ oldPassword, newPassword });
+      await onPasswordChanged();
       setOk(true);
       setOldPassword('');
       setNewPassword('');

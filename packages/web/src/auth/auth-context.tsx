@@ -1,16 +1,17 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthUser, LoginDto, MeProfileView } from '@nongchang/shared';
-import { getTokens, setTokens, clearTokens } from './token-store';
+import { clearAccessToken, setAccessToken } from './token-store';
 import { decodeToken } from './decode-token';
-import { getMe, login as loginRequest } from '../api/auth';
-import { setOnAuthExpired } from '../api/request';
+import { getMe, webLogin, webLogout } from '../api/auth';
+import { refreshWebSession, setOnAuthExpired } from '../api/request';
 
 interface AuthContextValue {
   user: AuthUser | null;
   profile: MeProfileView | null;
   isAuthenticated: boolean;
+  isReady: boolean;
   login: (dto: LoginDto) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   reloadProfile: () => Promise<void>;
   updateProfile: (me: MeProfileView) => void;
 }
@@ -18,37 +19,74 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const tokens = getTokens();
-    return tokens ? decodeToken(tokens.accessToken) : null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<MeProfileView | null>(null);
-  const userRef = useRef<AuthUser | null>(user);
+  const [isReady, setIsReady] = useState(false);
+  const userRef = useRef<AuthUser | null>(null);
 
   const setCurrentUser = useCallback((next: AuthUser | null) => {
     userRef.current = next;
     setUser(next);
   }, []);
 
-  const updateProfile = useCallback((me: MeProfileView) => {
-    const current = userRef.current;
-    if (current?.userId !== me.id) return;
-    setProfile(me);
-  }, []);
-
-  const logout = useCallback(() => {
-    clearTokens();
+  const clearSession = useCallback(() => {
+    clearAccessToken();
     setCurrentUser(null);
     setProfile(null);
   }, [setCurrentUser]);
 
+  const applyAccessToken = useCallback((accessToken: string) => {
+    const decoded = decodeToken(accessToken);
+    if (!decoded) {
+      clearSession();
+      throw new Error('登录令牌无效');
+    }
+    setProfile(null);
+    setCurrentUser(decoded);
+  }, [clearSession, setCurrentUser]);
+
+  const updateProfile = useCallback((me: MeProfileView) => {
+    if (userRef.current?.userId !== me.id) return;
+    setProfile(me);
+  }, []);
+
+  const logout = useCallback(async () => {
+    clearSession();
+    try {
+      await webLogout();
+    } catch {
+      // The local session is already cleared when the browser is offline.
+    }
+  }, [clearSession]);
+
   useEffect(() => {
-    // request.ts 刷新失败时回调:清空会话
-    setOnAuthExpired(() => {
-      setCurrentUser(null);
-      setProfile(null);
-    });
-  }, [setCurrentUser]);
+    setOnAuthExpired(clearSession);
+    return () => setOnAuthExpired(() => {});
+  }, [clearSession]);
+
+  useEffect(() => {
+    let active = true;
+    void refreshWebSession()
+      .then((accessToken) => {
+        if (!active) return;
+        if (!accessToken) {
+          clearSession();
+          return;
+        }
+        try {
+          applyAccessToken(accessToken);
+        } catch {
+          clearSession();
+        }
+      })
+      .catch(() => {
+        if (active) clearSession();
+      })
+      .finally(() => {
+        if (active) setIsReady(true);
+      });
+    return () => { active = false; };
+  }, [applyAccessToken, clearSession]);
 
   const reloadProfile = useCallback(async () => {
     const requestedUserId = userRef.current?.userId;
@@ -75,22 +113,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, updateProfile]);
 
   const login = useCallback(async (dto: LoginDto) => {
-    const tokens = await loginRequest(dto);
-    setTokens(tokens);
-    const decoded = decodeToken(tokens.accessToken);
-    if (!decoded) throw new Error('登录令牌无效');
-    setCurrentUser(decoded);
-  }, [setCurrentUser]);
+    const { accessToken } = await webLogin(dto);
+    setAccessToken(accessToken);
+    applyAccessToken(accessToken);
+  }, [applyAccessToken]);
 
   return (
-    <AuthContext.Provider value={{ user, profile, isAuthenticated: !!user, login, logout, reloadProfile, updateProfile }}>
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      isAuthenticated: !!user,
+      isReady,
+      login,
+      logout,
+      reloadProfile,
+      updateProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
 }

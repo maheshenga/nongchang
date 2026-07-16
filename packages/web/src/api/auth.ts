@@ -1,24 +1,43 @@
-import type { LoginDto, TokenPair, MeProfileView, UpdateMeDto, ChangePasswordDto } from '@nongchang/shared';
+import {
+  webAccessTokenResponseSchema,
+  type ChangePasswordDto,
+  type LoginDto,
+  type MeProfileView,
+  type UpdateMeDto,
+  type WebAccessTokenResponse,
+} from '@nongchang/shared';
 import { request } from './request';
 
-export async function login(dto: LoginDto): Promise<TokenPair> {
-  const res = await fetch('/api/auth/login', {
+async function authError(response: Response): Promise<Error> {
+  let message = '账号或密码错误';
+  try {
+    const body = (await response.json()) as { message?: string };
+    if (body.message) message = body.message;
+  } catch {
+    // Keep the generic authentication message for malformed error responses.
+  }
+  return new Error(message);
+}
+
+export async function webLogin(dto: LoginDto): Promise<WebAccessTokenResponse> {
+  const response = await fetch('/api/auth/web/login', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dto),
   });
-  if (!res.ok) {
-    let message = '账号或密码错误';
-    try {
-      const body = (await res.json()) as { message?: string };
-      if (body.message) message = body.message;
-    } catch { /* keep default */ }
-    throw new Error(message);
-  }
-  return (await res.json()) as TokenPair;
+  if (!response.ok) throw await authError(response);
+  return webAccessTokenResponseSchema.parse(await response.json());
 }
 
-// ── 个人账号 ──
+export async function webLogout(): Promise<void> {
+  const response = await fetch('/api/auth/web/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+  if (!response.ok) throw await authError(response);
+}
+
 export function getMe(): Promise<MeProfileView> {
   return request<MeProfileView>('/auth/me');
 }

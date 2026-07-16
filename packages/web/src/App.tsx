@@ -80,7 +80,7 @@ function navLabel(id: AppTab, label: string): string {
 }
 
 export default function App() {
-  const { user, profile, isAuthenticated, logout } = useAuth();
+  const { user, profile, isAuthenticated, isReady, logout } = useAuth();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
@@ -149,7 +149,7 @@ export default function App() {
   }, [isPresentationMode]);
 
   const handleLogout = () => {
-    logout();
+    void logout();
     setActiveTab('overview');
     setAuthView('landing');
   };
@@ -162,8 +162,14 @@ export default function App() {
   }, [navRole, activeTab]);
 
   if (traceCode) {
-    return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;
+    return (
+      <Suspense fallback={<ViewSkeleton />}>
+        <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />
+      </Suspense>
+    );
   }
+
+  if (!isReady) return <ViewSkeleton />;
 
   if (!isAuthenticated) {
     return (

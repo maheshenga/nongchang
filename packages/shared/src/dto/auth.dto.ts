@@ -9,6 +9,9 @@ export type LoginDto = z.infer<typeof loginSchema>;
 export const refreshSchema = z.object({ refreshToken: z.string().min(10) });
 export type RefreshDto = z.infer<typeof refreshSchema>;
 
+export const webAccessTokenResponseSchema = z.object({ accessToken: z.string().min(1) });
+export type WebAccessTokenResponse = z.infer<typeof webAccessTokenResponseSchema>;
+
 // ---- 个人账号(/auth/me):任意已登录角色自助查看/维护本人资料 ----
 // 个人资料视图:绝不含 passwordHash / wxOpenid 等敏感字段。
 export const meProfileViewSchema = z.object({

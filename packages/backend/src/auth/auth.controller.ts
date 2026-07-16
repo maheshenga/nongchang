@@ -1,18 +1,29 @@
-import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Patch, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   loginSchema, refreshSchema, wechatLoginSchema, wechatRegisterSchema,
   updateMeSchema, changePasswordSchema,
   LoginDto, RefreshDto, WechatLoginDto, WechatRegisterDto, UpdateMeDto, ChangePasswordDto, AuthUser,
+  TokenPair, WebAccessTokenResponse,
 } from '@nongchang/shared';
+import type { Request, Response } from 'express';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
+import { buildExpiredWebRefreshCookie, buildWebRefreshCookie, parseWebRefreshCookie } from './web-session';
 
 // 凭据类端点(登录/微信登录/注册)的防撞库限流:每 IP 60s 内最多 10 次。
 // 测试环境放到极高阈值,避免 e2e 中跨文件大量登录误触限流。
 const CREDENTIAL_LIMIT = process.env.NODE_ENV === 'test' ? 100_000 : 10;
+
+function toWebAccessTokenResponse(tokens: TokenPair): WebAccessTokenResponse {
+  return { accessToken: tokens.accessToken };
+}
+
+function useSecureWebRefreshCookie(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 @Controller('auth')
 export class AuthController {
@@ -43,6 +54,49 @@ export class AuthController {
   @Post('refresh')
   refresh(@Body(new ZodValidationPipe(refreshSchema)) dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: CREDENTIAL_LIMIT } })
+  @Post('web/login')
+  async webLogin(
+    @Body(new ZodValidationPipe(loginSchema)) dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<WebAccessTokenResponse> {
+    const tokens = await this.auth.login(dto);
+    response.setHeader('Set-Cookie', buildWebRefreshCookie(tokens.refreshToken, useSecureWebRefreshCookie()));
+    return toWebAccessTokenResponse(tokens);
+  }
+
+  @Public()
+  @Post('web/refresh')
+  async webRefresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<WebAccessTokenResponse> {
+    const refreshToken = parseWebRefreshCookie(request.headers.cookie);
+    if (!refreshToken) {
+      response.setHeader('Set-Cookie', buildExpiredWebRefreshCookie(useSecureWebRefreshCookie()));
+      throw new UnauthorizedException('刷新令牌无效');
+    }
+
+    try {
+      const tokens = await this.auth.refresh(refreshToken);
+      response.setHeader('Set-Cookie', buildWebRefreshCookie(tokens.refreshToken, useSecureWebRefreshCookie()));
+      return toWebAccessTokenResponse(tokens);
+    } catch (error) {
+      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
+        response.setHeader('Set-Cookie', buildExpiredWebRefreshCookie(useSecureWebRefreshCookie()));
+      }
+      throw error;
+    }
+  }
+
+  @Public()
+  @Post('web/logout')
+  webLogout(@Res() response: Response): void {
+    response.setHeader('Set-Cookie', buildExpiredWebRefreshCookie(useSecureWebRefreshCookie()));
+    response.status(204).end();
   }
 
   // ── 个人账号 ── 无 @Public/@Roles:全局 JwtAuthGuard 要求登录,任意角色可访问本人资料。
