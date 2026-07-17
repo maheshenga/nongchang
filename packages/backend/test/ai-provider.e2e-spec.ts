@@ -5,6 +5,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+type CleanupStep = readonly [string, () => Promise<unknown> | unknown];
+
+async function runCleanupSteps(steps: CleanupStep[]): Promise<void> {
+  const errors: Error[] = [];
+  for (const [name, cleanup] of steps) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'AI provider e2e cleanup failed');
+}
+
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
@@ -36,14 +50,15 @@ describe('AiProvider e2e', () => {
   });
 
   afterAll(async () => {
-    try {
-      if (createdIds.length) {
-        await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
-      }
-      await prisma.tenant.deleteMany({ where: { id: providerTenantId } });
-    } finally {
-      await app.close();
-    }
+    await runCleanupSteps([
+      ['providers', async () => {
+        if (createdIds.length) {
+          await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
+        }
+      }],
+      ['tenant', () => prisma.tenant.deleteMany({ where: { id: providerTenantId } })],
+      ['app close', () => app.close()],
+    ]);
   });
 
   it('merchant 无权访问 AI 服务商管理端点 → 403', async () => {

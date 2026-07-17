@@ -5,6 +5,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+type CleanupStep = readonly [string, () => Promise<unknown> | unknown];
+
+async function runCleanupSteps(steps: CleanupStep[]): Promise<void> {
+  const errors: Error[] = [];
+  for (const [name, cleanup] of steps) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Trace credential e2e cleanup failed');
+}
+
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
@@ -48,21 +62,21 @@ describe('TraceCredential e2e', () => {
   });
 
   afterAll(async () => {
-    try {
-      const credentialIds = createdIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
-      if (credentialIds.length) {
-        await prisma.traceCredential.deleteMany({ where: { id: { in: credentialIds } } });
-      }
-      await prisma.traceScan.deleteMany({ where: { code: scanCode } });
-      await prisma.traceCode.deleteMany({ where: { code: scanCode } });
-    } finally {
-      try {
-        await app.close();
-      } finally {
+    await runCleanupSteps([
+      ['credentials', async () => {
+        const credentialIds = createdIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+        if (credentialIds.length) {
+          await prisma.traceCredential.deleteMany({ where: { id: { in: credentialIds } } });
+        }
+      }],
+      ['trace scans', () => prisma.traceScan.deleteMany({ where: { code: scanCode } })],
+      ['trace code', () => prisma.traceCode.deleteMany({ where: { code: scanCode } })],
+      ['app close', () => app.close()],
+      ['restore OSS_BASE_URL', () => {
         if (previousOssBaseUrl === undefined) delete process.env.OSS_BASE_URL;
         else process.env.OSS_BASE_URL = previousOssBaseUrl;
-      }
-    }
+      }],
+    ]);
   });
 
   it('新增 → 列表返回(含 issuedAt ISO),删除生效', async () => {
@@ -132,6 +146,7 @@ describe('TraceCredential e2e', () => {
     expect(found.issuer).toBe('云南省检测院');
     expect(found.issuedAt).toBe('2026-02-20T00:00:00.000Z');
     expect(found.fileUrl).toBe('https://example.com/report.pdf');
+    expect(found).not.toHaveProperty('id');
     const json = JSON.stringify(found);
     expect(json).not.toContain('serialNo');
     expect(json).not.toContain(reportSerialNo);
