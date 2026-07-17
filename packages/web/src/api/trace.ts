@@ -1,5 +1,5 @@
-import type { CreateTraceEventDto, PublicTraceResult } from '@nongchang/shared';
-import { request } from './request';
+import type { CreateTraceEventDto, PublicTraceResult, TraceLabelPdfInput } from '@nongchang/shared';
+import { ApiError, request, requestFile, type ApiFile } from './request';
 
 export class TraceNotFoundError extends Error {}
 
@@ -54,6 +54,37 @@ export function listEvents(batchId: string): Promise<TraceEvent[]> {
 // 列出批次已生成的全部溯源码(含各自扫码次数)。
 export function listCodes(batchId: string): Promise<TraceCode[]> {
   return request<TraceCode[]>(`/trace/codes/${encodeURIComponent(batchId)}`);
+}
+
+async function readBlobPrefix(blob: Blob, length: number): Promise<Uint8Array> {
+  const prefix = blob.slice(0, length);
+  if (typeof prefix.arrayBuffer === 'function') {
+    return new Uint8Array(await prefix.arrayBuffer());
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file response'));
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.readAsArrayBuffer(prefix);
+  });
+}
+
+export async function createTraceLabelPdf(
+  batchId: string,
+  input: TraceLabelPdfInput,
+): Promise<ApiFile> {
+  const file = await requestFile(`/trace/codes/${encodeURIComponent(batchId)}/labels.pdf`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  const mimeType = file.blob.type.split(';', 1)[0].trim().toLowerCase();
+  const magic = file.blob.size >= 5
+    ? new TextDecoder().decode(await readBlobPrefix(file.blob, 5))
+    : '';
+  if (mimeType !== 'application/pdf' || magic !== '%PDF-') {
+    throw new ApiError(502, '标签 PDF 响应格式无效，请稍后重试');
+  }
+  return file;
 }
 
 export function createEvent(dto: CreateTraceEventDto): Promise<TraceEvent> {
