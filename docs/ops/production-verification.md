@@ -47,19 +47,20 @@ $env:DATABASE_URL='postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?sch
 corepack pnpm@10.33.2 --filter @nongchang/backend e2e:check-db
 ```
 
-## Binding Production Cutover Gate
+## Binding Production Cutover and Rollback Boundary
 
-The farm-record publication migration requires one atomic database/backend cutover. Passing local verification does not waive this gate:
+The production cutover and rollback boundary is identical across the approved design and deployment runbooks:
 
-1. Restore a current production backup into a separate rehearsal database. Record the `trace_events` row count and `pg_total_relation_size('trace_events')`, migration duration, and observed lock behavior. The operator must accept the result for the maintenance window before production proceeds.
-2. Enable maintenance mode or equivalent write quiescence, then stop all PM2 backend instances before `prisma:deploy`.
-3. Verify no old backend process is listening on port `3001`. Old and new versions must never accept writes concurrently.
-4. With writes still stopped, take and verify a pre-cutover database backup, run `prisma:deploy`, and start only the new build.
-5. Run readiness plus focused farm-record completion and public-trace smoke checks before removing maintenance mode.
-6. If any step fails before traffic is reopened, keep writes stopped and restore the pre-cutover database backup together with the old build.
-7. Once the new build accepts any production write, do not roll back to a pre-feature backend and do not drop the relation. Re-enter maintenance mode if needed and forward-fix. Historical pending records lack a completion timestamp that could safely distinguish a mixed-version missed publication from intentional historical non-backfill.
+1. Before production, restore a current backup into a rehearsal database; record the `trace_events` row count and total relation size, migration duration, and observed lock behavior. Do not proceed without an operator-approved maintenance-window result.
+2. At cutover, enable maintenance mode and write quiescence, stop every PM2 backend instance before `prisma:deploy`, and verify no old backend process listens on port `3001`; old and new versions must never serve writes concurrently.
+3. While writes remain stopped, take and verify the pre-cutover database backup, deploy the migration, and start only the new build.
+4. Pre-open smoke writes are allowed only as uniquely tagged, release-owned disposable fixtures; record the release ID and every created ID. Keep maintenance mode and write quiescence active while readiness and focused smoke checks run.
+5. If any pre-open check fails, keep writes stopped and restore the pre-cutover backup; that restore removes the disposable smoke writes, and rollback to the old build is allowed only together with that backup restore.
+6. If checks pass, remove every disposable smoke fixture in FK-safe order and verify zero residue before reopening user traffic.
+7. The irreversible boundary is the first non-disposable user write accepted after maintenance mode is removed, not the controlled smoke write.
+8. After that boundary, old-build/database rollback is forbidden; re-enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
 
-Do not run a broad historical reconciler or automatic backfill as part of this release. Keep production credentials and backup locations in restricted server configuration.
+No broad historical reconciler or automatic backfill is part of this cutover.
 
 ## E2E Blocker Interpretation
 

@@ -53,26 +53,20 @@ pnpm --filter @nongchang/backend prisma:seed
 
 After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
 
-### 3.1 原子数据库/后端切换(强制)
+## Binding Production Cutover and Rollback Boundary
 
-涉及 `FarmRecord` 自动发布迁移时,以下步骤是绑定流程,不得在旧/新后端同时提供写入的情况下滚动迁移:
+The production cutover and rollback boundary is identical across the approved design and deployment runbooks:
 
-1. **生产前演练:**将当前生产备份恢复到独立演练库。记录 `trace_events` 的行数和总关系大小,并记录 `prisma:deploy` 的耗时与锁等待/阻塞情况。只有运维确认结果适合计划维护窗口后才能继续。
-   ```sql
-   SELECT count(*) AS trace_events_rows FROM trace_events;
-   SELECT pg_size_pretty(pg_total_relation_size('trace_events')) AS trace_events_total_size;
-   ```
-2. **停止写入:**启用维护模式或等效的写入静默,然后停止所有 PM2 后端实例。迁移前不得保留任何旧后端写进程。
-3. **验证端口:**确认没有旧进程监听 `3001`;下列命令必须无输出。旧/新后端绝不能同时接受写入。
-   ```bash
-   ss -ltnp | grep ':3001 ' || true
-   ```
-4. **停写备份与迁移:**在写入仍停止时生成数据库备份并用 `pg_restore --list`(custom 格式)或等效恢复校验确认备份可读,然后执行 `pnpm --filter @nongchang/backend prisma:deploy`,只启动新构建。
-5. **开放前验证:**运行 readiness 以及农事记录完成/公开溯源的聚焦 smoke;全部通过后才能移除维护模式。
-6. **开放前失败:**保持写入停止,恢复切换前数据库备份和旧构建,验证旧版本 readiness 后再决定是否开放流量。
-7. **开放后边界:**新构建一旦接受任何生产写入,不得回滚到功能前后端,也不得删除该关系。必要时重新进入维护模式并前向修复。历史 pending 记录没有完成时间戳,无法安全区分混合版本漏发布与有意不回填。
+1. Before production, restore a current backup into a rehearsal database; record the `trace_events` row count and total relation size, migration duration, and observed lock behavior. Do not proceed without an operator-approved maintenance-window result.
+2. At cutover, enable maintenance mode and write quiescence, stop every PM2 backend instance before `prisma:deploy`, and verify no old backend process listens on port `3001`; old and new versions must never serve writes concurrently.
+3. While writes remain stopped, take and verify the pre-cutover database backup, deploy the migration, and start only the new build.
+4. Pre-open smoke writes are allowed only as uniquely tagged, release-owned disposable fixtures; record the release ID and every created ID. Keep maintenance mode and write quiescence active while readiness and focused smoke checks run.
+5. If any pre-open check fails, keep writes stopped and restore the pre-cutover backup; that restore removes the disposable smoke writes, and rollback to the old build is allowed only together with that backup restore.
+6. If checks pass, remove every disposable smoke fixture in FK-safe order and verify zero residue before reopening user traffic.
+7. The irreversible boundary is the first non-disposable user write accepted after maintenance mode is removed, not the controlled smoke write.
+8. After that boundary, old-build/database rollback is forbidden; re-enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
 
-本次切换不运行广义历史修复器或自动回填。备份路径和凭据只保存在受限服务器配置中,不要写入仓库或操作记录。
+No broad historical reconciler or automatic backfill is part of this cutover.
 
 ## 4. PM2 管理器启动后端
 

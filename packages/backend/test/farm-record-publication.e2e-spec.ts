@@ -59,6 +59,7 @@ describe('Farm record automatic public trace e2e', () => {
   const completedAction = `e2e-auto-publish-fertilize-${randomUUID()}`;
   const pendingAction = `e2e-pending-weed-${randomUUID()}`;
   const inconsistentAction = `e2e-inconsistent-pending-${randomUUID()}`;
+  const inconsistentCreateAction = `e2e-inconsistent-create-${randomUUID()}`;
   const raceAction = `e2e-completion-delete-race-${randomUUID()}`;
 
   beforeAll(async () => {
@@ -225,7 +226,7 @@ describe('Farm record automatic public trace e2e', () => {
     expect(publicJson).toContain('leaf fertilization complete');
     expect(publicJson).toContain('e2e-farm.jpg');
     expect(publicJson).not.toContain(completedRecordId!);
-    expect(publicJson).not.toContain('999');
+    expect(publishedEvent.payload).not.toHaveProperty('cost');
     expect(publicJson).not.toContain('labor');
     expect(publicJson).not.toContain('private formula');
     expect(publicJson).not.toContain('100.123456');
@@ -315,6 +316,24 @@ describe('Farm record automatic public trace e2e', () => {
     await prisma.user.update({ where: { id: ownerId }, data: { tenantId: driftTenantId } });
 
     await request(app.getHttpServer())
+      .post('/api/farm-records')
+      .set('Authorization', `Bearer ${systemToken}`)
+      .send({
+        batchId: driftBatchId,
+        fieldId: driftFieldId,
+        action: inconsistentCreateAction,
+        recordedAt: '2026-07-17T03:12:03.000Z',
+        source: 'web',
+      })
+      .expect(403);
+    expect(await prisma.farmRecord.count({
+      where: { batchId: driftBatchId, action: inconsistentCreateAction },
+    })).toBe(0);
+    expect(await prisma.traceEvent.count({
+      where: { batchId: driftBatchId, title: inconsistentCreateAction },
+    })).toBe(0);
+
+    await request(app.getHttpServer())
       .patch(`/api/farm-records/${inconsistentRecordId}/status`)
       .set('Authorization', `Bearer ${systemToken}`)
       .send({ status: 'completed' })
@@ -326,51 +345,63 @@ describe('Farm record automatic public trace e2e', () => {
   });
 
   it('races completion with force deletion without deadlock or inconsistent residue', async () => {
-    const raceBatch = await prisma.batch.create({
-      data: {
-        tenantId,
-        ownerId: merchantId!,
-        fieldId,
-        batchNo: `E2E-RACE-${randomUUID()}`,
-        cropName: 'e2e-race-crop',
-        plantDate: new Date('2026-07-01T00:00:00.000Z'),
-        expectedHarvest: new Date('2026-12-01T00:00:00.000Z'),
-        status: 'growing',
-      },
-    });
-    const raceBatchId = requireFixtureId(raceBatch.id, 'race batch id');
-    dedicatedBatchIds.push(raceBatchId);
-    const raceRecord = await prisma.farmRecord.create({
-      data: {
-        tenantId,
-        batchId: raceBatchId,
-        fieldId,
-        operatorId: merchantId!,
-        action: raceAction,
-        recordedAt: new Date('2026-07-17T04:02:03.000Z'),
-        source: 'web',
-        status: 'pending',
-      },
-    });
-    const raceRecordId = requireFixtureId(raceRecord.id, 'race record id');
-    createdRecordIds.push(raceRecordId);
+    for (let iteration = 0; iteration < 8; iteration += 1) {
+      const raceField = await prisma.field.create({
+        data: {
+          tenantId,
+          ownerId: merchantId!,
+          name: `Farm publication race field ${iteration} ${randomUUID()}`,
+          area: 1,
+        },
+      });
+      const raceFieldId = requireFixtureId(raceField.id, `race field id ${iteration}`);
+      dedicatedFieldIds.push(raceFieldId);
+      const raceBatch = await prisma.batch.create({
+        data: {
+          tenantId,
+          ownerId: merchantId!,
+          fieldId: raceFieldId,
+          batchNo: `E2E-RACE-${randomUUID()}`,
+          cropName: 'e2e-race-crop',
+          plantDate: new Date('2026-07-01T00:00:00.000Z'),
+          expectedHarvest: new Date('2026-12-01T00:00:00.000Z'),
+          status: 'growing',
+        },
+      });
+      const raceBatchId = requireFixtureId(raceBatch.id, `race batch id ${iteration}`);
+      dedicatedBatchIds.push(raceBatchId);
+      const raceRecord = await prisma.farmRecord.create({
+        data: {
+          tenantId,
+          batchId: raceBatchId,
+          fieldId: raceFieldId,
+          operatorId: merchantId!,
+          action: `${raceAction}-${iteration}`,
+          recordedAt: new Date('2026-07-17T04:02:03.000Z'),
+          source: 'web',
+          status: 'pending',
+        },
+      });
+      const raceRecordId = requireFixtureId(raceRecord.id, `race record id ${iteration}`);
+      createdRecordIds.push(raceRecordId);
 
-    const [completion, deletion] = await Promise.all([
-      request(app.getHttpServer())
-        .patch(`/api/farm-records/${raceRecordId}/status`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ status: 'completed' }),
-      request(app.getHttpServer())
-        .delete(`/api/batches/${raceBatchId}?force=true`)
-        .set('Authorization', `Bearer ${token}`),
-    ]);
+      const [completion, deletion] = await Promise.all([
+        request(app.getHttpServer())
+          .patch(`/api/farm-records/${raceRecordId}/status`)
+          .set('Authorization', `Bearer ${token}`)
+          .send({ status: 'completed' }),
+        request(app.getHttpServer())
+          .delete(`/api/batches/${raceBatchId}?force=true`)
+          .set('Authorization', `Bearer ${token}`),
+      ]);
 
-    expect([200, 403]).toContain(completion.status);
-    expect(deletion.status).toBe(200);
-    expect(completion.status).not.toBe(500);
-    expect(deletion.status).not.toBe(500);
-    expect(await prisma.batch.findUnique({ where: { id: raceBatchId } })).toBeNull();
-    expect(await prisma.farmRecord.findUnique({ where: { id: raceRecordId } })).toBeNull();
-    expect(await prisma.traceEvent.count({ where: { sourceFarmRecordId: raceRecordId } })).toBe(0);
-  });
+      expect([200, 403]).toContain(completion.status);
+      expect(deletion.status).toBe(200);
+      expect(completion.status).not.toBe(500);
+      expect(deletion.status).not.toBe(500);
+      expect(await prisma.batch.findUnique({ where: { id: raceBatchId } })).toBeNull();
+      expect(await prisma.farmRecord.findUnique({ where: { id: raceRecordId } })).toBeNull();
+      expect(await prisma.traceEvent.count({ where: { sourceFarmRecordId: raceRecordId } })).toBe(0);
+    }
+  }, E2E_HOOK_TIMEOUT_MS);
 });

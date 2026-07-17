@@ -175,15 +175,16 @@ Follow red-green-refactor for every behavior.
 
 ## Binding Production Cutover and Rollback Boundary
 
-This feature must use an atomic backend/database cutover. The following procedure is mandatory:
+The production cutover and rollback boundary is identical across the approved design and deployment runbooks:
 
-1. Before production, restore a current production backup into a rehearsal database. Record the `trace_events` row count and total relation size, then record migration duration and observed lock behavior. Do not proceed until the operator accepts the result for the planned maintenance window.
-2. At cutover, enable maintenance mode or otherwise quiesce all writes, then stop every PM2 backend instance before `prisma:deploy`.
-3. Verify that no old backend process is listening on port `3001`. Old and new backend versions must never serve writes concurrently.
-4. While writes remain stopped, take and verify a pre-cutover database backup, deploy the migration, and start only the new build.
-5. Run readiness and focused farm-record/public-trace smoke checks before removing maintenance mode.
-6. If a failure occurs before traffic is reopened, keep writes stopped and restore both the pre-cutover database backup and the old build.
-7. After any production write is accepted by the new build, do not restore a pre-feature backend and do not drop the relation. Enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
+1. Before production, restore a current backup into a rehearsal database; record the `trace_events` row count and total relation size, migration duration, and observed lock behavior. Do not proceed without an operator-approved maintenance-window result.
+2. At cutover, enable maintenance mode and write quiescence, stop every PM2 backend instance before `prisma:deploy`, and verify no old backend process listens on port `3001`; old and new versions must never serve writes concurrently.
+3. While writes remain stopped, take and verify the pre-cutover database backup, deploy the migration, and start only the new build.
+4. Pre-open smoke writes are allowed only as uniquely tagged, release-owned disposable fixtures; record the release ID and every created ID. Keep maintenance mode and write quiescence active while readiness and focused smoke checks run.
+5. If any pre-open check fails, keep writes stopped and restore the pre-cutover backup; that restore removes the disposable smoke writes, and rollback to the old build is allowed only together with that backup restore.
+6. If checks pass, remove every disposable smoke fixture in FK-safe order and verify zero residue before reopening user traffic.
+7. The irreversible boundary is the first non-disposable user write accepted after maintenance mode is removed, not the controlled smoke write.
+8. After that boundary, old-build/database rollback is forbidden; re-enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
 
 No broad historical reconciler or automatic backfill is part of this cutover.
 

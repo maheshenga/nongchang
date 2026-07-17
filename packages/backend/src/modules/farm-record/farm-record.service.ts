@@ -21,6 +21,90 @@ import {
 export class FarmRecordService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
+  private async lockTenantRow(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    entity: 'batch' | 'field' | 'owner' | 'farmRecord' | 'supply',
+    id: string,
+  ): Promise<void> {
+    let locked: Array<{ id: string }>;
+    if (entity === 'batch') {
+      locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM batches WHERE id = ${id} AND tenant_id = ${tenantId} FOR UPDATE
+      `;
+    } else if (entity === 'field') {
+      locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM fields WHERE id = ${id} AND tenant_id = ${tenantId} FOR UPDATE
+      `;
+    } else if (entity === 'owner') {
+      locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM users WHERE id = ${id} AND tenant_id = ${tenantId} FOR UPDATE
+      `;
+    } else if (entity === 'farmRecord') {
+      locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM farm_records WHERE id = ${id} AND tenant_id = ${tenantId} FOR UPDATE
+      `;
+    } else {
+      locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM supplies WHERE id = ${id} AND tenant_id = ${tenantId} FOR UPDATE
+      `;
+    }
+    if (locked.length === 0) {
+      throw new ForbiddenException(entity === 'supply' ? '农资不在可操作范围内' : '农事记录不在可操作范围内');
+    }
+  }
+
+  private async loadLockedPublicationContext(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    source: { tenantId: string; batchId: string; fieldId: string },
+    lockedBatchId: string,
+  ): Promise<{ batchOwnerId: string; ownerDisplayName: string; fieldName: string }> {
+    if (source.tenantId !== user.tenantId || source.batchId !== lockedBatchId) {
+      throw new ForbiddenException('农事记录不在可操作范围内');
+    }
+    await this.scope.assertInScope(tx, user, 'batch', lockedBatchId);
+    const candidate = await tx.batch.findFirst({
+      where: { id: lockedBatchId },
+      select: { id: true, tenantId: true, ownerId: true, fieldId: true },
+    });
+    if (!candidate
+      || candidate.tenantId !== user.tenantId
+      || candidate.fieldId !== source.fieldId) {
+      throw new ForbiddenException('农事记录不在可操作范围内');
+    }
+
+    await this.lockTenantRow(tx, user.tenantId, 'field', source.fieldId);
+    await this.lockTenantRow(tx, user.tenantId, 'owner', candidate.ownerId);
+    await this.scope.assertInScope(tx, user, 'field', source.fieldId);
+    const context = await tx.batch.findFirst({
+      where: { id: lockedBatchId },
+      select: {
+        id: true,
+        tenantId: true,
+        ownerId: true,
+        fieldId: true,
+        owner: { select: { id: true, tenantId: true, displayName: true } },
+        field: { select: { id: true, tenantId: true, ownerId: true, name: true } },
+      },
+    });
+    const contextIsValid = context
+      && context.id === source.batchId
+      && context.tenantId === user.tenantId
+      && context.fieldId === source.fieldId
+      && context.field.id === source.fieldId
+      && context.field.tenantId === user.tenantId
+      && context.field.ownerId === context.ownerId
+      && context.owner.id === context.ownerId
+      && context.owner.tenantId === user.tenantId;
+    if (!contextIsValid) throw new ForbiddenException('农事记录不在可操作范围内');
+    return {
+      batchOwnerId: context.ownerId,
+      ownerDisplayName: context.owner.displayName,
+      fieldName: context.field.name,
+    };
+  }
+
   private async createAndPublish(
     tx: Prisma.TransactionClient,
     data: Prisma.FarmRecordUncheckedCreateInput,
@@ -36,42 +120,25 @@ export class FarmRecordService {
   }
 
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
-    await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
-    await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
-    const batch = await this.prisma.batch.findFirst({
-      where: { id: dto.batchId, tenantId: user.tenantId, fieldId: dto.fieldId },
-      select: {
-        id: true,
-        ownerId: true,
-        owner: { select: { displayName: true } },
-        field: { select: { name: true } },
-      },
-    });
-    if (!batch) throw new ForbiddenException('地块不属于该批次,拒绝创建农事记录');
     const data = buildFarmRecordCreateData({ tenantId: user.tenantId, operatorId: user.userId, dto });
-    if (shouldApplySupplyQuota(dto)) {
-      // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额(只读鉴权,事务外)。
-      const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
-      const sup = await this.prisma.supply.findFirst({
-        where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
-        select: { id: true, ownerId: true },
-      });
-      if (!sup) throw new ForbiddenException('农资不在可操作范围内');
-      if (sup.ownerId !== batch.ownerId) throw new ForbiddenException('农资不属于该批次归属商家,拒绝核销');
-    }
-
-    const context = {
-      ownerDisplayName: batch.owner.displayName,
-      fieldName: batch.field.name,
-    };
     const created = await this.prisma.$transaction(async (tx) => {
+      await this.lockTenantRow(tx, user.tenantId, 'batch', dto.batchId);
+      const context = await this.loadLockedPublicationContext(tx, user, data, dto.batchId);
       if (shouldApplySupplyQuota(dto)) {
         // 配额核销:读累计用量、判 110%、再写,三步必须原子。
         // 否则并发提交在"读"与"写"之间无锁(TOCTOU),可双双通过校验导致超额核销。
         // 用事务 + 对该 supply 行 FOR UPDATE 行锁串行化同一农资的并发核销。
-        await tx.$queryRaw`SELECT id FROM batches WHERE id = ${dto.batchId} FOR UPDATE`;
-        // 锁定 supply 行:并发核销同一农资的事务在此排队,保证后到者读到前者已提交的用量。
-        await tx.$queryRaw`SELECT id FROM supplies WHERE id = ${dto.supplyId} FOR UPDATE`;
+        await this.lockTenantRow(tx, user.tenantId, 'supply', dto.supplyId!);
+        const supplyScopeWhere = await this.scope.ownedScopeWhere(tx, user);
+        const supply = await tx.supply.findFirst({
+          where: { id: dto.supplyId, ...(supplyScopeWhere as object) } as Prisma.SupplyWhereInput,
+          select: { id: true, tenantId: true, ownerId: true },
+        });
+        if (!supply
+          || supply.tenantId !== user.tenantId
+          || supply.ownerId !== context.batchOwnerId) {
+          throw new ForbiddenException('农资不属于该批次归属商家,拒绝核销');
+        }
         const quotaAgg = await tx.supplyIssue.aggregate({
           where: { tenantId: user.tenantId, batchId: dto.batchId, supplyId: dto.supplyId }, _sum: { amount: true },
         });
@@ -123,43 +190,14 @@ export class FarmRecordService {
     if (!scoped) throw new ForbiddenException('农事记录不在可操作范围内');
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const lockedBatch = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM batches WHERE id = ${scoped.batchId} FOR UPDATE
-      `;
-      if (lockedBatch.length === 0) throw new ForbiddenException('农事记录不在可操作范围内');
-      const lockedRecord = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM farm_records WHERE id = ${id} FOR UPDATE
-      `;
-      if (lockedRecord.length === 0) throw new ForbiddenException('农事记录不在可操作范围内');
+      await this.lockTenantRow(tx, user.tenantId, 'batch', scoped.batchId);
+      await this.lockTenantRow(tx, user.tenantId, 'farmRecord', id);
       const current = await tx.farmRecord.findFirst({
-        where: { id },
-        include: {
-          batch: {
-            select: {
-              id: true,
-              tenantId: true,
-              ownerId: true,
-              fieldId: true,
-              owner: { select: { tenantId: true, displayName: true } },
-            },
-          },
-          field: { select: { id: true, tenantId: true, ownerId: true, name: true } },
-        },
+        where: { id, tenantId: user.tenantId },
       });
       if (!current) throw new ForbiddenException('农事记录不在可操作范围内');
-      const { batch, field, ...record } = current;
-      await this.scope.assertInScope(tx, user, 'batch', scoped.batchId);
-      await this.scope.assertInScope(tx, user, 'field', current.fieldId);
-      const publicationContextIsValid = current.tenantId === user.tenantId
-        && current.batchId === scoped.batchId
-        && batch.id === scoped.batchId
-        && batch.tenantId === user.tenantId
-        && current.fieldId === batch.fieldId
-        && field.id === current.fieldId
-        && field.tenantId === user.tenantId
-        && field.ownerId === batch.ownerId
-        && batch.owner.tenantId === user.tenantId;
-      if (!publicationContextIsValid) throw new ForbiddenException('农事记录不在可操作范围内');
+      const context = await this.loadLockedPublicationContext(tx, user, current, scoped.batchId);
+      const { batch: _batch, field: _field, ...record } = current as typeof current & { batch?: unknown; field?: unknown };
       if (current.status === 'completed') {
         if (dto.status === 'pending') throw new BadRequestException('已完成农事记录不可退回待完成');
         return record;
@@ -169,8 +207,8 @@ export class FarmRecordService {
       await tx.traceEvent.create({
         data: buildFarmRecordTraceEventData({
           record: completed,
-          ownerDisplayName: batch.owner.displayName,
-          fieldName: field.name,
+          ownerDisplayName: context.ownerDisplayName,
+          fieldName: context.fieldName,
         }),
       });
       return completed;
