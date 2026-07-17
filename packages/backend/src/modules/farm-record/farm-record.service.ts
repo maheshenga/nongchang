@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto, UpdateFarmRecordStatusDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -117,12 +117,38 @@ export class FarmRecordService {
 
   // 状态流转:校验记录归属(经其 batchId 在调用方作用域内),再更新 status。
   async updateStatus(user: AuthUser, id: string, dto: UpdateFarmRecordStatusDto) {
-    const rec = await this.prisma.farmRecord.findFirst({
+    const scoped = await this.prisma.farmRecord.findFirst({
       where: { id, tenantId: user.tenantId }, select: { id: true, batchId: true },
     });
-    if (!rec) throw new ForbiddenException('农事记录不在可操作范围内');
-    await this.scope.assertInScope(this.prisma, user, 'batch', rec.batchId);
-    const updated = await this.prisma.farmRecord.update({ where: { id }, data: { status: dto.status } });
+    if (!scoped) throw new ForbiddenException('农事记录不在可操作范围内');
+    await this.scope.assertInScope(this.prisma, user, 'batch', scoped.batchId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM farm_records WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.farmRecord.findFirst({
+        where: { id, tenantId: user.tenantId },
+        include: {
+          batch: { select: { owner: { select: { displayName: true } } } },
+          field: { select: { name: true } },
+        },
+      });
+      if (!current) throw new ForbiddenException('农事记录不在可操作范围内');
+      const { batch, field, ...record } = current;
+      if (current.status === 'completed') {
+        if (dto.status === 'pending') throw new BadRequestException('已完成农事记录不可退回待完成');
+        return record;
+      }
+      if (dto.status === 'pending') return record;
+      const completed = await tx.farmRecord.update({ where: { id }, data: { status: 'completed' } });
+      await tx.traceEvent.create({
+        data: buildFarmRecordTraceEventData({
+          record: completed,
+          ownerDisplayName: batch.owner.displayName,
+          fieldName: field.name,
+        }),
+      });
+      return completed;
+    });
     return serializeFarmRecord(updated);
   }
 }

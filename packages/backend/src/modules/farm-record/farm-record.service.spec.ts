@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FarmRecordService } from './farm-record.service';
 import { ScopeService } from '../../common/scope/scope.service';
@@ -97,6 +97,170 @@ function makeService(overrides: any = {}) {
     get transactionError() { return transactionError; },
   };
 }
+
+function makeStatusService(overrides: { status?: 'pending' | 'completed'; publishError?: boolean } = {}) {
+  const calls: string[] = [];
+  let transactionError: unknown;
+  const recordScalars = {
+    id: 'fr-status',
+    tenantId: 't1',
+    batchId: BATCH,
+    fieldId: FIELD,
+    operatorId: 'u1',
+    action: '除草',
+    detail: { desc: '完成除草' },
+    images: null,
+    location: null,
+    recordedAt: new Date('2026-07-17T01:02:03.000Z'),
+    source: 'web',
+    status: overrides.status ?? 'pending',
+    supplyId: null,
+    supplyAmount: null,
+    createdAt: new Date('2026-07-17T01:02:03.000Z'),
+  };
+  const current = {
+    ...recordScalars,
+    batch: { owner: { displayName: '示范农场' } },
+    field: { name: '一号地块' },
+  };
+  const traceEventCreate = vi.fn(async (_args: any) => {
+    calls.push('publish-event');
+    if (overrides.publishError) throw new Error('publish failed');
+    return { id: 'te-status' };
+  });
+  const farmRecordUpdate = vi.fn(async (args: any) => {
+    calls.push('update-record');
+    return { ...recordScalars, status: args.data.status };
+  });
+  const rootFarmRecordUpdate = vi.fn(async (args: any) => ({ ...recordScalars, status: args.data.status }));
+  const tx = {
+    $queryRaw: vi.fn(async (_strings: TemplateStringsArray, _recordId: string) => {
+      calls.push('lock-record');
+      return [{ id: current.id }];
+    }),
+    farmRecord: {
+      findFirst: vi.fn(async () => {
+        calls.push('read-record');
+        return current;
+      }),
+      update: farmRecordUpdate,
+    },
+    traceEvent: { create: traceEventCreate },
+  };
+  const transaction = vi.fn(async (fn: any) => {
+    try {
+      return await fn(tx);
+    } catch (error) {
+      transactionError = error;
+      throw error;
+    }
+  });
+  const prisma = {
+    farmRecord: {
+      findFirst: vi.fn(async () => ({ id: current.id, batchId: BATCH })),
+      update: rootFarmRecordUpdate,
+    },
+    batch: { findFirst: vi.fn(async () => ({ id: BATCH })) },
+    $transaction: transaction,
+  };
+  return {
+    svc: new FarmRecordService(prisma as any, new ScopeService()),
+    tx,
+    transaction,
+    traceEventCreate,
+    farmRecordUpdate,
+    rootFarmRecordUpdate,
+    calls,
+    get transactionError() { return transactionError; },
+  };
+}
+
+describe('FarmRecordService.updateStatus 自动发布', () => {
+  it('pending to completed locks, updates, publishes once, and returns scalars', async () => {
+    const h = makeStatusService({ status: 'pending' });
+
+    const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' });
+
+    expect(result.status).toBe('completed');
+    expect(h.transaction).toHaveBeenCalledTimes(1);
+    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const [lockStrings, lockId] = h.tx.$queryRaw.mock.calls[0];
+    const lockSql = lockStrings.join('?');
+    expect(lockSql).toContain('FROM farm_records');
+    expect(lockSql).toContain('FOR UPDATE');
+    expect(lockId).toBe('fr-status');
+    expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
+    expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
+    expect(h.traceEventCreate.mock.calls[0][0].data).toMatchObject({
+      tenantId: 't1',
+      batchId: BATCH,
+      title: '除草',
+      actor: '示范农场',
+      location: '一号地块',
+      sourceFarmRecordId: 'fr-status',
+    });
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-record', 'read-record', 'update-record', 'publish-event']);
+    expect(result).not.toHaveProperty('batch');
+    expect(result).not.toHaveProperty('field');
+  });
+
+  it('repeated completed is an idempotent no-op', async () => {
+    const h = makeStatusService({ status: 'completed' });
+
+    const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' });
+
+    expect(result.status).toBe('completed');
+    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(h.farmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(result).not.toHaveProperty('batch');
+    expect(result).not.toHaveProperty('field');
+  });
+
+  it('completed to pending is rejected without writes', async () => {
+    const h = makeStatusService({ status: 'completed' });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'pending' }))
+      .rejects.toThrow('已完成农事记录不可退回待完成');
+
+    expect(h.farmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(h.transactionError).toBeInstanceOf(BadRequestException);
+  });
+
+  it('pending to pending remains a private no-op', async () => {
+    const h = makeStatusService({ status: 'pending' });
+
+    const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'pending' });
+
+    expect(result.status).toBe('pending');
+    expect(h.farmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(result).not.toHaveProperty('batch');
+    expect(result).not.toHaveProperty('field');
+  });
+
+  it('publication failure escapes the transaction after the completion write', async () => {
+    const h = makeStatusService({ status: 'pending', publishError: true });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' }))
+      .rejects.toThrow('publish failed');
+
+    expect(h.transaction).toHaveBeenCalledTimes(1);
+    expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
+    expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-record', 'read-record', 'update-record', 'publish-event']);
+    expect(h.transactionError).toEqual(new Error('publish failed'));
+  });
+});
 
 describe('FarmRecordService.create 核销', () => {
   it('completed non-quota create uses only transaction delegates to publish one linked event', async () => {
