@@ -75,11 +75,9 @@ type TraceLabelPdfInput = {
 默认值：
 
 - `paperSize = 'A4'`
-- `marginMm = 8`
-- `gapMm = 3`
-- A4 `qrSizeMm = 24`
-- 4x6 `qrSizeMm = 50`
-- 2x1 `qrSizeMm = 18`
+- A4：`marginMm = 8`、`gapMm = 3`、`qrSizeMm = 24`
+- 4x6：`marginMm = 6`、`gapMm = 0`、`qrSizeMm = 50`
+- 2x1：`marginMm = 2`、`gapMm = 0`、`qrSizeMm = 18`
 - `showProductName = true`
 - `showSerial = true`
 
