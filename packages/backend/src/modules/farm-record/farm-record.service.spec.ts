@@ -98,13 +98,29 @@ function makeService(overrides: any = {}) {
   };
 }
 
-function makeStatusService(overrides: { status?: 'pending' | 'completed'; publishError?: boolean } = {}) {
+function makeStatusService(overrides: {
+  status?: 'pending' | 'completed';
+  publishError?: boolean;
+  recordTenantMatches?: boolean;
+  recordBatchMatches?: boolean;
+  batchTenantMatches?: boolean;
+  recordFieldMatchesBatch?: boolean;
+  fieldTenantMatches?: boolean;
+  fieldOwnerMatchesBatch?: boolean;
+  batchOwnerTenantMatches?: boolean;
+} = {}) {
   const calls: string[] = [];
   let transactionError: unknown;
+  const recordBatchId = overrides.recordBatchMatches === false
+    ? '33333333-3333-3333-3333-333333333333'
+    : BATCH;
+  const batchFieldId = overrides.recordFieldMatchesBatch === false
+    ? '44444444-4444-4444-4444-444444444444'
+    : FIELD;
   const recordScalars = {
     id: 'fr-status',
-    tenantId: 't1',
-    batchId: BATCH,
+    tenantId: overrides.recordTenantMatches === false ? 't2' : 't1',
+    batchId: recordBatchId,
     fieldId: FIELD,
     operatorId: 'u1',
     action: '除草',
@@ -120,8 +136,22 @@ function makeStatusService(overrides: { status?: 'pending' | 'completed'; publis
   };
   const current = {
     ...recordScalars,
-    batch: { owner: { displayName: '示范农场' } },
-    field: { name: '一号地块' },
+    batch: {
+      id: recordBatchId,
+      tenantId: overrides.batchTenantMatches === false ? 't2' : 't1',
+      ownerId: 'm1',
+      fieldId: batchFieldId,
+      owner: {
+        tenantId: overrides.batchOwnerTenantMatches === false ? 't2' : 't1',
+        displayName: '示范农场',
+      },
+    },
+    field: {
+      id: FIELD,
+      tenantId: overrides.fieldTenantMatches === false ? 't2' : 't1',
+      ownerId: overrides.fieldOwnerMatchesBatch === false ? 'm2' : 'm1',
+      name: '一号地块',
+    },
   };
   const traceEventCreate = vi.fn(async (_args: any) => {
     calls.push('publish-event');
@@ -134,10 +164,17 @@ function makeStatusService(overrides: { status?: 'pending' | 'completed'; publis
   });
   const rootFarmRecordUpdate = vi.fn(async (args: any) => ({ ...recordScalars, status: args.data.status }));
   const tx = {
-    $queryRaw: vi.fn(async (_strings: TemplateStringsArray, _recordId: string) => {
+    $queryRaw: vi.fn(async (strings: TemplateStringsArray, lockedId: string) => {
+      const sql = strings.join('?');
+      if (sql.includes('FROM batches')) {
+        calls.push('lock-batch');
+        return [{ id: BATCH }];
+      }
       calls.push('lock-record');
-      return [{ id: current.id }];
+      return [{ id: lockedId }];
     }),
+    batch: { findFirst: vi.fn(async () => ({ id: BATCH })) },
+    field: { findFirst: vi.fn(async () => ({ id: FIELD })) },
     farmRecord: {
       findFirst: vi.fn(async () => {
         calls.push('read-record');
@@ -160,13 +197,16 @@ function makeStatusService(overrides: { status?: 'pending' | 'completed'; publis
       findFirst: vi.fn(async () => ({ id: current.id, batchId: BATCH })),
       update: rootFarmRecordUpdate,
     },
-    batch: { findFirst: vi.fn(async () => ({ id: BATCH })) },
     $transaction: transaction,
   };
+  const scope = {
+    assertInScope: vi.fn(async () => undefined),
+  };
   return {
-    svc: new FarmRecordService(prisma as any, new ScopeService()),
+    svc: new FarmRecordService(prisma as any, scope as any),
     tx,
     transaction,
+    scopeAssertInScope: scope.assertInScope,
     traceEventCreate,
     farmRecordUpdate,
     rootFarmRecordUpdate,
@@ -183,12 +223,17 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
 
     expect(result.status).toBe('completed');
     expect(h.transaction).toHaveBeenCalledTimes(1);
-    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(1);
-    const [lockStrings, lockId] = h.tx.$queryRaw.mock.calls[0];
-    const lockSql = lockStrings.join('?');
-    expect(lockSql).toContain('FROM farm_records');
-    expect(lockSql).toContain('FOR UPDATE');
-    expect(lockId).toBe('fr-status');
+    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(2);
+    const [batchLockStrings, batchLockId] = h.tx.$queryRaw.mock.calls[0];
+    expect(batchLockStrings.join('?')).toContain('FROM batches');
+    expect(batchLockStrings.join('?')).toContain('FOR UPDATE');
+    expect(batchLockId).toBe(BATCH);
+    const [recordLockStrings, recordLockId] = h.tx.$queryRaw.mock.calls[1];
+    expect(recordLockStrings.join('?')).toContain('FROM farm_records');
+    expect(recordLockStrings.join('?')).toContain('FOR UPDATE');
+    expect(recordLockId).toBe('fr-status');
+    expect(h.scopeAssertInScope).toHaveBeenNthCalledWith(1, h.tx, merchant, 'batch', BATCH);
+    expect(h.scopeAssertInScope).toHaveBeenNthCalledWith(2, h.tx, merchant, 'field', FIELD);
     expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
     expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
     expect(h.traceEventCreate.mock.calls[0][0].data).toMatchObject({
@@ -200,7 +245,7 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
       sourceFarmRecordId: 'fr-status',
     });
     expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['lock-record', 'read-record', 'update-record', 'publish-event']);
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record', 'update-record', 'publish-event']);
     expect(result).not.toHaveProperty('batch');
     expect(result).not.toHaveProperty('field');
   });
@@ -211,11 +256,11 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
     const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' });
 
     expect(result.status).toBe('completed');
-    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(h.tx.$queryRaw).toHaveBeenCalledTimes(2);
     expect(h.farmRecordUpdate).not.toHaveBeenCalled();
     expect(h.traceEventCreate).not.toHaveBeenCalled();
     expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record']);
     expect(result).not.toHaveProperty('batch');
     expect(result).not.toHaveProperty('field');
   });
@@ -229,7 +274,7 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
     expect(h.farmRecordUpdate).not.toHaveBeenCalled();
     expect(h.traceEventCreate).not.toHaveBeenCalled();
     expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record']);
     expect(h.transactionError).toBeInstanceOf(BadRequestException);
   });
 
@@ -242,7 +287,7 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
     expect(h.farmRecordUpdate).not.toHaveBeenCalled();
     expect(h.traceEventCreate).not.toHaveBeenCalled();
     expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['lock-record', 'read-record']);
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record']);
     expect(result).not.toHaveProperty('batch');
     expect(result).not.toHaveProperty('field');
   });
@@ -257,8 +302,28 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
     expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
     expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
     expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
-    expect(h.calls).toEqual(['lock-record', 'read-record', 'update-record', 'publish-event']);
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record', 'update-record', 'publish-event']);
     expect(h.transactionError).toEqual(new Error('publish failed'));
+  });
+
+  it.each([
+    ['record tenant', { recordTenantMatches: false }],
+    ['record batch', { recordBatchMatches: false }],
+    ['batch tenant', { batchTenantMatches: false }],
+    ['record field and batch field', { recordFieldMatchesBatch: false }],
+    ['field tenant', { fieldTenantMatches: false }],
+    ['field owner and batch owner', { fieldOwnerMatchesBatch: false }],
+    ['batch owner tenant', { batchOwnerTenantMatches: false }],
+  ])('fails closed when %s context is inconsistent', async (_label, mismatch) => {
+    const h = makeStatusService({ status: 'pending', ...mismatch });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' }))
+      .rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(h.farmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.rootFarmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.calls).toEqual(['lock-batch', 'lock-record', 'read-record']);
   });
 });
 

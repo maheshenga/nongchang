@@ -100,10 +100,13 @@ Create only the `FarmRecord`. No public event exists while the task is pending.
 
 ### Completion transition
 
-1. Load the scoped record with its current status, batch owner, and field.
-2. If it is pending and the requested state is completed, update the record and create the linked event in one transaction.
-3. If it is already completed and the request repeats completed, return it as an idempotent no-op.
-4. If a client requests completed to pending, reject it with `BadRequestException` and leave both rows unchanged.
+1. Use a tenant-scoped read only to obtain the record's candidate `batchId`.
+2. In the transaction, lock and verify the candidate batch row first, then lock and verify the farm-record row.
+3. Reload the record with its batch, batch owner, and field metadata through the transaction client.
+4. Re-run batch and field scope checks through the transaction client and fail closed unless the record tenant, locked batch, batch tenant, batch field, field tenant, field owner, batch owner, and batch-owner tenant relationships all agree with the authenticated user.
+5. If it is pending and the requested state is completed, update the record and create the linked event in the same transaction.
+6. If it is already completed and the request repeats completed, return it as an idempotent no-op after the same lock and invariant checks.
+7. If a client requests completed to pending, reject it with `BadRequestException` and leave both rows unchanged.
 
 ## API and UI Impact
 
@@ -161,12 +164,28 @@ Follow red-green-refactor for every behavior.
 - Complete the task twice: exactly one event exists.
 - Public response contains none of the excluded internal or commercial fields.
 - Existing completed fixture records are not implicitly backfilled by migration.
+- An inconsistent pending record permitted by independent relations is rejected without a status change or linked event.
+- Concurrent pending completion and force deletion of an unscanned batch cannot deadlock and leaves only a transactionally consistent outcome.
 
 ### Frontend tests
 
 - Web completion feedback states that the record is publicly published.
 - Existing consumer timeline renders the projected description and image.
 - Existing miniapp trace timeline receives the event through the current endpoint.
+
+## Binding Production Cutover and Rollback Boundary
+
+This feature must use an atomic backend/database cutover. The following procedure is mandatory:
+
+1. Before production, restore a current production backup into a rehearsal database. Record the `trace_events` row count and total relation size, then record migration duration and observed lock behavior. Do not proceed until the operator accepts the result for the planned maintenance window.
+2. At cutover, enable maintenance mode or otherwise quiesce all writes, then stop every PM2 backend instance before `prisma:deploy`.
+3. Verify that no old backend process is listening on port `3001`. Old and new backend versions must never serve writes concurrently.
+4. While writes remain stopped, take and verify a pre-cutover database backup, deploy the migration, and start only the new build.
+5. Run readiness and focused farm-record/public-trace smoke checks before removing maintenance mode.
+6. If a failure occurs before traffic is reopened, keep writes stopped and restore both the pre-cutover database backup and the old build.
+7. After any production write is accepted by the new build, do not restore a pre-feature backend and do not drop the relation. Enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
+
+No broad historical reconciler or automatic backfill is part of this cutover.
 
 ## Acceptance Criteria
 
@@ -182,4 +201,4 @@ The subproject is complete only when all of the following are true:
 
 ## Rollback
 
-Application rollback is safe because the new source link is nullable and existing trace readers ignore it. Database rollback removes only the new nullable relation after confirming that newly projected events are either retained as ordinary trace events or explicitly removed according to the deployment rollback procedure.
+Rollback to the old application and pre-cutover database is allowed only while writes are still stopped and before production traffic has been reopened. Once the new build accepts any production write, rollback to a pre-feature backend or removal of the source relation is unsafe; keep or re-enter maintenance mode and forward-fix instead.

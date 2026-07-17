@@ -43,7 +43,7 @@ pnpm install
 pnpm build:shared
 pnpm build:backend
 psql "$DATABASE_URL" -f packages/backend/prisma/audit-data-consistency.sql
-pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 migrate dev
+# prisma:deploy 只能在下述原子切换流程中、全部后端停止后执行
 ```
 `audit-data-consistency.sql` 应返回 0 行。若返回跨商家/跨租户脏数据或重复微信 appId,先备份并清洗数据,再执行迁移。
 可选:初始化演示数据:
@@ -52,6 +52,27 @@ pnpm --filter @nongchang/backend prisma:seed
 ```
 
 After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
+
+### 3.1 原子数据库/后端切换(强制)
+
+涉及 `FarmRecord` 自动发布迁移时,以下步骤是绑定流程,不得在旧/新后端同时提供写入的情况下滚动迁移:
+
+1. **生产前演练:**将当前生产备份恢复到独立演练库。记录 `trace_events` 的行数和总关系大小,并记录 `prisma:deploy` 的耗时与锁等待/阻塞情况。只有运维确认结果适合计划维护窗口后才能继续。
+   ```sql
+   SELECT count(*) AS trace_events_rows FROM trace_events;
+   SELECT pg_size_pretty(pg_total_relation_size('trace_events')) AS trace_events_total_size;
+   ```
+2. **停止写入:**启用维护模式或等效的写入静默,然后停止所有 PM2 后端实例。迁移前不得保留任何旧后端写进程。
+3. **验证端口:**确认没有旧进程监听 `3001`;下列命令必须无输出。旧/新后端绝不能同时接受写入。
+   ```bash
+   ss -ltnp | grep ':3001 ' || true
+   ```
+4. **停写备份与迁移:**在写入仍停止时生成数据库备份并用 `pg_restore --list`(custom 格式)或等效恢复校验确认备份可读,然后执行 `pnpm --filter @nongchang/backend prisma:deploy`,只启动新构建。
+5. **开放前验证:**运行 readiness 以及农事记录完成/公开溯源的聚焦 smoke;全部通过后才能移除维护模式。
+6. **开放前失败:**保持写入停止,恢复切换前数据库备份和旧构建,验证旧版本 readiness 后再决定是否开放流量。
+7. **开放后边界:**新构建一旦接受任何生产写入,不得回滚到功能前后端,也不得删除该关系。必要时重新进入维护模式并前向修复。历史 pending 记录没有完成时间戳,无法安全区分混合版本漏发布与有意不回填。
+
+本次切换不运行广义历史修复器或自动回填。备份路径和凭据只保存在受限服务器配置中,不要写入仓库或操作记录。
 
 ## 4. PM2 管理器启动后端
 

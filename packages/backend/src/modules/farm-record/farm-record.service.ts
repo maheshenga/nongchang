@@ -121,19 +121,45 @@ export class FarmRecordService {
       where: { id, tenantId: user.tenantId }, select: { id: true, batchId: true },
     });
     if (!scoped) throw new ForbiddenException('农事记录不在可操作范围内');
-    await this.scope.assertInScope(this.prisma, user, 'batch', scoped.batchId);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM farm_records WHERE id = ${id} FOR UPDATE`;
+      const lockedBatch = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM batches WHERE id = ${scoped.batchId} FOR UPDATE
+      `;
+      if (lockedBatch.length === 0) throw new ForbiddenException('农事记录不在可操作范围内');
+      const lockedRecord = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM farm_records WHERE id = ${id} FOR UPDATE
+      `;
+      if (lockedRecord.length === 0) throw new ForbiddenException('农事记录不在可操作范围内');
       const current = await tx.farmRecord.findFirst({
-        where: { id, tenantId: user.tenantId },
+        where: { id },
         include: {
-          batch: { select: { owner: { select: { displayName: true } } } },
-          field: { select: { name: true } },
+          batch: {
+            select: {
+              id: true,
+              tenantId: true,
+              ownerId: true,
+              fieldId: true,
+              owner: { select: { tenantId: true, displayName: true } },
+            },
+          },
+          field: { select: { id: true, tenantId: true, ownerId: true, name: true } },
         },
       });
       if (!current) throw new ForbiddenException('农事记录不在可操作范围内');
       const { batch, field, ...record } = current;
+      await this.scope.assertInScope(tx, user, 'batch', scoped.batchId);
+      await this.scope.assertInScope(tx, user, 'field', current.fieldId);
+      const publicationContextIsValid = current.tenantId === user.tenantId
+        && current.batchId === scoped.batchId
+        && batch.id === scoped.batchId
+        && batch.tenantId === user.tenantId
+        && current.fieldId === batch.fieldId
+        && field.id === current.fieldId
+        && field.tenantId === user.tenantId
+        && field.ownerId === batch.ownerId
+        && batch.owner.tenantId === user.tenantId;
+      if (!publicationContextIsValid) throw new ForbiddenException('农事记录不在可操作范围内');
       if (current.status === 'completed') {
         if (dto.status === 'pending') throw new BadRequestException('已完成农事记录不可退回待完成');
         return record;
