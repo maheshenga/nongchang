@@ -10,34 +10,108 @@ const FIELD = '22222222-2222-2222-2222-222222222222';
 const base = { batchId: BATCH, fieldId: FIELD, action: '施肥', recordedAt: '2026-06-14T10:00:00.000Z', source: FarmRecordSource.MINIAPP };
 
 function makeService(overrides: any = {}) {
-  let created: any;
-  const farmRecord = {
-    create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
+  let rootCreated: any;
+  let txCreated: any;
+  let rootPublished: any;
+  let txPublished: any;
+  let rootFarmRecordCreateCount = 0;
+  let txFarmRecordCreateCount = 0;
+  let rootTraceEventCreateCount = 0;
+  let txTraceEventCreateCount = 0;
+  const rootFarmRecord = {
+    create: async (a: any) => {
+      rootFarmRecordCreateCount += 1;
+      rootCreated = a;
+      return { id: 'fr1', ...a.data };
+    },
     aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
+  };
+  const txFarmRecord = {
+    create: async (a: any) => {
+      txFarmRecordCreateCount += 1;
+      txCreated = a;
+      return { id: 'fr1', ...a.data };
+    },
+    aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
+  };
+  const rootTraceEvent = {
+    create: async (a: any) => {
+      rootTraceEventCreateCount += 1;
+      rootPublished = a;
+      return { id: 'root-te1', ...a.data };
+    },
+  };
+  const txTraceEvent = {
+    create: async (a: any) => {
+      txTraceEventCreateCount += 1;
+      if (overrides.publishError) throw new Error('publish failed');
+      txPublished = a;
+      return { id: 'te1', ...a.data };
+    },
   };
   const supplyIssue = { aggregate: async () => ({ _sum: { amount: overrides.quota ?? 0 } }) };
   const prisma = {
     batch: { findFirst: async ({ where }: any = {}) => {
       if (overrides.batchScoped === false) return null;
       if (where?.fieldId && overrides.batchFieldMatches === false) return null;
-      return { id: 'b1', ownerId: 'm1', fieldId: FIELD };
+      return {
+        id: 'b1',
+        ownerId: 'm1',
+        fieldId: FIELD,
+        owner: { displayName: '示范农场' },
+        field: { name: '一号地块' },
+      };
     } },
     field: { findFirst: async () => (overrides.fieldScoped === false ? null : { id: 'f1' }) },
-    farmRecord,
+    farmRecord: rootFarmRecord,
+    traceEvent: rootTraceEvent,
     supplyIssue,
     supply: { findFirst: async ({ where }: any = {}) => {
       if (overrides.supplyScoped === false) return null;
-      if (where?.ownerId && overrides.supplyOwnerMatches === false) return null;
-      return { id: 'sup1', ownerId: 'm1' };
+      return { id: 'sup1', ownerId: overrides.supplyOwnerMatches === false ? 'm2' : 'm1' };
     } },
     // 核销路径用事务 + FOR UPDATE 行锁;tx 复用同一组 mock 表。
-    $queryRaw: async () => [{ id: 'sup1' }],
-    $transaction: async (fn: any) => fn({ farmRecord, supplyIssue, $queryRaw: async () => [{ id: 'sup1' }] }),
+    $transaction: async (fn: any) => fn({
+      farmRecord: txFarmRecord,
+      traceEvent: txTraceEvent,
+      supplyIssue,
+      $queryRaw: async () => [{ id: 'sup1' }],
+    }),
   };
-  return { svc: new FarmRecordService(prisma as any, new ScopeService()), get created() { return created; } };
+  return {
+    svc: new FarmRecordService(prisma as any, new ScopeService()),
+    get created() { return txCreated ?? rootCreated; },
+    get published() { return txPublished ?? rootPublished; },
+    get rootFarmRecordCreateCount() { return rootFarmRecordCreateCount; },
+    get txFarmRecordCreateCount() { return txFarmRecordCreateCount; },
+    get rootTraceEventCreateCount() { return rootTraceEventCreateCount; },
+    get txTraceEventCreateCount() { return txTraceEventCreateCount; },
+  };
 }
 
 describe('FarmRecordService.create 核销', () => {
+  it('completed non-quota create uses only transaction delegates to publish one linked event', async () => {
+    const h = makeService();
+
+    const result = await h.svc.create(merchant, {
+      batchId: BATCH,
+      fieldId: FIELD,
+      action: '施肥',
+      detail: { note: '完成追肥', cost: 200 },
+      images: ['https://cdn.example/1.jpg'],
+      recordedAt: '2026-07-17T01:02:03.000Z',
+      source: FarmRecordSource.MINIAPP,
+    });
+
+    expect(result.status).toBe('completed');
+    expect(h.txFarmRecordCreateCount).toBe(1);
+    expect(h.txTraceEventCreateCount).toBe(1);
+    expect(h.rootFarmRecordCreateCount).toBe(0);
+    expect(h.rootTraceEventCreateCount).toBe(0);
+    expect(h.published.data.sourceFarmRecordId).toBe('fr1');
+    expect(h.published.data.payload).toEqual({ desc: '完成追肥', image: 'https://cdn.example/1.jpg' });
+  });
+
   it('无 supplyId:走原路径,不校验配额', async () => {
     const h = makeService();
     const r = await h.svc.create(merchant, { ...base });

@@ -6,6 +6,7 @@ import { ScopeService } from '../../common/scope/scope.service';
 import {
   assertSupplyQuotaWithinLimit,
   buildFarmRecordCreateData,
+  buildFarmRecordTraceEventData,
   buildFarmRecordListFindManyArgs,
   buildFarmRecordListWhere,
   buildFarmRecordOwnerBatchWhere,
@@ -25,7 +26,12 @@ export class FarmRecordService {
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
     const batch = await this.prisma.batch.findFirst({
       where: { id: dto.batchId, tenantId: user.tenantId, fieldId: dto.fieldId },
-      select: { id: true, ownerId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        owner: { select: { displayName: true } },
+        field: { select: { name: true } },
+      },
     });
     if (!batch) throw new ForbiddenException('地块不属于该批次,拒绝创建农事记录');
     const data = buildFarmRecordCreateData({ tenantId: user.tenantId, operatorId: user.userId, dto });
@@ -60,7 +66,19 @@ export class FarmRecordService {
       });
       return serializeFarmRecord(created);
     }
-    const created = await this.prisma.farmRecord.create({ data });
+    const created = await this.prisma.$transaction(async (tx) => {
+      const record = await tx.farmRecord.create({ data });
+      if (record.status === 'completed') {
+        await tx.traceEvent.create({
+          data: buildFarmRecordTraceEventData({
+            record,
+            ownerDisplayName: batch.owner.displayName,
+            fieldName: batch.field.name,
+          }),
+        });
+      }
+      return record;
+    });
     return serializeFarmRecord(created);
   }
 
