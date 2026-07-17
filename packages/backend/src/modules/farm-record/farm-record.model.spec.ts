@@ -9,6 +9,7 @@ import {
   buildFarmRecordListFindManyArgs,
   buildFarmRecordListWhere,
   buildFarmRecordCreateData,
+  buildFarmRecordTraceEventData,
   buildFarmRecordOwnerBatchWhere,
   buildFarmRecordOwnerWhere,
   enrichFarmRecordRows,
@@ -34,6 +35,69 @@ const actor = (overrides: Partial<AuthUser> = {}): AuthUser => ({
   ownerId: 'm1',
   agentId: null,
   ...overrides,
+});
+
+describe('buildFarmRecordTraceEventData', () => {
+  const base = {
+    record: {
+      id: 'fr1',
+      tenantId: 'tenant1',
+      batchId: 'batch1',
+      action: '  施肥  ',
+      detail: { note: '  叶面追肥完成  ', cost: 200, labor: 3, material: '复合肥' },
+      images: ['https://cdn.example/farm-1.jpg', 'https://cdn.example/farm-2.jpg'],
+      recordedAt: new Date('2026-07-17T01:02:03.000Z'),
+    },
+    ownerDisplayName: '示范农场',
+    fieldName: '一号地块',
+  };
+
+  it('maps a completed record to the public farm-event allowlist', () => {
+    expect(buildFarmRecordTraceEventData(base)).toEqual({
+      tenantId: 'tenant1',
+      batchId: 'batch1',
+      type: 'farm',
+      title: '施肥',
+      actor: '示范农场',
+      location: '一号地块',
+      occurredAt: new Date('2026-07-17T01:02:03.000Z'),
+      payload: { desc: '叶面追肥完成', image: 'https://cdn.example/farm-1.jpg' },
+      sourceFarmRecordId: 'fr1',
+    });
+  });
+
+  it('supports web detail.desc and excludes private or unknown fields', () => {
+    const result = buildFarmRecordTraceEventData({
+      ...base,
+      record: {
+        ...base.record,
+        detail: { desc: '完成除草', cost: 99, labor: 8, supplyId: 'hidden', extra: 'hidden' },
+        images: [],
+      },
+    });
+    expect(result.payload).toEqual({ desc: '完成除草' });
+    expect(JSON.stringify(result)).not.toContain('cost');
+    expect(JSON.stringify(result)).not.toContain('labor');
+    expect(JSON.stringify(result)).not.toContain('supplyId');
+    expect(JSON.stringify(result)).not.toContain('extra');
+  });
+
+  it('uses no payload when no public description or valid image exists', () => {
+    expect(buildFarmRecordTraceEventData({
+      ...base,
+      record: { ...base.record, detail: { cost: 1 }, images: [1, null] },
+    }).payload).toBeUndefined();
+  });
+
+  it('trims descriptions to 2000 Unicode code points', () => {
+    const desc = `${'农'.repeat(2000)}尾部`;
+    const result = buildFarmRecordTraceEventData({
+      ...base,
+      record: { ...base.record, detail: { note: desc }, images: null },
+    });
+    expect(Array.from((result.payload as { desc: string }).desc)).toHaveLength(2000);
+    expect((result.payload as { desc: string }).desc.endsWith('尾部')).toBe(false);
+  });
 });
 
 describe('farm record model helpers', () => {
