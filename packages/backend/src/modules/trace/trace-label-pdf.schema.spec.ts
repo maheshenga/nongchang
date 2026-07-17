@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   TRACE_LABEL_PAPER_DEFAULTS,
   traceLabelPdfInputSchema,
@@ -66,5 +66,9 @@ describe('trace label PDF input schema', () => {
       showProductName: true,
       showSerial: true,
     });
+  });
+
+  it('keeps codeIds typed as an optional string array at the request boundary', () => {
+    expectTypeOf<TraceLabelPdfInput['codeIds']>().toEqualTypeOf<string[] | undefined>();
   });
 });

@@ -10,12 +10,17 @@ export const TRACE_LABEL_PAPER_DEFAULTS = {
 } as const;
 
 const millimeterSchema = z.number().finite().int();
+const traceLabelCodeIdsSchema = z.array(z.string().uuid()).min(1).superRefine((codeIds, context) => {
+  if (new Set(codeIds).size > 500) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'codeIds must contain at most 500 unique IDs',
+    });
+  }
+}).transform((codeIds) => [...new Set(codeIds)]);
 
 export const traceLabelPdfInputSchema = z.object({
-  codeIds: z.preprocess(
-    (value) => Array.isArray(value) ? [...new Set(value)] : value,
-    z.array(z.string().uuid()).min(1).max(500),
-  ).optional(),
+  codeIds: traceLabelCodeIdsSchema.optional(),
   paperSize: traceLabelPaperSizeSchema.default('A4'),
   marginMm: millimeterSchema.min(0).max(20).optional(),
   gapMm: millimeterSchema.min(0).max(20).optional(),
