@@ -43,6 +43,8 @@ const paperSizes: Array<{ value: TraceLabelPaperSize; label: string }> = [
   { value: '2x1', label: '2x1' },
 ];
 
+const A4_LABELS_PER_PAGE = 21;
+
 function makeLayoutForm(paperSize: TraceLabelPaperSize): LayoutForm {
   return {
     paperSize,
@@ -75,7 +77,7 @@ function safeFileName(batchNo: string): string {
 
 function pageCount(labelCount: number, paperSize: TraceLabelPaperSize): number {
   if (labelCount <= 0) return 0;
-  return paperSize === 'A4' ? Math.ceil(labelCount / 12) : labelCount;
+  return paperSize === 'A4' ? Math.ceil(labelCount / A4_LABELS_PER_PAGE) : labelCount;
 }
 
 export default function BatchLabelWorkspace({

@@ -38,7 +38,7 @@ describe('BatchLabelWorkspace', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
   });
 
-  it('loads selected codes once and derives the A4 label/page summary', async () => {
+  it('loads selected codes once and derives the real 21-label A4 capacity', async () => {
     const codeIds = [
       '00000000-0000-4000-8000-000000000001',
       '00000000-0000-4000-8000-000000000002',
@@ -49,7 +49,7 @@ describe('BatchLabelWorkspace', () => {
         batchNo="BATCH-001"
         cropName="阳光玫瑰"
         codeIds={codeIds}
-        labelCount={22}
+        labelCount={21}
         onClose={vi.fn()}
       />,
     );
@@ -62,7 +62,7 @@ describe('BatchLabelWorkspace', () => {
       gapMm: 3,
       qrSizeMm: 24,
     }));
-    expect(screen.getByText('22 张标签 / 2 页')).toBeTruthy();
+    expect(screen.getByText('21 张标签 / 1 页')).toBeTruthy();
     expect(screen.getByTitle('溯源标签 PDF 预览').getAttribute('src')).toBe('blob:trace-label-pdf');
   });
 
@@ -129,6 +129,7 @@ describe('BatchLabelWorkspace', () => {
     await waitFor(() => expect(createTraceLabelPdfMock).toHaveBeenCalledTimes(1));
     const update = screen.getByRole('button', { name: '更新预览' }) as HTMLButtonElement;
     expect(update.disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '下载 PDF' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: '打印 PDF' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(update);
     fireEvent.click(update);
@@ -170,8 +171,9 @@ describe('BatchLabelWorkspace', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:second');
   });
 
-  it('does not publish a late result after unmounting', async () => {
+  it('revokes an in-flight Blob URL that resolves after unmounting', async () => {
     const pending = deferred<ReturnType<typeof pdfFile>>();
+    createObjectURL.mockReturnValueOnce('blob:stale');
     createTraceLabelPdfMock.mockReturnValueOnce(pending.promise);
     const { unmount } = render(
       <BatchLabelWorkspace
@@ -182,10 +184,34 @@ describe('BatchLabelWorkspace', () => {
         onClose={vi.fn()}
       />,
     );
+    await waitFor(() => expect(createTraceLabelPdfMock).toHaveBeenCalledTimes(1));
     unmount();
     pending.resolve(pdfFile());
 
-    await waitFor(() => expect(createObjectURL).not.toHaveBeenCalled());
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:stale');
+    });
+    expect(screen.queryByTitle('溯源标签 PDF 预览')).toBeNull();
+  });
+
+  it.each([
+    ['A4', 22, '22 张标签 / 2 页'],
+    ['4x6', 3, '3 张标签 / 3 页'],
+    ['2x1', 3, '3 张标签 / 3 页'],
+  ] as const)('reports the %s page total from labelCount', async (paperSize, labelCount, summary) => {
+    render(
+      <BatchLabelWorkspace
+        batchId="batch-1"
+        batchNo="BATCH-001"
+        cropName="阳光玫瑰"
+        labelCount={labelCount}
+        initialPaperSize={paperSize}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(summary)).toBeTruthy();
   });
 
   it.each([
