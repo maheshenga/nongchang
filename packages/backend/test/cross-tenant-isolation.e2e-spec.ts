@@ -83,14 +83,18 @@ describe('跨租户隔离(多租户深度)e2e', () => {
   });
 
   afterAll(async () => {
+    try {
     // 先删子表再删父(FK Restrict)。
-    await prisma.traceCode.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.batch.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.field.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.creditAccount.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.user.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.tenant.deleteMany({ where: { id: t2TenantId } });
-    await app.close();
+      await prisma.traceScan.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.traceCode.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.batch.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.field.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.creditAccount.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.user.deleteMany({ where: { tenantId: t2TenantId } });
+      await prisma.tenant.deleteMany({ where: { id: t2TenantId } });
+    } finally {
+      await app.close();
+    }
   });
 
   it('DEMO 系统管理员的 /agents/merchants 看不到 T2 租户的商户', async () => {

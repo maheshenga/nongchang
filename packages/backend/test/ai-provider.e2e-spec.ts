@@ -18,6 +18,7 @@ describe('AiProvider e2e', () => {
   let prisma: PrismaService;
   let sysToken: string;
   let merchantToken: string;
+  let providerTenantId: string;
   const createdIds: string[] = [];
 
   beforeAll(async () => {
@@ -28,13 +29,21 @@ describe('AiProvider e2e', () => {
     prisma = app.get(PrismaService);
     sysToken = await login(app, 'sysadmin');
     merchantToken = await login(app, 'merchantA');
+    const tenant = await prisma.tenant.create({
+      data: { name: `AI Provider E2E ${Date.now()}`, code: `AIPROV-E2E-${Date.now()}` },
+    });
+    providerTenantId = tenant.id;
   });
 
   afterAll(async () => {
-    if (createdIds.length) {
-      await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
+    try {
+      if (createdIds.length) {
+        await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
+      }
+      await prisma.tenant.deleteMany({ where: { id: providerTenantId } });
+    } finally {
+      await app.close();
     }
-    await app.close();
   });
 
   it('merchant 无权访问 AI 服务商管理端点 → 403', async () => {
@@ -80,10 +89,9 @@ describe('AiProvider e2e', () => {
   });
 
   it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {
-    // ai_providers.tenant_id 无 FK(#20 未纳入),用合成租户隔离真实数据。
-    const fakeTenant = 'e2e-115-tenant';
+    // Use a suite-owned tenant to exercise the partial unique index against a valid FK.
     const base = {
-      tenantId: fakeTenant,
+      tenantId: providerTenantId,
       baseUrl: 'https://x.com/v1',
       apiKeyEnc: 'iv:tag:cipher',
       textModel: 'qwen-plus',
@@ -93,7 +101,7 @@ describe('AiProvider e2e', () => {
     createdIds.push(first.id);
     await expect(
       prisma.aiProvider.create({ data: { ...base, name: '启用B' } }),
-    ).rejects.toThrow(); // 偏唯一索引冲突(P2002)
+    ).rejects.toMatchObject({ code: 'P2002', name: 'PrismaClientKnownRequestError' });
     // enabled=false 不受约束:同租户可任意多条
     const disabled = await prisma.aiProvider.create({
       data: { ...base, name: '停用C', enabled: false },
