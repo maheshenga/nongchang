@@ -21,6 +21,16 @@ async function login(app: INestApplication, username: string): Promise<string> {
   return res.body.accessToken;
 }
 
+function requireCreatedSupplyId(body: unknown): string {
+  const id = (body as { id?: unknown } | null)?.id;
+  expect(typeof id).toBe('string');
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new Error('Supply create response must contain a non-empty string id');
+  }
+  expect(id.length).toBeGreaterThan(0);
+  return id;
+}
+
 describe('Supply e2e', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -38,10 +48,13 @@ describe('Supply e2e', () => {
     app.setGlobalPrefix('api');
     await app.init();
     prisma = app.get(PrismaService);
-    tokenA = await login(app, 'merchantA');
-    tokenB = await login(app, 'merchantB');
-    const userA = await prisma.user.findFirstOrThrow({ where: { username: 'merchantA' } });
-    const userB = await prisma.user.findFirstOrThrow({ where: { username: 'merchantB' } });
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { code: 'DEMO' } });
+    const userA = await prisma.user.findUniqueOrThrow({
+      where: { tenantId_username: { tenantId: tenant.id, username: 'merchantA' } },
+    });
+    const userB = await prisma.user.findUniqueOrThrow({
+      where: { tenantId_username: { tenantId: tenant.id, username: 'merchantB' } },
+    });
     userAId = userA.id;
     userBId = userB.id;
     originalGroupIds = { userA: userA.groupId, userB: userB.groupId };
@@ -59,38 +72,54 @@ describe('Supply e2e', () => {
       where: { id: { in: [userA.id, userB.id] } },
       data: { groupId: recordGroup.id },
     });
-    const batchA = await prisma.batch.findFirst({ where: { ownerId: userA.id } });
-    batchAId = batchA!.id;
+    tokenA = await login(app, 'merchantA');
+    tokenB = await login(app, 'merchantB');
+    const batchA = await prisma.batch.findFirstOrThrow({
+      where: { tenantId: tenant.id, ownerId: userA.id },
+    });
+    batchAId = batchA.id;
   });
 
   afterAll(async () => {
-    if (prisma) {
-      if (createdSupplyIds.length) {
-        await prisma.supplyIssue.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
+    try {
+      const supplyIds = createdSupplyIds.filter(
+        (id): id is string => typeof id === 'string' && id.length > 0,
+      );
+      if (prisma && supplyIds.length) {
+        await prisma.supplyIssue.deleteMany({ where: { supplyId: { in: supplyIds } } });
         const records = await prisma.farmRecord.findMany({
-          where: { supplyId: { in: createdSupplyIds } },
+          where: { supplyId: { in: supplyIds } },
           select: { id: true },
         });
-        await prisma.traceEvent.deleteMany({
-          where: { sourceFarmRecordId: { in: records.map((record) => record.id) } },
-        });
-        await prisma.farmRecord.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
-        await prisma.supply.deleteMany({ where: { id: { in: createdSupplyIds } } });
+        const recordIds = records
+          .map((record) => record.id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+        if (recordIds.length) {
+          await prisma.traceEvent.deleteMany({ where: { sourceFarmRecordId: { in: recordIds } } });
+        }
+        await prisma.farmRecord.deleteMany({ where: { supplyId: { in: supplyIds } } });
+        await prisma.supply.deleteMany({ where: { id: { in: supplyIds } } });
       }
-      if (userAId && userBId && originalGroupIds) {
-        await prisma.user.updateMany({ data: { groupId: originalGroupIds.userA }, where: { id: userAId } });
-        await prisma.user.updateMany({ data: { groupId: originalGroupIds.userB }, where: { id: userBId } });
+    } finally {
+      try {
+        if (prisma && userAId && userBId && originalGroupIds) {
+          await prisma.$transaction([
+            prisma.user.updateMany({ data: { groupId: originalGroupIds.userA }, where: { id: userAId } }),
+            prisma.user.updateMany({ data: { groupId: originalGroupIds.userB }, where: { id: userBId } }),
+          ]);
+        }
+      } finally {
+        if (app) await app.close();
       }
     }
-    if (app) await app.close();
   });
 
   it('入库 → 领用扣减 → 列表 remaining 正确', async () => {
     const create = await request(app.getHttpServer())
       .post('/api/supplies').set('Authorization', `Bearer ${tokenA}`)
-      .send({ name: 'e2e复合肥', unit: '包', amount: 100 });
-    expect(create.status).toBe(201);
-    const id = create.body.id;
+      .send({ name: 'e2e复合肥', unit: '包', amount: 100 })
+      .expect(201);
+    const id = requireCreatedSupplyId(create.body);
     createdSupplyIds.push(id);
     expect(create.body.remaining).toBe(100);
 
@@ -110,8 +139,9 @@ describe('Supply e2e', () => {
   it('领用超量 → 400 熔断,库存不变', async () => {
     const create = await request(app.getHttpServer())
       .post('/api/supplies').set('Authorization', `Bearer ${tokenA}`)
-      .send({ name: 'e2e尿素', unit: '袋', amount: 10 });
-    const id = create.body.id;
+      .send({ name: 'e2e尿素', unit: '袋', amount: 10 })
+      .expect(201);
+    const id = requireCreatedSupplyId(create.body);
     createdSupplyIds.push(id);
     const issue = await request(app.getHttpServer())
       .post(`/api/supplies/${id}/issue`).set('Authorization', `Bearer ${tokenA}`)
@@ -124,8 +154,9 @@ describe('Supply e2e', () => {
   it('作用域隔离:merchantB 看不到 A 的农资,越权领用/删除被拒', async () => {
     const create = await request(app.getHttpServer())
       .post('/api/supplies').set('Authorization', `Bearer ${tokenA}`)
-      .send({ name: 'e2e隔离品', unit: '件', amount: 20 });
-    const id = create.body.id;
+      .send({ name: 'e2e隔离品', unit: '件', amount: 20 })
+      .expect(201);
+    const id = requireCreatedSupplyId(create.body);
     createdSupplyIds.push(id);
 
     const listB = await request(app.getHttpServer())
@@ -145,8 +176,9 @@ describe('Supply e2e', () => {
   it('核销:领用配额后打卡超110% → 400;未超 → 201 落两列', async () => {
     const create = await request(app.getHttpServer())
       .post('/api/supplies').set('Authorization', `Bearer ${tokenA}`)
-      .send({ name: 'e2e核销品', unit: '桶', amount: 200 });
-    const id = create.body.id;
+      .send({ name: 'e2e核销品', unit: '桶', amount: 200 })
+      .expect(201);
+    const id = requireCreatedSupplyId(create.body);
     createdSupplyIds.push(id);
     await request(app.getHttpServer())
       .post(`/api/supplies/${id}/issue`).set('Authorization', `Bearer ${tokenA}`)

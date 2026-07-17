@@ -124,13 +124,18 @@ describe('Farm record automatic public trace e2e', () => {
     expect(before.body.events.some((event: any) => event.title === pendingAction)).toBe(false);
 
     const publishedEvent = before.body.events.find((event: any) => event.title === completedAction);
-    expect(publishedEvent).toMatchObject({
+    expect(Object.keys(publishedEvent).sort()).toEqual([
+      'actor', 'location', 'occurredAt', 'payload', 'title', 'type',
+    ]);
+    expect(publishedEvent).toStrictEqual({
       type: 'farm',
+      title: completedAction,
       actor: merchantDisplayName,
       location: fieldName,
+      occurredAt: '2026-07-17T01:02:03.000Z',
       payload: { desc: 'leaf fertilization complete', image: 'https://cdn.example/e2e-farm.jpg' },
     });
-    expect(publishedEvent).not.toHaveProperty('sourceFarmRecordId');
+    expect(Object.keys(publishedEvent.payload).sort()).toEqual(['desc', 'image']);
 
     const publicJson = JSON.stringify(publishedEvent);
     expect(publicJson).toContain('leaf fertilization complete');
