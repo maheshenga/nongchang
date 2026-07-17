@@ -5,7 +5,6 @@
   color: #242424;
   background: #f5f5f5;
 }
-
 body {
   margin: 0;
   min-width: 320px;
@@ -53,26 +52,5 @@ textarea {
   .shadow-sm.bg-white.rounded-xl.border:hover {
     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     transform: translateY(-0.125rem);
-  }
-}
-
-/*
- * 打印隔离:点击"对接本机打印驱动 / 确认排版并打印"调用 window.print() 时,
- * 仅输出标签排版画布(.print-sheet),隐藏所有后台 UI/弹窗外壳,避免整屏被打印。
- */
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .print-sheet,
-  .print-sheet * {
-    visibility: visible;
-  }
-  .print-sheet {
-    position: absolute;
-    left: 0;
-    top: 0;
-    box-shadow: none !important;
-    transform: none !important;
   }
 }

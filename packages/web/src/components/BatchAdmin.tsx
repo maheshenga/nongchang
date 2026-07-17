@@ -1,6 +1,5 @@
-import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, Printer, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2, RefreshCw } from 'lucide-react';
+import { Layers, Plus, Search, Filter, TrendingUp, Calculator, X, QrCode, CheckCircle, ShieldCheck, Download, FileText, FileSpreadsheet, Loader2, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight, Eye, Copy, ExternalLink, ScanLine, Trash2, RefreshCw } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import { useApi } from '../hooks/useApi';
 import { showToast } from '../hooks/useToast';
 import { listBatches, createBatch, getBatchLifecycle, deleteBatch } from '../api/batches';
@@ -8,7 +7,8 @@ import { listFields, type Field } from '../api/fields';
 import { createTraceGenerationRequestKey, generateCodes, listCodes, type TraceCode } from '../api/trace';
 import { downloadCSV } from '../utils/csv';
 import BatchCredentialModal from './BatchCredentialModal';
-import { BatchStatus, type CreateBatchDto } from '@nongchang/shared';
+import BatchLabelWorkspace from './batch-admin/BatchLabelWorkspace';
+import { BatchStatus, type CreateBatchDto, type TraceLabelPaperSize } from '@nongchang/shared';
 import { fluentButton, fluentInput, fluentSelect, fluentStatusTag, fluentTable } from '../ui/fluent';
 import {
   PAGE_SIZE,
@@ -23,6 +23,17 @@ import {
   toViewBatch,
   type ViewBatch,
 } from './BatchAdmin.model';
+
+type LabelWorkspaceState = {
+  batchId: string;
+  batchNo: string;
+  cropName: string;
+  codeIds?: string[];
+  labelCount: number;
+  paperSize: TraceLabelPaperSize;
+};
+
+const MAX_LABEL_EXPORT = 500;
 
 export default function BatchAdmin() {
   const { data: rawBatches, loading, error, reload } = useApi(listBatches);
@@ -58,6 +69,8 @@ export default function BatchAdmin() {
   const [codesBatchId, setCodesBatchId] = useState<string | null>(null);
   const [codesList, setCodesList] = useState<TraceCode[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
+  const [selectedCodeIds, setSelectedCodeIds] = useState<Set<string>>(new Set());
+  const codesRequestId = useRef(0);
   // 删除确认:存待删批次 {id, label, generated};有码时需二次强制确认。
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string; generated: number } | null>(null);
   const [forceConfirm, setForceConfirm] = useState(false);
@@ -68,25 +81,10 @@ export default function BatchAdmin() {
   // 资质/检测管理弹窗:存当前批次 {id, label}。
   const [credentialBatch, setCredentialBatch] = useState<{ id: string; label: string } | null>(null);
   const [qrAmount, setQrAmount] = useState<number>(100);
-  // 一物一码:进入排版预览时为批次真实生成的溯源码列表。
-  const [generatedCodes, setGeneratedCodes] = useState<string[]>([]);
   const generationRequestKeys = useRef<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
-  const [paperSize, setPaperSize] = useState('4x6');
-  
-  // Custom layout config
-  const [labelPaddingX, setLabelPaddingX] = useState<number>(16);
-  const [labelSpacing, setLabelSpacing] = useState<number>(4);
-  const [showAntiFakeLogo, setShowAntiFakeLogo] = useState<boolean>(true);
-  
-  const [showPdfPreview, setShowPdfPreview] = useState(false);
-  // 排版沙盒:纸张边距 / 标签行间距 / 二维码尺寸 + 三个元素投射开关,实时映射到右侧画布。
-  const [sheetMargin, setSheetMargin] = useState<number>(16);
-  const [sheetGap, setSheetGap] = useState<number>(12);
-  const [sheetQrSize, setSheetQrSize] = useState<number>(80);
-  const [showShield, setShowShield] = useState<boolean>(true);
-  const [showProductName, setShowProductName] = useState<boolean>(true);
-  const [showSerial, setShowSerial] = useState<boolean>(true);
+  const [paperSize, setPaperSize] = useState<TraceLabelPaperSize>('4x6');
+  const [labelWorkspace, setLabelWorkspace] = useState<LabelWorkspaceState | null>(null);
   const [isScanningCompliance, setIsScanningCompliance] = useState(false);
   const [showComplianceReport, setShowComplianceReport] = useState<string | null>(null);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
@@ -128,32 +126,27 @@ export default function BatchAdmin() {
 
   // 计算批次毛利率文本,供 CSV 导出复用。
 
-  const handleExport = (format: 'pdf' | 'excel') => {
+  const handleExport = () => {
     setExportDropdownOpen(false);
     const targets = selectedIds.size > 0
       ? batches.filter(b => selectedIds.has(b.id))
       : batches;
     setPendingAction({
       type: 'export',
-      title: `导出批次数据 (${format.toUpperCase()})`,
+      title: '导出批次数据 · CSV（Excel 可打开）',
       description: selectedIds.size > 0
-        ? `即将导出已选中的 ${targets.length} 个批次的生命周期、财务与合规数据为 ${format.toUpperCase()} 文件。`
-        : `即将导出当前系统中全部 ${targets.length} 个批次的生命周期、财务与合规数据为 ${format.toUpperCase()} 文件。`,
+        ? `即将把已选中的 ${targets.length} 个批次生命周期、财务与合规数据导出为 CSV（Excel 可打开）。`
+        : `即将把当前系统中全部 ${targets.length} 个批次生命周期、财务与合规数据导出为 CSV（Excel 可打开）。`,
       affectedCount: targets.length,
-      format,
+      format: 'csv',
       onConfirm: () => {
         setPendingAction(null);
-        setIsExporting(format);
+        setIsExporting('csv');
         try {
-          if (format === 'excel') {
-            const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
-            const rows = toBatchExportRows(targets);
-            downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
-            showToast(`已导出 ${targets.length} 个批次的 Excel 数据报表`);
-          } else {
-            // PDF:走浏览器打印(用户可另存为 PDF)。
-            window.print();
-          }
+          const header = ['批次号', '品种', '种植日期', '地块', '归属商户', '状态', '已签发码数', '累计扫码', '投入成本', '人工成本', '售价', '毛利率'];
+          const rows = toBatchExportRows(targets);
+          downloadCSV(`批次数据报表_${new Date().toISOString().split('T')[0]}.csv`, [header, ...rows]);
+          showToast(`已导出 ${targets.length} 个批次的 CSV（Excel 可打开）数据报表`);
         } finally {
           setIsExporting(null);
         }
@@ -188,14 +181,11 @@ export default function BatchAdmin() {
 
   const activeBatch = batches.find(b => b.id === showQrModal);
 
-  // 生码数量校验:须为 1~10000 的整数(与后端 MAX_CODES_PER_BATCH 一致)。
-  const MAX_CODES = 10000;
-  const qrAmountValid = Number.isInteger(qrAmount) && qrAmount >= 1 && qrAmount <= MAX_CODES;
+  // 本入口会立即把新码交给 PDF 服务，因此与单次 PDF 导出共用 500 上限。
+  const qrAmountValid = Number.isInteger(qrAmount) && qrAmount >= 1 && qrAmount <= MAX_LABEL_EXPORT;
 
   // 消费者扫码访问的真实溯源页 URL(hash 路由 H5)。
-  const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
-  // 标签按索引取真实码;未生成时回退到批次号占位(仅预览,导出前会真实生成)。
-  const codeForIndex = (i: number) => generatedCodes[i] ?? `${activeBatch?.code ?? ''}-预览${i + 1}`;
+  const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${encodeURIComponent(code)}`;
 
   // 进入排版沙盒前为批次真实生成 qrAmount 个唯一溯源码。
   const getGenerationRequestKey = (source: string, batchId: string, count: number) => {
@@ -207,18 +197,27 @@ export default function BatchAdmin() {
     delete generationRequestKeys.current[`${source}:${batchId}:${count}`];
   };
 
-  const handleGenerateCodes = async (): Promise<boolean> => {
-    if (!showQrModal) return false;
+  const handleGenerateCodes = async (): Promise<TraceCode[] | null> => {
+    if (!showQrModal || !activeBatch) return null;
+    const batchId = showQrModal;
+    const batch = activeBatch;
     setGenerating(true);
     try {
-      const requestKey = getGenerationRequestKey('batch-label-preview', showQrModal, qrAmount);
-      const codes = await generateCodes(showQrModal, qrAmount, requestKey);
-      setGeneratedCodes(codes.map(c => c.code));
-      clearGenerationRequestKey('batch-label-preview', showQrModal, qrAmount);
-      return true;
+      const requestKey = getGenerationRequestKey('batch-label-preview', batchId, qrAmount);
+      const codes = await generateCodes(batchId, qrAmount, requestKey);
+      clearGenerationRequestKey('batch-label-preview', batchId, qrAmount);
+      setLabelWorkspace({
+        batchId,
+        batchNo: batch.code,
+        cropName: batch.type,
+        codeIds: codes.map((code) => code.id),
+        labelCount: codes.length,
+        paperSize,
+      });
+      return codes;
     } catch (e) {
       showToast(e instanceof Error ? `生成真实溯源码失败:${e.message}` : '生成真实溯源码失败');
-      return false;
+      return null;
     } finally {
       setGenerating(false);
     }
@@ -241,17 +240,43 @@ export default function BatchAdmin() {
 
   // 打开已生成码列表:拉取该批次全部溯源码(含各自扫码次数)。
   const openCodes = async (id: string) => {
+    const requestId = ++codesRequestId.current;
     setCodesBatchId(id);
     setCodesList([]);
+    setSelectedCodeIds(new Set());
     setCodesLoading(true);
     try {
-      setCodesList(await listCodes(id));
+      const codes = await listCodes(id);
+      if (requestId === codesRequestId.current) setCodesList(codes);
     } catch (e) {
-      showToast(e instanceof Error ? `加载溯源码失败:${e.message}` : '加载溯源码失败');
-      setCodesBatchId(null);
+      if (requestId === codesRequestId.current) {
+        showToast(e instanceof Error ? `加载溯源码失败:${e.message}` : '加载溯源码失败');
+        setCodesBatchId(null);
+      }
     } finally {
-      setCodesLoading(false);
+      if (requestId === codesRequestId.current) setCodesLoading(false);
     }
+  };
+
+  const closeCodes = () => {
+    codesRequestId.current += 1;
+    setCodesBatchId(null);
+    setCodesList([]);
+    setSelectedCodeIds(new Set());
+  };
+
+  const openExistingCodeWorkspace = (codeIds?: string[]) => {
+    if (!codesBatchId) return;
+    const batch = batches.find((item) => item.id === codesBatchId);
+    if (!batch) return;
+    setLabelWorkspace({
+      batchId: codesBatchId,
+      batchNo: batch.code,
+      cropName: batch.type,
+      ...(codeIds === undefined ? {} : { codeIds }),
+      labelCount: codeIds?.length ?? codesList.length,
+      paperSize,
+    });
   };
 
   // 复制溯源链接到剪贴板。
@@ -315,11 +340,8 @@ export default function BatchAdmin() {
               </button>
               {exportDropdownOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-[4px] border border-[#E1DFDD] bg-white shadow-lg">
-                  <button onClick={() => handleExport('pdf')} className="flex w-full items-center gap-2 border-b border-[#EDEBE9] px-3 py-2 text-left text-sm text-[#242424] hover:bg-[#F3F2F1]">
-                    <FileText className="h-4 w-4 text-[#A4262C]" /> 标准 PDF 溯源版
-                  </button>
-                  <button onClick={() => handleExport('excel')} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#242424] hover:bg-[#F3F2F1]">
-                    <FileSpreadsheet className="h-4 w-4 text-[#107C10]" /> 原始 Excel 数据表
+                  <button onClick={handleExport} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#242424] hover:bg-[#F3F2F1]">
+                    <FileSpreadsheet className="h-4 w-4 text-[#107C10]" /> CSV（Excel 可打开）
                   </button>
                 </div>
               )}
@@ -502,11 +524,8 @@ export default function BatchAdmin() {
             </button>
             {exportDropdownOpen && (
               <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-slate-200 rounded-[6px] shadow-lg overflow-hidden z-20 animate-in fade-in slide-in-from-top-2">
-                <button onClick={() => handleExport('pdf')} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-red-50 hover:text-red-700 flex items-center gap-3 transition-colors border-b border-slate-100">
-                  <div className="bg-red-100 text-red-600 p-1.5 rounded-md"><FileText className="w-4 h-4" /></div> 标准 PDF 溯源版
-                </button>
-                <button onClick={() => handleExport('excel')} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-[#F3F2F1] hover:text-[#107C10] flex items-center gap-3 transition-colors">
-                  <div className="bg-[#DFF6DD] text-[#107C10] p-1.5 rounded-md"><FileSpreadsheet className="w-4 h-4" /></div> 原始 Excel 数据表
+                <button onClick={handleExport} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-[#F3F2F1] hover:text-[#107C10] flex items-center gap-3 transition-colors">
+                  <div className="bg-[#DFF6DD] text-[#107C10] p-1.5 rounded-md"><FileSpreadsheet className="w-4 h-4" /></div> CSV（Excel 可打开）
                 </button>
               </div>
             )}
@@ -762,339 +781,88 @@ export default function BatchAdmin() {
       )}
 
       {/* QR Generation Modal */}
-      {showQrModal && activeBatch && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm">
-           <div className="bg-white rounded-[6px] shadow-lg w-full max-w-4xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col md:flex-row transform transition-all h-[90vh] md:h-auto max-h-[800px]">
-              <div className="w-full md:w-[55%] p-8 border-r border-slate-100 bg-slate-50/80 flex flex-col overflow-y-auto">
-                 <div className="flex justify-between items-center mb-8">
-                    <h3 className="font-bold text-slate-800 text-xl flex items-center gap-3">
-                       <div className="p-2.5 bg-blue-100 text-blue-600 rounded-[6px] shadow-sm">
-                         <QrCode className="w-6 h-6" /> 
-                       </div>
-                       专属溯源标签批量引擎
-                    </h3>
-                 </div>
-                 
-                 <div className="space-y-6 flex-1">
-                    <div className="bg-white p-4 rounded-[6px] border border-slate-200 shadow-sm flex items-center gap-4">
-                       <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400">
-                         <Layers className="w-6 h-6" />
-                       </div>
-                       <div>
-                         <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">当前挂载目标批次序列</label>
-                         <div className="text-sm font-black text-slate-800 tracking-wide">
-                           <span className="font-mono text-blue-600 mr-2 bg-blue-50 px-2 py-0.5 rounded">{activeBatch.id}</span> 
-                           {activeBatch.type}
-                         </div>
-                       </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="col-span-2">
-                         <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">物理标签纸张切割规格 <span className="text-[10px] text-slate-400 bg-slate-200/50 px-1.5 py-0.5 rounded ml-2 normal-case">热敏打印机必须参数</span></label>
-                         <select 
-                           value={paperSize} 
-                           onChange={(e) => setPaperSize(e.target.value)}
-                           className="w-full px-4 py-3 bg-white border border-slate-200 rounded-[6px] text-sm font-bold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                         >
-                            <option value="4x6">标准物流特大外箱贴 (4"x6")</option>
-                            <option value="2x1">盆栽单株植物迷你标 (2"x1")</option>
-                            <option value="A4">A4 激光不干胶合集阵列 (每页21贴)</option>
-                         </select>
-                      </div>
-
-                      <div className="col-span-2">
-                         <label className="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">预设批量衍生总数 <span className="text-[10px] text-slate-400 font-normal ml-2 tracking-normal">(单批次 1 ~ {MAX_CODES} 张)</span></label>
-                         <div className="relative">
-                           <input
-                              type="number"
-                              min={1}
-                              max={MAX_CODES}
-                              value={qrAmount}
-                              onChange={(e) => setQrAmount(Math.floor(Number(e.target.value)))}
-                              className={`w-full pl-4 pr-12 py-3 bg-white border rounded-[6px] text-lg font-black text-slate-800 shadow-sm focus:outline-none focus:ring-2 font-mono transition-all ${qrAmountValid ? 'border-slate-200 focus:ring-blue-500/20 focus:border-blue-500' : 'border-rose-300 focus:ring-rose-500/20 focus:border-rose-500'}`}
-                           />
-                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">张</span>
-                         </div>
-                         {!qrAmountValid && (
-                           <p className="mt-2 text-xs font-bold text-rose-500 flex items-center gap-1.5">
-                             <AlertTriangle className="w-3.5 h-3.5" /> 生成数量须为 1 ~ {MAX_CODES} 的整数
-                           </p>
-                         )}
-                      </div>
-                    </div>
-                    
-                    <div className="border border-slate-200 rounded-[6px] p-5 bg-white space-y-4 shadow-sm group hover:border-slate-300 transition-colors">
-                       <div className="flex items-center gap-2 mb-2">
-                         <Calculator className="w-4 h-4 text-slate-400" />
-                         <span className="text-xs font-bold text-slate-800 uppercase tracking-widest">标签排版参数</span>
-                       </div>
-                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                             <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase">X/Y 轴间距容斥 (px)</label>
-                             <input type="number" value={labelSpacing} onChange={(e) => setLabelSpacing(Number(e.target.value))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-500/20 transition-all font-mono" />
-                          </div>
-                          <div>
-                             <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase">安全出血边距 (px)</label>
-                             <input type="number" value={labelPaddingX} onChange={(e) => setLabelPaddingX(Number(e.target.value))} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:bg-white focus:ring-2 focus:ring-slate-500/20 transition-all font-mono" />
-                          </div>
-                       </div>
-                       <label className="flex items-center gap-3 cursor-pointer bg-slate-50 p-3 rounded-lg border border-slate-100 hover:bg-slate-100 transition-colors mt-2">
-                          <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${showAntiFakeLogo ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300 text-transparent'}`}>
-                             <CheckCircle className="w-3.5 h-3.5" />
-                          </div>
-                          <input type="checkbox" checked={showAntiFakeLogo} onChange={(e) => setShowAntiFakeLogo(e.target.checked)} className="hidden" />
-                          <span className="text-xs font-bold text-slate-700 tracking-wide">显示平台标识栏</span>
-                       </label>
-                    </div>
-                    
-                    <div className="bg-[#EFF6FC] p-4 rounded-[6px] border border-blue-100/50 text-xs text-blue-800 flex items-start gap-3 shadow-sm">
-                       <div className="bg-white p-1.5 rounded-lg border border-blue-100 shadow-sm shrink-0">
-                         <Printer className="w-4 h-4 text-blue-600" />
-                       </div>
-                       <p className="leading-relaxed font-medium">生成后可在浏览器打印预览中输出或另存为 PDF。实际打印设备、纸张规格和清晰度以本地打印环境为准。</p>
-                    </div>
-                 </div>
-                 
-                 {/* Push down controls */}
-                 <div className="flex-1 min-h-[40px]"></div>
-
-                 <div className="mt-8 flex justify-between gap-4 shrink-0">
-                    <button onClick={() => setShowQrModal(null)} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 hover:text-slate-800 rounded-[6px] shadow-sm hover:bg-slate-50 hover:border-slate-300 font-bold text-sm transition-all focus:ring-4 focus:ring-slate-100 min-w-[120px]">暂缓生成</button>
-                    <button onClick={() => {
-                        setPendingAction({
-                          type: 'generate',
-                          title: '批量生成并导出溯源标签矩阵',
-                          description: `将通过真实溯源码接口为批次 [${activeBatch?.id}] 生成 ${qrAmount} 枚唯一溯源码 (标签规格: ${paperSize})。生成后会消耗可用二维码额度,请确认数量。`,
-                          affectedCount: qrAmount,
-                          batchId: activeBatch?.id,
-                          onConfirm: async () => {
-                             const ok = await handleGenerateCodes();
-                             setPendingAction(null);
-                             if (ok) setShowPdfPreview(true);
-                          }
-                        });
-                    }} disabled={!qrAmountValid} className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-[6px] shadow-sm font-bold text-sm transition-all flex items-center justify-center gap-2 transform active:scale-[0.98] focus:ring-4 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed">
-                       生成真实溯源码
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-                    </button>
-                 </div>
+      {showQrModal && activeBatch && !labelWorkspace && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-label="生成溯源标签">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-[6px] border border-[#E1DFDD] bg-white shadow-lg">
+            <div className="flex items-start justify-between border-b border-[#E1DFDD] px-6 py-5">
+              <div>
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-[#242424]"><QrCode className="h-5 w-5 text-[#0078D4]" />生成溯源标签</h3>
+                <p className="mt-1 text-sm text-[#605E5C]">批次 {activeBatch.code} · {activeBatch.type}</p>
               </div>
-
-              <div className="w-full md:w-[45%] p-8 flex flex-col items-center justify-center bg-[#f1f5f9] relative overflow-hidden border-t md:border-t-0 border-slate-200">
-                 <button onClick={() => setShowQrModal(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-white rounded-lg p-2 transition-colors z-20 md:hidden">
-                    <X className="w-6 h-6" />
-                 </button>
-                 <div className="absolute top-6 left-6 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black text-slate-600 uppercase tracking-widest shadow-sm border border-slate-200 z-20 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#107C10] animate-pulse"></span>
-                    实时物理标尺预览沙盒
-                 </div>
-                 
-                 {/* Preview mock parent container to simulate environment */}
-                 <div className="w-full h-full flex flex-col items-center justify-center z-10 p-6 min-h-[400px]">
-                   <div 
-                     style={{ padding: `${labelPaddingX}px`, gap: `${labelSpacing}px` }}
-                     className={`bg-white shadow-lg relative transition-all duration-300 transform md:scale-100 scale-90 origin-center select-none ring-1 ring-slate-200/50
-                     ${paperSize === '4x6' ? 'w-[280px] min-h-[420px] flex flex-col rounded-md' : 
-                       paperSize === '2x1' ? 'w-[200px] h-28 flex items-center justify-between rounded-sm px-2' : 
-                       'w-[350px] h-[480px] grid grid-cols-2 grid-rows-4 rounded bg-slate-50'}`}
-                   >
-                      {paperSize === '4x6' ? (
-                         <div className="flex-1 flex flex-col h-full border-[3px] border-slate-200 border-dashed rounded overflow-hidden relative">
-                           {showAntiFakeLogo && (
-                             <div className="text-center bg-slate-900 flex items-center justify-center gap-2 text-white font-black py-3 tracking-widest text-xs shrink-0">
-                               <ShieldCheck className="w-4 h-4 text-[#107C10]" />
-                               溯源标签预览
-                             </div>
-                           )}
-                           <div className="flex-1 flex flex-col items-center justify-center p-6 bg-white bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
-                             <div className="bg-white p-3 rounded-[6px] shadow-sm border border-slate-100">
-                                <QRCodeSVG value={traceUrl(codeForIndex(0))} size={140} level="H" />
-                             </div>
-                             <div className="mt-5 flex flex-col items-center gap-2 bg-slate-50 px-4 py-2.5 rounded-[6px] border border-slate-200 w-full text-center">
-                               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">唯一数字映射标识</span>
-                               <span className="font-mono font-black text-xl text-slate-900 tracking-widest bg-white px-2 rounded shadow-sm border border-slate-100 w-full overflow-hidden text-ellipsis">
-                                 {codeForIndex(0)}
-                               </span>
-                             </div>
-                           </div>
-                           <div className="bg-slate-50 border-t-[3px] border-dashed border-slate-200 p-4 text-xs space-y-2.5 shrink-0">
-                             <div className="flex justify-between items-center border-b border-slate-200/50 pb-2"><span className="text-slate-500 font-bold">农科培育品种:</span> <span className="font-black text-slate-800 text-sm tracking-wide bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100">{activeBatch.type}</span></div>
-                             <div className="flex justify-between items-center"><span className="text-slate-500 font-bold">法定备案原产地:</span> <span className="font-black text-slate-800 tracking-wide">云南·大理白族自治州</span></div>
-                           </div>
-                         </div>
-                      ) : paperSize === '2x1' ? (
-                         <div className="flex-1 w-full h-full border-2 border-slate-200 border-dashed rounded-sm flex flex-row items-center justify-between p-2 bg-white relative overflow-hidden">
-                           <div className="absolute top-0 right-0 w-8 h-8 bg-slate-50 origin-bottom-left transform rotate-45 translate-x-4 -translate-y-4"></div>
-                           <div className="p-1 border border-slate-100 rounded-md bg-white shadow-sm shrink-0">
-                             <QRCodeSVG value={traceUrl(codeForIndex(0))} size={showAntiFakeLogo ? 60 : 76} level="H" />
-                           </div>
-                           <div className="flex-1 ml-3 text-right flex flex-col justify-center h-full">
-                             {showAntiFakeLogo && <div className="text-[8px] font-black text-[#107C10] mb-1 tracking-widest flex justify-end items-center gap-1 uppercase"><ShieldCheck className="w-2.5 h-2.5" /> 核准溯源</div>}
-                             <div className="font-black text-xs text-slate-800 leading-tight tracking-wide bg-slate-50 px-1 py-0.5 rounded ml-auto border border-slate-100 mb-1 w-max max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{activeBatch.type}</div>
-                             <div className="font-mono font-bold text-[9px] text-slate-500 mt-auto truncate tracking-widest px-1">{codeForIndex(0)}</div>
-                           </div>
-                         </div>
-                      ) : (
-                       Array.from({length: 8}).map((_, i) => (
-                          <div key={i} className="border border-slate-300 border-dashed rounded flex flex-col items-center justify-center p-1 bg-white relative">
-                             {showAntiFakeLogo && <ShieldCheck className="absolute top-1 left-1 w-2.5 h-2.5 text-[#107C10] opacity-50" />}
-                             <QRCodeSVG value={traceUrl(codeForIndex(i))} size={38} level="L" />
-                             <div className="text-[6px] font-mono mt-1 text-slate-600 bg-slate-100 px-1 rounded">{codeForIndex(i).substring(0,8)}</div>
-                          </div>
-                       ))
-                    )}
-                 </div>
+              <button type="button" onClick={() => setShowQrModal(null)} aria-label="关闭生成设置" title="关闭" className={fluentButton('subtle')}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="space-y-5 px-6 py-5">
+              <label className="block text-sm font-semibold text-[#323130]">
+                纸张规格
+                <select aria-label="纸张规格" value={paperSize} onChange={(event) => setPaperSize(event.target.value as TraceLabelPaperSize)} className={`${fluentSelect} mt-1 w-full`}>
+                  <option value="4x6">4x6 英寸（单张单页）</option>
+                  <option value="2x1">2x1 英寸（单张单页）</option>
+                  <option value="A4">A4（每页 21 张）</option>
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-[#323130]">
+                生成数量
+                <input
+                  aria-label="生成数量"
+                  type="number"
+                  min={1}
+                  max={MAX_LABEL_EXPORT}
+                  value={qrAmount}
+                  onChange={(event) => setQrAmount(Math.floor(Number(event.target.value)))}
+                  className={`${fluentInput} mt-1 w-full`}
+                />
+              </label>
+              {!qrAmountValid && <p className="text-sm text-[#A4262C]" role="alert">生成数量须为 1 ~ {MAX_LABEL_EXPORT} 的整数</p>}
+              <div className="border border-[#E1DFDD] bg-[#FAFAFA] p-4 text-sm text-[#605E5C]">
+                <p>生成会消耗 {qrAmountValid ? qrAmount : 0} 个二维码额度；随后由后端生成真实 PDF。</p>
+                <p className="mt-1">PDF 预览、下载和打印使用同一文件，失败重试不会再次生成溯源码。</p>
               </div>
-           </div>
-        </div>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-[#E1DFDD] px-6 py-4">
+              <button type="button" onClick={() => setShowQrModal(null)} className={fluentButton('secondary')}>暂缓生成</button>
+              <button
+                type="button"
+                disabled={!qrAmountValid || generating}
+                onClick={() => {
+                  setPendingAction({
+                    type: 'generate',
+                    title: '生成真实溯源码并创建标签 PDF',
+                    description: `将为批次 [${activeBatch.id}] 生成 ${qrAmount} 枚唯一溯源码（纸张：${paperSize}）。生成会扣减二维码额度，PDF 重试不会重复扣减。`,
+                    affectedCount: qrAmount,
+                    batchId: activeBatch.id,
+                    onConfirm: async () => {
+                      await handleGenerateCodes();
+                      setPendingAction(null);
+                    },
+                  });
+                }}
+                className={fluentButton('primary')}
+              >
+                {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+                生成真实溯源码
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* PDF Generation Print Preview (Full Screen) */}
-      {showPdfPreview && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm shadow-lg p-4">
-            <div className="bg-slate-50 rounded-[6px] shadow-lg w-full max-w-6xl h-[90vh] overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-300">
-               <div className="p-6 bg-white/80 backdrop-blur-md border-b border-slate-200/60 flex justify-between items-center shrink-0">
-                  <h3 className="font-bold text-slate-800 text-lg flex items-center gap-3">
-                     <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg shadow-sm">
-                       <Printer className="w-5 h-5" />
-                     </div>
-                     可视化标签排版及导出引擎
-                     <span className="text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded-full ml-3 hidden sm:inline-block shadow-sm">
-                       序列号列队: 1 ~ {qrAmount}
-                     </span>
-                  </h3>
-                  <button onClick={() => setShowPdfPreview(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
-               </div>
-               
-               <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative">
-                  {/* Left Side: Layout Configurator */}
-                  <div className="w-full md:w-80 bg-white border-r border-slate-200/60 p-6 overflow-y-auto shrink-0 flex flex-col gap-8 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] relative z-10">
-                     <div>
-                        <h4 className="font-black text-[11px] text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
-                           <Layers className="w-3.5 h-3.5" /> 纸张版式控制器
-                        </h4>
-                        
-                        <div className="space-y-6">
-                           <div>
-                              <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
-                                <span>纸张边距 (X/Y)</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetMargin}px</span>
-                              </label>
-                              <input type="range" min="0" max="40" value={sheetMargin} onChange={(e) => setSheetMargin(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
-                           </div>
-
-                           <div>
-                              <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
-                                <span>标签行间距 (Gap)</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetGap}px</span>
-                              </label>
-                              <input type="range" min="0" max="32" value={sheetGap} onChange={(e) => setSheetGap(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
-                           </div>
-
-                           <div>
-                              <label className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
-                                <span>防伪溯源码尺寸比</span>
-                                <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{sheetQrSize}px</span>
-                              </label>
-                              <input type="range" min="40" max="120" value={sheetQrSize} onChange={(e) => setSheetQrSize(Number(e.target.value))} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-full appearance-none hover:accent-indigo-700 transition-all cursor-pointer" />
-                           </div>
-                        </div>
-                     </div>
-
-                     <div className="h-px bg-slate-100 w-full"></div>
-
-                     <div>
-                        <h4 className="font-black text-[11px] text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
-                           <ShieldCheck className="w-3.5 h-3.5" /> 元算元素投射
-                        </h4>
-                        <div className="space-y-3">
-                           <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" checked={showShield} onChange={(e) => setShowShield(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
-                              显示平台标识
-                           </label>
-                           <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" checked={showProductName} onChange={(e) => setShowProductName(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
-                              映射关联商品品名
-                           </label>
-                           <label className="flex items-center gap-3 text-sm font-bold text-slate-700 cursor-pointer hover:bg-slate-50 p-2 -ml-2 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                              <input type="checkbox" checked={showSerial} onChange={(e) => setShowSerial(e.target.checked)} className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 bg-slate-100 border-slate-300" />
-                              挂载动态流水号序列
-                           </label>
-                        </div>
-                     </div>
-
-                     <div className="mt-auto pt-6">
-                        <div className="p-4 bg-[#EFF6FC] border border-indigo-100/50 rounded-[6px] text-xs text-indigo-800 leading-relaxed font-medium shadow-sm flex items-start gap-3">
-                           <div className="bg-white p-1.5 rounded-lg shrink-0 shadow-sm border border-indigo-100">
-                             <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
-                           </div>
-                           左侧物理介质调校面板的参数将进行毫秒级热更新计算，直接映射至右侧高保真画布中。并以此最终态输出印刷级 PDF 文件。
-                        </div>
-                     </div>
-                  </div>
-
-                  {/* Right Side: Visual Canvas */}
-                  <div className="flex-1 overflow-y-auto bg-[#e2e8f0] p-8 flex flex-col items-center relative pattern-boxes pattern-slate-300 pattern-bg-transparent pattern-size-4">
-                     {/* Export Header Control */}
-                     <div className="bg-white/90 backdrop-blur-md sticky top-0 z-20 mb-6 px-6 py-3 rounded-[6px] shadow-sm border border-slate-200 w-full max-w-4xl flex justify-between items-center bg-slate-50">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-slate-500 bg-white px-2 py-1 rounded shadow-sm border border-slate-100">A4 标准预切不干胶 (21贴/页)</span>
-                          <span className="text-xs font-mono font-bold text-slate-400">总计 {Math.ceil(qrAmount / 21)} 页</span>
-                        </div>
-                        <div className="flex gap-3">
-                          <button onClick={() => {
-                             window.print();
-                          }} className="flex items-center justify-center gap-2 text-indigo-600 font-bold text-sm bg-white border border-indigo-100 px-5 py-2 rounded-[6px] transition-all shadow-sm hover:border-indigo-300 hover:shadow-md focus:ring-4 focus:ring-indigo-500/20 active:scale-95">
-                            <Printer className="w-4 h-4" /> 对接本机打印驱动
-                          </button>
-                          <button onClick={() => {
-                             setShowPdfPreview(false);
-                             setShowQrModal(null);
-                             showToast(`已为批次生成 ${generatedCodes.length} 个唯一溯源码并导出标签。`);
-                             setGeneratedCodes([]);
-                          }} className="flex items-center justify-center gap-2 text-white font-bold text-sm bg-indigo-600 hover:bg-indigo-700 px-6 py-2 rounded-[6px] transition-all shadow border border-indigo-700/50 focus:ring-4 focus:ring-indigo-500/30 active:scale-95">
-                            <Download className="w-4 h-4" /> 导出印刷级 PDF
-                          </button>
-                        </div>
-                     </div>
-                     
-                     <div style={{ padding: `${sheetMargin}px`, gap: `${sheetGap}px` }} className="print-sheet bg-white shadow-lg ring-1 ring-slate-900/5 min-h-[842px] w-[595px] grid grid-cols-3 pb-20 transform transition-transform hover:scale-[1.02] duration-500 ease-out origin-top border-t-8 border-indigo-600">
-                        {Array.from({length: Math.min(21, qrAmount)}).map((_, i) => (
-                           <div key={i} className="border-2 border-dashed border-slate-300 rounded p-2 flex flex-col items-center justify-center relative hover:bg-slate-50 transition-colors cursor-pointer group">
-                              <div className="absolute top-1 left-1 flex items-center gap-1">
-                                 {showShield && <CheckCircle className="w-3 h-3 text-[#107C10]" />}
-                              </div>
-                              {showSerial && <div className="absolute top-1 right-1 text-[8px] text-slate-400 font-mono font-bold">{i+1}/{qrAmount}</div>}
-                              <QRCodeSVG value={traceUrl(codeForIndex(i))} size={sheetQrSize} level="M" />
-                              {showProductName && <div className="mt-2 text-[10px] font-bold text-slate-800 text-center">{activeBatch?.type}</div>}
-                              {showSerial && <div className="text-[8px] text-slate-500 font-mono">{codeForIndex(i)}</div>}
-                              <div className="absolute inset-0 border-2 border-indigo-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                           </div>
-                        ))}
-                     </div>
-                     {qrAmount > 21 && (
-                        <div className="mt-6 text-slate-500 font-bold text-sm bg-white px-6 py-3 rounded-full shadow-md border border-slate-200">
-                           ... 以及其他 {qrAmount - 21} 张标签分页显示 ...
-                        </div>
-                     )}
-                  </div>
-               </div>
-
-               <div className="p-4 bg-white border-t border-slate-200 flex justify-end gap-3 shrink-0">
-                  <button onClick={() => setShowPdfPreview(false)} className="px-5 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded transition-colors">返回设置</button>
-                  <button onClick={() => {
-                     window.print();
-                     setShowPdfPreview(false);
-                     setShowQrModal(null);
-                     showToast(`已成功为批次生成 ${qrAmount} 个真实溯源码`);
-                  }} className="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow flex items-center gap-2">
-                     <Printer className="w-5 h-5" /> 确认排版并打印 PDF
-                  </button>
-               </div>
-            </div>
-         </div>
+      {labelWorkspace && (
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 p-2 sm:p-4" role="dialog" aria-modal="true" aria-label="溯源标签 PDF">
+          <div className="mx-auto w-full max-w-6xl bg-white shadow-lg">
+            <p className="border-b border-[#E1DFDD] bg-[#FFF4CE] px-4 py-3 text-sm text-[#323130]">
+              溯源码已生成；若标签文件生成失败，请直接在下方重试 PDF，不会再次生成溯源码。
+            </p>
+            <BatchLabelWorkspace
+              batchId={labelWorkspace.batchId}
+              batchNo={labelWorkspace.batchNo}
+              cropName={labelWorkspace.cropName}
+              codeIds={labelWorkspace.codeIds}
+              labelCount={labelWorkspace.labelCount}
+              initialPaperSize={labelWorkspace.paperSize}
+              onClose={() => setLabelWorkspace(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Profit Analysis Plugin Modal */}
@@ -1379,7 +1147,7 @@ export default function BatchAdmin() {
       {codesBatchId && (() => {
         const b = batches.find(x => x.id === codesBatchId);
         return (
-          <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-label="已生成溯源码">
             <div className="bg-white rounded-[6px] shadow-lg w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
               <div className="p-6 border-b border-slate-100 bg-violet-50 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-violet-900 text-lg flex items-center gap-3">
@@ -1387,7 +1155,31 @@ export default function BatchAdmin() {
                   已生成溯源码 · <span className="font-mono text-violet-700">{b?.code}</span>
                   <span className="text-xs font-mono bg-white text-violet-600 px-2 py-0.5 rounded border border-violet-200">{codesList.length} 个</span>
                 </h3>
-                <button onClick={() => setCodesBatchId(null)} className="text-violet-400 hover:text-violet-700 hover:bg-violet-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+                <button onClick={closeCodes} aria-label="关闭已生成码" title="关闭" className="text-violet-400 hover:text-violet-700 hover:bg-violet-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-b border-[#E1DFDD] px-6 py-3 text-sm">
+                <span className="mr-auto font-semibold text-[#323130]">已选择 {selectedCodeIds.size} / {MAX_LABEL_EXPORT}</span>
+                <button
+                  type="button"
+                  disabled={codesList.length === 0 || codesList.length > MAX_LABEL_EXPORT}
+                  onClick={() => setSelectedCodeIds(new Set(codesList.map((code) => code.id)))}
+                  className={fluentButton('secondary')}
+                >
+                  全选
+                </button>
+                {codesList.length > MAX_LABEL_EXPORT && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCodeIds(new Set(codesList.slice(0, MAX_LABEL_EXPORT).map((code) => code.id)))}
+                    className={fluentButton('secondary')}
+                  >
+                    选择前 500 个
+                  </button>
+                )}
+                <button type="button" disabled={selectedCodeIds.size === 0} onClick={() => setSelectedCodeIds(new Set())} className={fluentButton('subtle')}>
+                  取消选择
+                </button>
+                {codesList.length > MAX_LABEL_EXPORT && <p className="w-full text-[#A4262C]">单次最多 500，请分批选择</p>}
               </div>
               <div className="flex-1 overflow-y-auto p-6">
                 {codesLoading && <div className="py-12 text-center text-slate-400 text-sm">加载中…</div>}
@@ -1395,8 +1187,23 @@ export default function BatchAdmin() {
                 {!codesLoading && codesList.length > 0 && (
                   <div className="space-y-2">
                     {codesList.map(c => (
-                      <div key={c.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-[6px] px-4 py-3 shadow-sm hover:border-violet-200 transition-colors">
-                        <span className="font-mono font-bold text-slate-800 text-sm flex-1 truncate">{c.code}</span>
+                      <div key={c.id} className="flex flex-col items-stretch gap-2 rounded-[6px] border border-slate-200 bg-white px-4 py-3 shadow-sm transition-colors hover:border-violet-200 sm:flex-row sm:items-center sm:gap-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`选择溯源码 ${c.code}`}
+                          checked={selectedCodeIds.has(c.id)}
+                          disabled={!selectedCodeIds.has(c.id) && selectedCodeIds.size >= MAX_LABEL_EXPORT}
+                          onChange={(event) => {
+                            setSelectedCodeIds((previous) => {
+                              const next = new Set(previous);
+                              if (event.target.checked && next.size < MAX_LABEL_EXPORT) next.add(c.id);
+                              if (!event.target.checked) next.delete(c.id);
+                              return next;
+                            });
+                          }}
+                          className="h-4 w-4 shrink-0 accent-[#0078D4]"
+                        />
+                        <span className="min-w-0 flex-1 truncate font-mono text-sm font-bold text-slate-800">{c.code}</span>
                         <span className="text-xs text-slate-400 shrink-0">扫码 <span className="font-bold text-blue-600 font-mono">{c.scanCount}</span> 次</span>
                         <button onClick={() => copyLink(c.code)} title="复制溯源链接" className="flex items-center gap-1 text-violet-600 hover:text-white hover:bg-violet-600 text-xs font-bold border border-violet-100 bg-violet-50 px-2.5 py-1.5 rounded-lg transition-all">
                           <Copy className="w-3 h-3" /> 复制链接
@@ -1408,6 +1215,27 @@ export default function BatchAdmin() {
                     ))}
                   </div>
                 )}
+              </div>
+              <div className="border-t border-[#E1DFDD] bg-white px-6 py-4">
+                <p className="mb-3 text-sm text-[#605E5C]">导出已生成溯源码不会再次扣减二维码额度。</p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={selectedCodeIds.size === 0}
+                    onClick={() => openExistingCodeWorkspace(Array.from(selectedCodeIds))}
+                    className={fluentButton('primary')}
+                  >
+                    导出选中（{selectedCodeIds.size}）
+                  </button>
+                  <button
+                    type="button"
+                    disabled={codesList.length === 0 || codesList.length > MAX_LABEL_EXPORT}
+                    onClick={() => openExistingCodeWorkspace()}
+                    className={fluentButton('secondary')}
+                  >
+                    导出全部
+                  </button>
+                </div>
               </div>
             </div>
           </div>
