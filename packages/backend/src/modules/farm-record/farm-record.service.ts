@@ -21,6 +21,20 @@ import {
 export class FarmRecordService {
   constructor(private prisma: PrismaService, private scope: ScopeService) {}
 
+  private async createAndPublish(
+    tx: Prisma.TransactionClient,
+    data: Prisma.FarmRecordUncheckedCreateInput,
+    context: { ownerDisplayName: string; fieldName: string },
+  ) {
+    const created = await tx.farmRecord.create({ data });
+    if (created.status === 'completed') {
+      await tx.traceEvent.create({
+        data: buildFarmRecordTraceEventData({ record: created, ...context }),
+      });
+    }
+    return created;
+  }
+
   async create(user: AuthUser, dto: CreateFarmRecordDto) {
     await this.scope.assertInScope(this.prisma, user, 'batch', dto.batchId);
     await this.scope.assertInScope(this.prisma, user, 'field', dto.fieldId);
@@ -44,10 +58,17 @@ export class FarmRecordService {
       });
       if (!sup) throw new ForbiddenException('农资不在可操作范围内');
       if (sup.ownerId !== batch.ownerId) throw new ForbiddenException('农资不属于该批次归属商家,拒绝核销');
-      // 配额核销:读累计用量、判 110%、再写,三步必须原子。
-      // 否则并发提交在"读"与"写"之间无锁(TOCTOU),可双双通过校验导致超额核销。
-      // 用事务 + 对该 supply 行 FOR UPDATE 行锁串行化同一农资的并发核销。
-      const created = await this.prisma.$transaction(async (tx) => {
+    }
+
+    const context = {
+      ownerDisplayName: batch.owner.displayName,
+      fieldName: batch.field.name,
+    };
+    const created = await this.prisma.$transaction(async (tx) => {
+      if (shouldApplySupplyQuota(dto)) {
+        // 配额核销:读累计用量、判 110%、再写,三步必须原子。
+        // 否则并发提交在"读"与"写"之间无锁(TOCTOU),可双双通过校验导致超额核销。
+        // 用事务 + 对该 supply 行 FOR UPDATE 行锁串行化同一农资的并发核销。
         await tx.$queryRaw`SELECT id FROM batches WHERE id = ${dto.batchId} FOR UPDATE`;
         // 锁定 supply 行:并发核销同一农资的事务在此排队,保证后到者读到前者已提交的用量。
         await tx.$queryRaw`SELECT id FROM supplies WHERE id = ${dto.supplyId} FOR UPDATE`;
@@ -62,22 +83,8 @@ export class FarmRecordService {
           consumed: consumedAgg._sum.supplyAmount ?? 0,
           requested: dto.supplyAmount!,
         });
-        return tx.farmRecord.create({ data });
-      });
-      return serializeFarmRecord(created);
-    }
-    const created = await this.prisma.$transaction(async (tx) => {
-      const record = await tx.farmRecord.create({ data });
-      if (record.status === 'completed') {
-        await tx.traceEvent.create({
-          data: buildFarmRecordTraceEventData({
-            record,
-            ownerDisplayName: batch.owner.displayName,
-            fieldName: batch.field.name,
-          }),
-        });
       }
-      return record;
+      return this.createAndPublish(tx, data, context);
     });
     return serializeFarmRecord(created);
   }

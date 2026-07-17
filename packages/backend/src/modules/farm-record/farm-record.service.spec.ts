@@ -18,6 +18,7 @@ function makeService(overrides: any = {}) {
   let txFarmRecordCreateCount = 0;
   let rootTraceEventCreateCount = 0;
   let txTraceEventCreateCount = 0;
+  let transactionError: unknown;
   const rootFarmRecord = {
     create: async (a: any) => {
       rootFarmRecordCreateCount += 1;
@@ -71,12 +72,19 @@ function makeService(overrides: any = {}) {
       return { id: 'sup1', ownerId: overrides.supplyOwnerMatches === false ? 'm2' : 'm1' };
     } },
     // 核销路径用事务 + FOR UPDATE 行锁;tx 复用同一组 mock 表。
-    $transaction: async (fn: any) => fn({
-      farmRecord: txFarmRecord,
-      traceEvent: txTraceEvent,
-      supplyIssue,
-      $queryRaw: async () => [{ id: 'sup1' }],
-    }),
+    $transaction: async (fn: any) => {
+      try {
+        return await fn({
+          farmRecord: txFarmRecord,
+          traceEvent: txTraceEvent,
+          supplyIssue,
+          $queryRaw: async () => [{ id: 'sup1' }],
+        });
+      } catch (error) {
+        transactionError = error;
+        throw error;
+      }
+    },
   };
   return {
     svc: new FarmRecordService(prisma as any, new ScopeService()),
@@ -86,6 +94,7 @@ function makeService(overrides: any = {}) {
     get txFarmRecordCreateCount() { return txFarmRecordCreateCount; },
     get rootTraceEventCreateCount() { return rootTraceEventCreateCount; },
     get txTraceEventCreateCount() { return txTraceEventCreateCount; },
+    get transactionError() { return transactionError; },
   };
 }
 
@@ -110,6 +119,63 @@ describe('FarmRecordService.create 核销', () => {
     expect(h.rootTraceEventCreateCount).toBe(0);
     expect(h.published.data.sourceFarmRecordId).toBe('fr1');
     expect(h.published.data.payload).toEqual({ desc: '完成追肥', image: 'https://cdn.example/1.jpg' });
+  });
+
+  it('completed quota create publishes through the transaction event delegate', async () => {
+    const h = makeService({ quota: 100 });
+
+    await h.svc.create(merchant, {
+      batchId: BATCH,
+      fieldId: FIELD,
+      action: '施肥',
+      recordedAt: '2026-07-17T01:02:03.000Z',
+      source: FarmRecordSource.MINIAPP,
+      supplyId: '11111111-1111-4111-8111-111111111111',
+      supplyAmount: 10,
+    });
+
+    expect(h.txFarmRecordCreateCount).toBe(1);
+    expect(h.txTraceEventCreateCount).toBe(1);
+    expect(h.rootFarmRecordCreateCount).toBe(0);
+    expect(h.rootTraceEventCreateCount).toBe(0);
+    expect(h.published.data.sourceFarmRecordId).toBe('fr1');
+  });
+
+  it('pending create remains private while using the transaction record delegate', async () => {
+    const h = makeService();
+
+    await h.svc.create(merchant, {
+      batchId: BATCH,
+      fieldId: FIELD,
+      action: '除草',
+      recordedAt: '2026-07-17T01:02:03.000Z',
+      source: FarmRecordSource.WEB,
+      status: 'pending',
+    });
+
+    expect(h.txFarmRecordCreateCount).toBe(1);
+    expect(h.txTraceEventCreateCount).toBe(0);
+    expect(h.rootFarmRecordCreateCount).toBe(0);
+    expect(h.rootTraceEventCreateCount).toBe(0);
+    expect(h.published).toBeUndefined();
+  });
+
+  it('propagates a completed projection failure out of the transaction', async () => {
+    const h = makeService({ publishError: true });
+
+    await expect(h.svc.create(merchant, {
+      batchId: BATCH,
+      fieldId: FIELD,
+      action: '施肥',
+      recordedAt: '2026-07-17T01:02:03.000Z',
+      source: FarmRecordSource.MINIAPP,
+    })).rejects.toThrow('publish failed');
+
+    expect(h.txFarmRecordCreateCount).toBe(1);
+    expect(h.txTraceEventCreateCount).toBe(1);
+    expect(h.rootFarmRecordCreateCount).toBe(0);
+    expect(h.rootTraceEventCreateCount).toBe(0);
+    expect(h.transactionError).toBeInstanceOf(Error);
   });
 
   it('无 supplyId:走原路径,不校验配额', async () => {
@@ -143,6 +209,7 @@ describe('FarmRecordService.create 核销', () => {
     await expect(h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 }))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(h.created).toBeUndefined();
+    expect(h.published).toBeUndefined();
   });
   it('batch 不在作用域内:抛 Forbidden(不创建)', async () => {
     const h = makeService({ batchScoped: false });
@@ -173,11 +240,17 @@ describe('FarmRecordService.create 核销', () => {
         aggregate: async () => ({ _sum: { supplyAmount: 0 } }),
         create: async (a: any) => { calls.push('create-record'); return { id: 'fr1', ...a.data }; },
       },
+      traceEvent: {
+        create: async () => {
+          calls.push('publish-event');
+          return { id: 'te1' };
+        },
+      },
     });
 
     await h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 });
 
-    expect(calls).toEqual(['lock-batch', 'lock-supply', 'create-record']);
+    expect(calls).toEqual(['lock-batch', 'lock-supply', 'create-record', 'publish-event']);
   });
 });
 
