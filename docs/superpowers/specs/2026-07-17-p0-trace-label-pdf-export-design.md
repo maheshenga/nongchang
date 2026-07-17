@@ -180,13 +180,14 @@ ${normalized WEB_BASE_URL}/#/trace/${encodeURIComponent(code)}
 新增后端环境变量：
 
 ```env
-TRACE_PDF_FONT_PATH=/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
+TRACE_PDF_FONT_PATH=/www/server/fonts/NotoSansSC-Regular.ttf
 ```
 
 规则：
 
 - 字体路径只能来自服务端环境变量，不接受请求参数；
 - 首次导出时读取并缓存字体字节，后续请求复用；
+- 只接受可独立嵌入的 `.ttf` / `.otf` 单字体文件，不接受 `.ttc` 字体集合；
 - 路径缺失、不是普通文件或字体不可嵌入时返回 `503`；
 - `WEB_BASE_URL` 缺失、不是绝对 URL或生产环境不是 HTTPS 时返回 `503`；
 - 宝塔部署文档增加 Noto CJK 字体安装、实际路径确认和 PDF smoke 命令。
