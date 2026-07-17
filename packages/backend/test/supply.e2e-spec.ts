@@ -27,6 +27,9 @@ describe('Supply e2e', () => {
   let tokenA: string;
   let tokenB: string;
   let batchAId: string;
+  let userAId: string | undefined;
+  let userBId: string | undefined;
+  let originalGroupIds: { userA: string | null; userB: string | null } | undefined;
   const createdSupplyIds: string[] = [];
 
   beforeAll(async () => {
@@ -37,33 +40,49 @@ describe('Supply e2e', () => {
     prisma = app.get(PrismaService);
     tokenA = await login(app, 'merchantA');
     tokenB = await login(app, 'merchantB');
-    const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
-    const userB = await prisma.user.findFirst({ where: { username: 'merchantB' } });
+    const userA = await prisma.user.findFirstOrThrow({ where: { username: 'merchantA' } });
+    const userB = await prisma.user.findFirstOrThrow({ where: { username: 'merchantB' } });
+    userAId = userA.id;
+    userBId = userB.id;
+    originalGroupIds = { userA: userA.groupId, userB: userB.groupId };
     const recordGroup = await prisma.userGroup.upsert({
-      where: { tenantId_name: { tenantId: userA!.tenantId, name: 'e2e记录权限组' } },
+      where: { tenantId_name: { tenantId: userA.tenantId, name: 'e2e记录权限组' } },
       update: { permissions: [...CONNECTED_GROUP_PERMISSIONS] },
       create: {
-        tenantId: userA!.tenantId,
+        tenantId: userA.tenantId,
         name: 'e2e记录权限组',
         isDefault: false,
         permissions: [...CONNECTED_GROUP_PERMISSIONS],
       },
     });
     await prisma.user.updateMany({
-      where: { id: { in: [userA!.id, userB!.id] } },
+      where: { id: { in: [userA.id, userB.id] } },
       data: { groupId: recordGroup.id },
     });
-    const batchA = await prisma.batch.findFirst({ where: { ownerId: userA!.id } });
+    const batchA = await prisma.batch.findFirst({ where: { ownerId: userA.id } });
     batchAId = batchA!.id;
   });
 
   afterAll(async () => {
-    if (createdSupplyIds.length) {
-      await prisma.supplyIssue.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
-      await prisma.farmRecord.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
-      await prisma.supply.deleteMany({ where: { id: { in: createdSupplyIds } } });
+    if (prisma) {
+      if (createdSupplyIds.length) {
+        await prisma.supplyIssue.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
+        const records = await prisma.farmRecord.findMany({
+          where: { supplyId: { in: createdSupplyIds } },
+          select: { id: true },
+        });
+        await prisma.traceEvent.deleteMany({
+          where: { sourceFarmRecordId: { in: records.map((record) => record.id) } },
+        });
+        await prisma.farmRecord.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
+        await prisma.supply.deleteMany({ where: { id: { in: createdSupplyIds } } });
+      }
+      if (userAId && userBId && originalGroupIds) {
+        await prisma.user.updateMany({ data: { groupId: originalGroupIds.userA }, where: { id: userAId } });
+        await prisma.user.updateMany({ data: { groupId: originalGroupIds.userB }, where: { id: userBId } });
+      }
     }
-    await app.close();
+    if (app) await app.close();
   });
 
   it('入库 → 领用扣减 → 列表 remaining 正确', async () => {
