@@ -68,6 +68,34 @@ If the precheck reports `ECONNREFUSED 127.0.0.1:5544` or says it cannot reach `1
 
 Do not report e2e as passing until `corepack pnpm@10.33.2 test:e2e` exits `0`.
 
+## Trace Label PDF Preflight And Smoke
+
+Before enabling the Web label workspace, verify the backend with the real production font and public URL:
+
+```bash
+test -r "$TRACE_PDF_FONT_PATH"
+file "$TRACE_PDF_FONT_PATH"
+fc-scan "$TRACE_PDF_FONT_PATH" | head -n 20
+case "${TRACE_PDF_FONT_PATH,,}" in
+  *.ttf|*.otf) ;;
+  *) echo 'TRACE_PDF_FONT_PATH must end in .ttf or .otf' >&2; exit 1 ;;
+esac
+```
+
+`WEB_BASE_URL` must be the real public HTTPS Web origin. `TRACE_PDF_FONT_PATH` must resolve to an embeddable standalone `.ttf/.otf`; a `.ttc`, missing path, directory, or unreadable file is a release blocker.
+
+Use an isolated batch containing three generated trace codes and save the endpoint response. Record all of the following in the release evidence:
+
+- actual font path and `sha256sum`;
+- execution time and operator;
+- HTTP status, `Content-Type`, `Content-Disposition`, and `Cache-Control`;
+- `%PDF-` magic and `pdfinfo` page count;
+- Chinese batch/crop text rendering without missing glyphs;
+- decoded destinations for at least three QR codes, each matching `${WEB_BASE_URL}/#/trace/<encoded-code>`;
+- confirmation that export did not change code count, scan count, or CODE credit balance.
+
+Deploy backend first and complete this smoke before deploying Web. This change has no database migration. Roll back Web first and backend second; no server-side PDF archive requires cleanup.
+
 ## Phase 1-6 Coverage Matrix
 
 | Roadmap item | Evidence |
