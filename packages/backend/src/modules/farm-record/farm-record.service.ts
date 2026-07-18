@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto, UpdateFarmRecordStatusDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,11 +20,23 @@ import {
 
 @Injectable()
 export class FarmRecordService {
+  private readonly logger = new Logger(FarmRecordService.name);
+
   constructor(
     private prisma: PrismaService,
     private scope: ScopeService,
     @Optional() private cache?: PublicTraceCacheService,
   ) {}
+
+  private async invalidatePublicTraceCache(batchId: string): Promise<void> {
+    try {
+      await this.cache?.invalidateBatch(batchId);
+    } catch (error) {
+      // The database transaction is already committed; cache failure must not turn a successful write into a retryable 5xx.
+      const reason = error instanceof Error ? error.name : typeof error;
+      this.logger.warn(`public trace cache invalidation failed after farm-record mutation (batch=${batchId}, error=${reason})`);
+    }
+  }
 
   private async lockTenantRow(
     tx: Prisma.TransactionClient,
@@ -158,7 +170,7 @@ export class FarmRecordService {
       }
       return this.createAndPublish(tx, data, context);
     });
-    if (created.status === 'completed') await this.cache?.invalidateBatch(dto.batchId);
+    if (created.status === 'completed') await this.invalidatePublicTraceCache(dto.batchId);
     return serializeFarmRecord(created);
   }
 
@@ -219,7 +231,7 @@ export class FarmRecordService {
       });
       return { record: completed, published: true };
     });
-    if (result.published) await this.cache?.invalidateBatch(scoped.batchId);
+    if (result.published) await this.invalidatePublicTraceCache(scoped.batchId);
     return serializeFarmRecord(result.record);
   }
 }

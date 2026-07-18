@@ -160,7 +160,9 @@ function makeService(overrides: any = {}) {
     $transaction: transaction,
   };
   const cache = {
-    invalidateBatch: vi.fn(async () => undefined),
+    invalidateBatch: vi.fn(async () => {
+      if (overrides.cacheError) throw new Error('cache unavailable');
+    }),
   };
   return {
     svc: new FarmRecordService(prisma as any, scope as any, cache as any),
@@ -190,6 +192,7 @@ function makeStatusService(overrides: {
   fieldTenantMatches?: boolean;
   fieldOwnerMatchesBatch?: boolean;
   batchOwnerTenantMatches?: boolean;
+  cacheError?: boolean;
 } = {}) {
   const calls: string[] = [];
   let transactionError: unknown;
@@ -302,7 +305,9 @@ function makeStatusService(overrides: {
     assertInScope: vi.fn(async () => undefined),
   };
   const cache = {
-    invalidateBatch: vi.fn(async () => undefined),
+    invalidateBatch: vi.fn(async () => {
+      if (overrides.cacheError) throw new Error('cache unavailable');
+    }),
   };
   return {
     svc: new FarmRecordService(prisma as any, scope as any, cache as any),
@@ -319,6 +324,15 @@ function makeStatusService(overrides: {
 }
 
 describe('FarmRecordService.updateStatus 自动发布', () => {
+  it('keeps a committed completion successful when cache invalidation fails', async () => {
+    const h = makeStatusService({ status: 'pending', cacheError: true });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' }))
+      .resolves.toMatchObject({ status: 'completed' });
+    expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
+    expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('pending to completed locks, updates, publishes once, and returns scalars', async () => {
     const h = makeStatusService({ status: 'pending' });
 
@@ -450,6 +464,18 @@ describe('FarmRecordService.updateStatus 自动发布', () => {
 });
 
 describe('FarmRecordService.create 核销', () => {
+  it('keeps a committed create successful when cache invalidation fails', async () => {
+    const h = makeService({ cacheError: true });
+
+    await expect(h.svc.create(merchant, {
+      ...base,
+      detail: { note: 'cache failure create' },
+      source: FarmRecordSource.MINIAPP,
+    })).resolves.toMatchObject({ status: 'completed' });
+    expect(h.txFarmRecordCreateCount).toBe(1);
+    expect(h.txTraceEventCreateCount).toBe(1);
+  });
+
   it('completed non-quota create uses only transaction delegates to publish one linked event', async () => {
     const h = makeService();
 
