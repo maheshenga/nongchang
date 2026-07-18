@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<MeProfileView | null>(null);
   const [isReady, setIsReady] = useState(false);
   const userRef = useRef<AuthUser | null>(null);
+  const sessionEpochRef = useRef(0);
 
   const setCurrentUser = useCallback((next: AuthUser | null) => {
     const previous = userRef.current;
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearClientSession = useCallback(() => {
+    sessionEpochRef.current += 1;
     clearAccessToken();
     setCurrentUser(null);
     setProfile(null);
@@ -65,13 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const bootstrapEpoch = sessionEpochRef.current;
 
     void refreshWebSession()
       .then((accessToken) => {
-        if (cancelled || !accessToken) return;
+        if (cancelled || sessionEpochRef.current !== bootstrapEpoch || !accessToken) return;
         const decoded = decodeToken(accessToken);
         if (!decoded) {
-          clearAccessToken();
+          clearClientSession();
           return;
         }
         setAccessToken(accessToken);
@@ -122,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const decoded = decodeToken(response.accessToken);
     if (!decoded) throw new Error('登录令牌无效');
 
+    sessionEpochRef.current += 1;
     setAccessToken(response.accessToken);
+    setProfile(null);
     setCurrentUser(decoded);
   }, [setCurrentUser]);
 

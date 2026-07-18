@@ -69,6 +69,7 @@ model User {
   displayName    String        @map("display_name")
   status         String        @default("active")
   sessionVersion Int           @default(0) @map("session_version")
+  webSessionVersion Int        @default(0) @map("web_session_version")
   groupId        String?       @map("group_id")
   createdAt      DateTime      @default(now()) @map("created_at")
   tenant         Tenant        @relation(fields: [tenantId], references: [id])
@@ -163,6 +164,7 @@ model FarmRecord {
   field        Field    @relation(fields: [fieldId], references: [id])
   operator     User     @relation(fields: [operatorId], references: [id])
   supply       Supply?  @relation(fields: [supplyId], references: [id])
+  traceEvent TraceEvent?
 
   @@index([tenantId])
   @@index([batchId])
@@ -218,6 +220,8 @@ model TraceEvent {
   createdAt  DateTime @default(now()) @map("created_at")
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
   batch      Batch    @relation(fields: [batchId], references: [id])
+  sourceFarmRecordId String?     @unique @map("source_farm_record_id")
+  sourceFarmRecord   FarmRecord? @relation(fields: [sourceFarmRecordId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
   @@index([batchId])

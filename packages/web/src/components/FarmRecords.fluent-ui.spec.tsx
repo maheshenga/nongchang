@@ -141,6 +141,7 @@ describe('FarmRecords Fluent UI', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '标记完成 温室浇水' }));
     await waitFor(() => expect(apiMocks.updateFarmRecordStatus).toHaveBeenCalledWith('rec-pending', 'completed'));
+    expect(await screen.findByText('已完成并发布到公开溯源')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '快捷农事实录' }));
     fireEvent.change(await screen.findByLabelText('关联批次'), { target: { value: 'batch-1' } });

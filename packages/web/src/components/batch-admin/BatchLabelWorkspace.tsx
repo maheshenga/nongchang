@@ -1,81 +1,386 @@
-import { useState } from 'react';
-import { AlertTriangle, CheckCircle, Download, Printer, QrCode, ShieldCheck, X } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import { showToast } from '../../hooks/useToast';
-import type { ViewBatch } from '../BatchAdmin.model';
-import type { PendingAction } from './BatchAnalysisDialogs';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Download, Printer, RefreshCw, X } from 'lucide-react';
+import {
+  TRACE_LABEL_PAPER_DEFAULTS,
+  type TraceLabelPaperSize,
+  type TraceLabelPdfInput,
+} from '@nongchang/shared';
+import { createTraceLabelPdf } from '../../api/trace';
 
-const MAX_CODES = 10_000;
-
-interface Props {
-  batch: ViewBatch;
-  generating: boolean;
-  onGenerate(count: number): Promise<string[]>;
-  requestConfirmation(action: PendingAction): void;
-  onClose(): void;
+interface BatchLabelWorkspaceProps {
+  batchId: string;
+  batchNo: string;
+  cropName: string;
+  codeIds?: string[];
+  labelCount: number;
+  generatedCodeCount?: number;
+  initialPaperSize?: TraceLabelPaperSize;
+  onClose: () => void;
 }
 
-export function BatchLabelWorkspace({ batch, generating, onGenerate, requestConfirmation, onClose }: Props) {
-  const [amount, setAmount] = useState(100);
-  const [paperSize, setPaperSize] = useState('4x6');
-  const [labelPadding, setLabelPadding] = useState(16);
-  const [labelGap, setLabelGap] = useState(4);
-  const [showLogo, setShowLogo] = useState(true);
-  const [printPreview, setPrintPreview] = useState(false);
-  const [sheetMargin, setSheetMargin] = useState(16);
-  const [sheetGap, setSheetGap] = useState(12);
-  const [qrSize, setQrSize] = useState(80);
-  const [showProduct, setShowProduct] = useState(true);
-  const [showSerial, setShowSerial] = useState(true);
-  const [codes, setCodes] = useState<string[]>([]);
-  const valid = Number.isInteger(amount) && amount >= 1 && amount <= MAX_CODES;
-  const traceUrl = (code: string) => `${window.location.origin}${window.location.pathname}#/trace/${code}`;
-  const codeAt = (index: number) => codes[index] ?? `${batch.code}-预览${index + 1}`;
+interface PdfPreview {
+  blob: Blob;
+  objectUrl: string;
+  fileName: string;
+  layout: LayoutForm;
+}
 
-  const requestGeneration = () => requestConfirmation({
-    type: 'generate',
-    title: '批量生成并导出溯源标签矩阵',
-    description: `将通过真实溯源码接口为批次 [${batch.id}] 生成 ${amount} 枚唯一溯源码 (标签规格: ${paperSize})。生成后会消耗可用二维码额度,请确认数量。`,
-    affectedCount: amount,
-    batchId: batch.id,
-    onConfirm: async () => {
-      const generated = await onGenerate(amount);
-      if (generated.length) {
-        setCodes(generated);
-        setPrintPreview(true);
+type WorkspaceState =
+  | { status: 'loading' }
+  | { status: 'ready'; preview: PdfPreview }
+  | { status: 'error'; message: string };
+
+interface LayoutForm {
+  paperSize: TraceLabelPaperSize;
+  marginMm: number;
+  gapMm: number;
+  qrSizeMm: number;
+  showProductName: boolean;
+  showSerial: boolean;
+}
+
+const paperSizes: Array<{ value: TraceLabelPaperSize; label: string }> = [
+  { value: 'A4', label: 'A4' },
+  { value: '4x6', label: '4x6' },
+  { value: '2x1', label: '2x1' },
+];
+
+const A4_LABELS_PER_PAGE = 21;
+
+function makeLayoutForm(paperSize: TraceLabelPaperSize): LayoutForm {
+  return {
+    paperSize,
+    ...TRACE_LABEL_PAPER_DEFAULTS[paperSize],
+    showProductName: true,
+    showSerial: true,
+  };
+}
+
+function layoutsMatch(left: LayoutForm, right: LayoutForm): boolean {
+  return left.paperSize === right.paperSize
+    && left.marginMm === right.marginMm
+    && left.gapMm === right.gapMm
+    && left.qrSizeMm === right.qrSizeMm
+    && left.showProductName === right.showProductName
+    && left.showSerial === right.showSerial;
+}
+
+function errorMessage(error: unknown): string {
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? (error as { status?: unknown }).status
+    : undefined;
+  if (status === 400) return '请求参数无效，请检查标签设置后重试。';
+  if (status === 403) return '没有导出该批次标签的权限。';
+  if (status === 503) return 'PDF 服务暂不可用，请联系管理员检查公开站点和 PDF 字体配置。';
+  return error instanceof Error && error.message
+    ? error.message
+    : 'PDF 生成失败，请稍后重试。';
+}
+
+function safeFileName(batchNo: string): string {
+  const safeBatchNo = batchNo
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'batch';
+  return `trace-labels-${safeBatchNo}.pdf`;
+}
+
+function pageCount(labelCount: number, paperSize: TraceLabelPaperSize): number {
+  if (labelCount <= 0) return 0;
+  return paperSize === 'A4' ? Math.ceil(labelCount / A4_LABELS_PER_PAGE) : labelCount;
+}
+
+export default function BatchLabelWorkspace({
+  batchId,
+  batchNo,
+  cropName,
+  codeIds,
+  labelCount,
+  generatedCodeCount,
+  initialPaperSize = 'A4',
+  onClose,
+}: BatchLabelWorkspaceProps) {
+  const [form, setForm] = useState<LayoutForm>(() => makeLayoutForm(initialPaperSize));
+  const [workspace, setWorkspace] = useState<WorkspaceState>({ status: 'loading' });
+  const [printHint, setPrintHint] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+  const startedRef = useRef(false);
+  const loadingRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const previewUrlRef = useRef<string | null>(null);
+
+  const releasePreviewUrl = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      releasePreviewUrl();
+    };
+  }, [releasePreviewUrl]);
+
+  const generatePreview = useCallback(async () => {
+    if (loadingRef.current) return;
+
+    loadingRef.current = true;
+    const requestId = ++requestIdRef.current;
+    setPrintHint(null);
+    setWorkspace({ status: 'loading' });
+    const input: TraceLabelPdfInput = {
+      paperSize: form.paperSize,
+      marginMm: form.marginMm,
+      gapMm: form.gapMm,
+      qrSizeMm: form.qrSizeMm,
+      showProductName: form.showProductName,
+      showSerial: form.showSerial,
+      ...(codeIds === undefined ? {} : { codeIds }),
+    };
+
+    try {
+      const file = await createTraceLabelPdf(batchId, input);
+      const objectUrl = URL.createObjectURL(file.blob);
+      if (!mountedRef.current || requestId !== requestIdRef.current) {
+        URL.revokeObjectURL(objectUrl);
+        return;
       }
-    },
-  });
 
-  return <>
-    <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm"><div className="flex max-h-[800px] h-[90vh] w-full max-w-4xl overflow-hidden rounded-[6px] bg-white shadow-lg md:h-auto">
-      <div className="flex w-[55%] flex-col overflow-y-auto border-r border-slate-100 bg-slate-50/80 p-8"><h3 className="mb-8 flex items-center gap-3 text-xl font-bold text-slate-800"><QrCode className="h-6 w-6 text-blue-600" />专属溯源标签批量引擎</h3>
-        <div className="space-y-5"><div className="rounded-[6px] border border-slate-200 bg-white p-4"><div className="text-[10px] font-bold uppercase text-slate-400">当前批次</div><div className="font-mono text-sm font-black text-blue-600">{batch.code} · {batch.type}</div></div>
-          <label className="block text-xs font-bold text-slate-600">物理标签规格<select value={paperSize} onChange={event => setPaperSize(event.target.value)} className="mt-2 w-full rounded-[6px] border border-slate-200 bg-white px-4 py-3 text-sm font-bold"><option value="4x6">标准物流特大外箱贴 (4x6)</option><option value="2x1">盆栽单株植物迷你标 (2x1)</option><option value="A4">A4 激光不干胶阵列</option></select></label>
-          <label className="block text-xs font-bold text-slate-600">预设批量总数<input type="number" min={1} max={MAX_CODES} value={amount} onChange={event => setAmount(Math.floor(Number(event.target.value)))} className="mt-2 w-full rounded-[6px] border border-slate-200 px-4 py-3 font-mono text-lg font-black" /></label>
-          {!valid && <p className="flex items-center gap-2 text-xs font-bold text-rose-500"><AlertTriangle className="h-4 w-4" />生成数量须为 1 ~ {MAX_CODES} 的整数</p>}
-          <div className="grid grid-cols-2 gap-4 rounded-[6px] border border-slate-200 bg-white p-5"><label className="text-xs font-bold text-slate-500">标签间距<input type="number" value={labelGap} onChange={event => setLabelGap(Number(event.target.value))} className="mt-2 w-full rounded border p-2" /></label><label className="text-xs font-bold text-slate-500">安全边距<input type="number" value={labelPadding} onChange={event => setLabelPadding(Number(event.target.value))} className="mt-2 w-full rounded border p-2" /></label><label className="col-span-2 flex items-center gap-3 text-xs font-bold"><input type="checkbox" checked={showLogo} onChange={event => setShowLogo(event.target.checked)} />显示平台标识栏</label></div>
+      releasePreviewUrl();
+      previewUrlRef.current = objectUrl;
+      setWorkspace({
+        status: 'ready',
+        preview: {
+          blob: file.blob,
+          objectUrl,
+          fileName: file.fileName || safeFileName(batchNo),
+          layout: { ...form },
+        },
+      });
+    } catch (error) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
+      releasePreviewUrl();
+      setWorkspace({ status: 'error', message: errorMessage(error) });
+    } finally {
+      if (requestId === requestIdRef.current) loadingRef.current = false;
+    }
+  }, [batchId, batchNo, codeIds, form, releasePreviewUrl]);
+
+  useEffect(() => {
+    const start = window.setTimeout(() => {
+      if (!startedRef.current) {
+        startedRef.current = true;
+        void generatePreview();
+      }
+    }, 0);
+    return () => window.clearTimeout(start);
+  }, [generatePreview]);
+
+  const selectPaperSize = (paperSize: TraceLabelPaperSize) => {
+    setForm((previous) => ({
+      ...makeLayoutForm(paperSize),
+      showProductName: previous.showProductName,
+      showSerial: previous.showSerial,
+    }));
+  };
+
+  const updateNumber = (field: 'marginMm' | 'gapMm' | 'qrSizeMm', value: string) => {
+    setForm((previous) => ({ ...previous, [field]: Number(value) }));
+  };
+
+  const handlePrint = () => {
+    if (workspace.status !== 'ready' || !layoutsMatch(workspace.preview.layout, form)) return;
+    const printWindow = window.open(workspace.preview.objectUrl, '_blank');
+    if (!printWindow) {
+      setPrintHint('打印窗口被浏览器拦截，请下载 PDF 后打印。');
+      return;
+    }
+    printWindow.addEventListener('load', () => printWindow.print(), { once: true });
+  };
+
+  const isLoading = workspace.status === 'loading';
+  const previewIsCurrent = workspace.status === 'ready' && layoutsMatch(workspace.preview.layout, form);
+  const summaryPages = pageCount(labelCount, form.paperSize);
+
+  return (
+    <section className="min-w-0 bg-white p-4 text-[#323130] sm:p-6" aria-label="溯源标签 PDF 工作区">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-[#E1DFDD] pb-4">
+        <div>
+          <h2 className="text-lg font-semibold">溯源标签 PDF</h2>
+          <p className="mt-1 text-sm text-[#605E5C]">{cropName} · 批次 {batchNo}</p>
         </div>
-        <div className="mt-auto flex gap-4 pt-8"><button onClick={onClose} className="rounded-[6px] border border-slate-200 bg-white px-6 py-3 text-sm font-bold">暂缓生成</button><button onClick={requestGeneration} disabled={!valid || generating} className="flex-1 rounded-[6px] bg-blue-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-50">{generating ? '生成中…' : '生成真实溯源码'}</button></div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="关闭"
+          title="关闭"
+          className="inline-flex h-9 w-9 items-center justify-center border border-[#8A8886] text-[#323130] hover:bg-[#F3F2F1]"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
-      <div className="flex w-[45%] items-center justify-center bg-slate-100 p-8"><div style={{ padding: labelPadding, gap: labelGap }} className={`flex bg-white shadow-lg ${paperSize === '2x1' ? 'h-28 w-[240px] flex-row items-center' : paperSize === 'A4' ? 'grid h-[480px] w-[350px] grid-cols-2' : 'min-h-[420px] w-[280px] flex-col'}`}>
-        {paperSize === 'A4' ? Array.from({ length: 8 }, (_, index) => <Label key={index} code={codeAt(index)} url={traceUrl(codeAt(index))} size={38} product={batch.type} showLogo={showLogo} />) : <Label code={codeAt(0)} url={traceUrl(codeAt(0))} size={paperSize === '2x1' ? 60 : 140} product={batch.type} showLogo={showLogo} />}
-      </div></div>
-    </div></div>
-    {printPreview && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"><div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-[6px] bg-slate-50 shadow-lg">
-      <div className="flex items-center justify-between border-b bg-white p-6"><h3 className="flex items-center gap-3 text-lg font-bold"><Printer className="h-5 w-5" />可视化标签排版及导出引擎</h3><button onClick={() => setPrintPreview(false)}><X className="h-5 w-5" /></button></div>
-      <div className="flex flex-1 overflow-hidden"><div className="w-80 space-y-6 overflow-y-auto border-r bg-white p-6"><Range label="纸张边距" value={sheetMargin} min={0} max={40} onChange={setSheetMargin} /><Range label="标签行间距" value={sheetGap} min={0} max={32} onChange={setSheetGap} /><Range label="二维码尺寸" value={qrSize} min={40} max={120} onChange={setQrSize} /><label className="flex gap-3 text-sm font-bold"><input type="checkbox" checked={showProduct} onChange={event => setShowProduct(event.target.checked)} />显示商品品名</label><label className="flex gap-3 text-sm font-bold"><input type="checkbox" checked={showSerial} onChange={event => setShowSerial(event.target.checked)} />显示流水号</label></div>
-        <div className="flex-1 overflow-y-auto bg-slate-200 p-8"><div style={{ padding: sheetMargin, gap: sheetGap }} className="mx-auto grid min-h-[842px] w-[595px] grid-cols-3 bg-white">{Array.from({ length: Math.min(21, amount) }, (_, index) => <div key={index} className="relative flex flex-col items-center justify-center rounded border-2 border-dashed border-slate-300 p-2">{showLogo && <CheckCircle className="absolute left-1 top-1 h-3 w-3 text-[#107C10]" />}{showSerial && <span className="absolute right-1 top-1 text-[8px]">{index + 1}/{amount}</span>}<QRCodeSVG value={traceUrl(codeAt(index))} size={qrSize} level="M" />{showProduct && <div className="mt-2 text-[10px] font-bold">{batch.type}</div>}{showSerial && <div className="font-mono text-[8px]">{codeAt(index)}</div>}</div>)}</div></div>
+
+      {generatedCodeCount !== undefined && (
+        <p className="mb-4 border border-[#C7E0F4] bg-[#EFF6FC] p-3 text-sm text-[#004578]" role="status">
+          溯源码已生成 {generatedCodeCount} 个；若标签文件生成失败，可仅重试 PDF，不会再次生成或扣减溯源码。
+        </p>
+      )}
+
+      <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="min-w-0 border-b border-[#E1DFDD] pb-5 lg:border-b-0 lg:border-r lg:pr-5">
+          <fieldset>
+            <legend className="text-sm font-semibold">纸张规格</legend>
+            <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label="纸张规格">
+              {paperSizes.map((paper) => (
+                <label
+                  key={paper.value}
+                  className={`cursor-pointer border px-3 py-2 text-sm ${form.paperSize === paper.value ? 'border-[#0078D4] bg-[#EFF6FC]' : 'border-[#8A8886]'}`}
+                >
+                  <input
+                    type="radio"
+                    name="paperSize"
+                    value={paper.value}
+                    checked={form.paperSize === paper.value}
+                    onChange={() => selectPaperSize(paper.value)}
+                    className="sr-only"
+                  />
+                  {paper.label} 纸张规格
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            {([
+              ['marginMm', '边距'],
+              ['gapMm', '间距'],
+              ['qrSizeMm', '二维码尺寸'],
+            ] as const).map(([field, label]) => (
+              <label key={field} className="text-sm font-medium">
+                {label}
+                <span className="mt-1 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={field === 'qrSizeMm' ? 15 : 0}
+                    max={field === 'qrSizeMm' ? 80 : 20}
+                    step="1"
+                    value={form[field]}
+                    onChange={(event) => updateNumber(field, event.target.value)}
+                    className="min-w-0 flex-1 border border-[#8A8886] px-2 py-1.5"
+                  />
+                  <span className="text-[#605E5C]">mm</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-5 space-y-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.showProductName}
+                onChange={(event) => setForm((previous) => ({ ...previous, showProductName: event.target.checked }))}
+              />
+              显示产品名称
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.showSerial}
+                onChange={(event) => setForm((previous) => ({ ...previous, showSerial: event.target.checked }))}
+              />
+              显示序列号
+            </label>
+          </div>
+
+          <p className="mt-5 text-sm text-[#605E5C]">导出已生成溯源码不会再次扣减二维码额度。</p>
+          <p className="mt-2 text-sm font-medium">{labelCount} 张标签 / {summaryPages} 页</p>
+          {workspace.status === 'ready' && !previewIsCurrent && (
+            <p className="mt-2 text-sm text-[#A4262C]" role="status">标签设置已更改，请先更新预览再下载或打印。</p>
+          )}
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void generatePreview()}
+              disabled={isLoading}
+              aria-label="更新预览"
+              title="更新预览"
+              className="inline-flex items-center gap-2 border border-[#0078D4] bg-[#0078D4] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              更新预览
+            </button>
+            {workspace.status === 'ready' && previewIsCurrent ? (
+              <a
+                href={workspace.preview.objectUrl}
+                download={workspace.preview.fileName}
+                aria-label="下载 PDF"
+                title="下载 PDF"
+                className="inline-flex items-center gap-2 border border-[#8A8886] px-3 py-2 text-sm font-semibold hover:bg-[#F3F2F1]"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                下载 PDF
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label="下载 PDF"
+                title="下载 PDF"
+                className="inline-flex items-center gap-2 border border-[#8A8886] px-3 py-2 text-sm font-semibold opacity-60"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                下载 PDF
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={!previewIsCurrent}
+              aria-label="打印 PDF"
+              title="打印 PDF"
+              className="inline-flex items-center gap-2 border border-[#8A8886] px-3 py-2 text-sm font-semibold hover:bg-[#F3F2F1] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              打印 PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          {workspace.status === 'loading' && (
+            <div className="flex min-h-96 items-center justify-center border border-[#E1DFDD] text-sm text-[#605E5C]" role="status">
+              正在生成 PDF 预览…
+            </div>
+          )}
+          {workspace.status === 'error' && (
+            <div className="border border-[#A4262C] bg-[#FDE7E9] p-4 text-sm text-[#A4262C]" role="alert">
+              <p>{workspace.message}</p>
+              <button
+                type="button"
+                onClick={() => void generatePreview()}
+                className="mt-3 inline-flex items-center gap-2 border border-current px-3 py-2 font-semibold"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                重试生成
+              </button>
+            </div>
+          )}
+          {workspace.status === 'ready' && (
+            <iframe
+              title="溯源标签 PDF 预览"
+              src={workspace.preview.objectUrl}
+              className="min-h-96 w-full border border-[#E1DFDD]"
+            />
+          )}
+          {printHint && <p className="mt-3 text-sm text-[#A4262C]" role="status">{printHint}</p>}
+        </div>
       </div>
-      <div className="flex justify-end gap-3 border-t bg-white p-4"><button onClick={() => setPrintPreview(false)} className="px-5 py-2">返回设置</button><button onClick={() => window.print()} className="flex items-center gap-2 rounded bg-indigo-600 px-6 py-2 font-bold text-white"><Printer className="h-4 w-4" />打印 / 另存 PDF</button><button onClick={() => { showToast(`已为批次生成 ${codes.length} 个唯一溯源码并导出标签。`); onClose(); }} className="flex items-center gap-2 rounded bg-[#107C10] px-6 py-2 font-bold text-white"><Download className="h-4 w-4" />完成</button></div>
-    </div></div>}
-  </>;
-}
-
-function Label({ code, url, size, product, showLogo }: { code: string; url: string; size: number; product: string; showLogo: boolean }) {
-  return <div className="flex flex-1 flex-col items-center justify-center border border-dashed border-slate-300 p-2">{showLogo && <div className="mb-2 flex items-center gap-1 text-[9px] font-black text-[#107C10]"><ShieldCheck className="h-3 w-3" />溯源标签预览</div>}<QRCodeSVG value={url} size={size} level="H" /><div className="mt-2 text-xs font-bold">{product}</div><div className="font-mono text-[9px] text-slate-500">{code}</div></div>;
-}
-
-function Range({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange(value: number): void }) {
-  return <label className="block text-xs font-bold text-slate-700">{label}: {value}px<input type="range" min={min} max={max} value={value} onChange={event => onChange(Number(event.target.value))} className="mt-2 w-full accent-indigo-600" /></label>;
+    </section>
+  );
 }

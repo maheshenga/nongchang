@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthUser, Role } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import type { SessionTokenClaims } from './auth.model';
 import { SessionValidationCacheService } from './session-validation-cache.service';
 
 @Injectable()
@@ -17,20 +18,32 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       secretOrKey: process.env.JWT_SECRET as string,
     });
   }
-  async validate(payload: AuthUser & { sub?: string }): Promise<AuthUser> {
+
+  async validate(payload: SessionTokenClaims & { sub?: string }): Promise<AuthUser> {
+    if (payload.sessionKind !== 'generic' && payload.sessionKind !== 'web') {
+      throw new UnauthorizedException('登录状态已失效');
+    }
+
     const tokenVersion = payload.sessionVersion ?? 0;
-    const cached = await this.cache.get(payload.tenantId, payload.userId, tokenVersion);
-    if (cached) return cached;
+    if (payload.sessionKind === 'generic') {
+      const cached = await this.cache.get(payload.tenantId, payload.userId, tokenVersion);
+      if (cached) return cached;
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
       include: { tenant: { select: { status: true } } },
     });
+    const tokenWebSessionVersion = payload.sessionKind === 'web'
+      ? payload.webSessionVersion
+      : undefined;
     if (
       !user ||
       user.status !== 'active' ||
       user.tenant.status !== 'active' ||
-      (user.sessionVersion ?? 0) !== tokenVersion
+      (user.sessionVersion ?? 0) !== tokenVersion ||
+      (payload.sessionKind === 'web' && tokenWebSessionVersion === undefined) ||
+      (tokenWebSessionVersion !== undefined && (user.webSessionVersion ?? 0) !== tokenWebSessionVersion)
     ) {
       throw new UnauthorizedException('登录状态已失效');
     }
@@ -44,7 +57,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!agent || agent.status !== 'active') throw new UnauthorizedException('登录状态已失效');
     }
 
-    const validated = {
+    const validated: AuthUser = {
       userId: user.id,
       tenantId: user.tenantId,
       role: user.role as Role,
@@ -52,7 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ownerId: user.role === Role.MERCHANT ? user.id : null,
       sessionVersion: user.sessionVersion ?? 0,
     };
-    await this.cache.set(validated);
+    if (payload.sessionKind === 'generic') await this.cache.set(validated);
     return validated;
   }
 }

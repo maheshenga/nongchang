@@ -6,6 +6,20 @@ import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+type CleanupStep = readonly [string, () => Promise<unknown> | unknown];
+
+async function runCleanupSteps(steps: CleanupStep[]): Promise<void> {
+  const errors: Error[] = [];
+  for (const [name, cleanup] of steps) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Cross-tenant e2e cleanup failed');
+}
+
 // #28:现有 isolation.e2e 只在单一 DEMO 租户内验证 agent/merchant 隔离,
 // 最根本的"租户 A 绝对看不到租户 B"从未被验证(库里只有一个租户)。
 // 本套自建第二个租户 T2(独立 code/用户/数据),验证跨租户读写隔离,afterAll 清理,
@@ -83,15 +97,17 @@ describe('跨租户隔离(多租户深度)e2e', () => {
   });
 
   afterAll(async () => {
+    await runCleanupSteps([
     // 先删子表再删父(FK Restrict)。
-    await prisma.traceScan.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.traceCode.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.batch.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.field.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.creditAccount.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.user.deleteMany({ where: { tenantId: t2TenantId } });
-    await prisma.tenant.deleteMany({ where: { id: t2TenantId } });
-    await app.close();
+      ['trace scans', () => prisma.traceScan.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['trace codes', () => prisma.traceCode.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['batches', () => prisma.batch.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['fields', () => prisma.field.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['credit accounts', () => prisma.creditAccount.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['users', () => prisma.user.deleteMany({ where: { tenantId: t2TenantId } })],
+      ['tenant', () => prisma.tenant.deleteMany({ where: { id: t2TenantId } })],
+      ['app close', () => app.close()],
+    ]);
   });
 
   it('DEMO 系统管理员的 /agents/merchants 看不到 T2 租户的商户', async () => {

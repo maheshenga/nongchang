@@ -5,33 +5,26 @@ import {
   parseWebRefreshCookie,
 } from './web-session';
 
-describe('web refresh cookie', () => {
-  it('uses an HttpOnly strict same-origin cookie for seven days', () => {
-    expect(buildWebRefreshCookie('a.b.c', true)).toContain(
+describe('web refresh-session cookies', () => {
+  it('creates the production-only secure HttpOnly cookie contract', () => {
+    expect(buildWebRefreshCookie('a.b.c', true)).toBe(
       'nc_refresh=a.b.c; Path=/api/auth/web; HttpOnly; Secure; SameSite=Strict; Max-Age=604800',
+    );
+    expect(buildWebRefreshCookie('a.b.c', false)).toBe(
+      'nc_refresh=a.b.c; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=604800',
     );
   });
 
-  it('only includes Secure in production mode', () => {
-    expect(buildWebRefreshCookie('a.b.c', false)).not.toContain('; Secure');
-    expect(buildWebRefreshCookie('a.b.c', true)).toContain('; Secure');
-  });
-
-  it('expires the refresh cookie with the same scope', () => {
-    expect(buildExpiredWebRefreshCookie(true)).toContain(
+  it('expires the same scoped cookie on logout', () => {
+    expect(buildExpiredWebRefreshCookie(true)).toBe(
       'nc_refresh=; Path=/api/auth/web; HttpOnly; Secure; SameSite=Strict; Max-Age=0',
     );
   });
 
-  it('parses the named cookie while ignoring malformed unrelated cookies', () => {
-    expect(parseWebRefreshCookie('bad=%E0%A4%A; nc_refresh=refresh%2Etoken; theme=dark')).toBe(
-      'refresh.token',
-    );
-  });
-
-  it('returns null when the named cookie is absent or malformed', () => {
-    expect(parseWebRefreshCookie(undefined)).toBeNull();
+  it('reads only a well-formed named refresh cookie', () => {
+    expect(parseWebRefreshCookie('bad=%E0%A4%A; nc_refresh=refresh%2Etoken; theme=dark')).toBe('refresh.token');
+    expect(parseWebRefreshCookie('theme=dark; nc_refresh=%')).toBeNull();
     expect(parseWebRefreshCookie('theme=dark')).toBeNull();
-    expect(parseWebRefreshCookie('nc_refresh=%E0%A4%A')).toBeNull();
+    expect(parseWebRefreshCookie(undefined)).toBeNull();
   });
 });

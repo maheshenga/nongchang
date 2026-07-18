@@ -142,11 +142,15 @@ export default function App() {
     }
   }, [navRole, activeTab]);
 
-  if (!isReady) return <ViewSkeleton />;
-
   if (traceCode) {
-    return <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />;
+    return (
+      <Suspense fallback={<ViewSkeleton />}>
+        <TraceabilityPage code={traceCode} onBack={() => { window.location.hash = ''; setTraceCode(null); }} />
+      </Suspense>
+    );
   }
+
+  if (!isReady) return <ViewSkeleton />;
 
   if (!isAuthenticated) {
     return (

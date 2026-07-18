@@ -1,4 +1,4 @@
-import { ChevronDown, Download, FileSpreadsheet, FileText, Filter, Layers, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, Filter, Layers, Loader2, Plus, RefreshCw, Search } from 'lucide-react';
 import type { Field } from '../../api/fields';
 import { fluentButton, fluentInput, fluentSelect } from '../../ui/fluent';
 
@@ -19,7 +19,7 @@ interface Props {
   exportDropdownOpen: boolean;
   setExportDropdownOpen(value: boolean): void;
   exporting: string | null;
-  onExport(format: 'pdf' | 'excel'): void;
+  onExport(): void;
   onCreate(): void;
   onReload(): void;
 }
@@ -47,8 +47,7 @@ export function BatchCommandBar(props: Props) {
               {props.exporting ? `正在导出 ${props.exporting.toUpperCase()}...` : props.selectedCount ? `导出 (${props.selectedCount})` : '导出'}
             </button>
             {props.exportDropdownOpen && <div className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-[4px] border border-[#E1DFDD] bg-white shadow-lg">
-              <button onClick={() => props.onExport('pdf')} className="flex w-full items-center gap-2 border-b border-[#EDEBE9] px-3 py-2 text-left text-sm hover:bg-[#F3F2F1]"><FileText className="h-4 w-4 text-[#A4262C]" />标准 PDF 溯源版</button>
-              <button onClick={() => props.onExport('excel')} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F3F2F1]"><FileSpreadsheet className="h-4 w-4 text-[#107C10]" />原始 Excel 数据表</button>
+              <button onClick={props.onExport} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-[#F3F2F1]"><FileSpreadsheet className="h-4 w-4 text-[#107C10]" />CSV（Excel 可打开）</button>
             </div>}
           </div>
           <button onClick={() => props.setShowAdvancedFilter(!props.showAdvancedFilter)} className={fluentButton('secondary')}><Filter className="h-4 w-4" />筛选<ChevronDown className={`h-3.5 w-3.5 ${props.showAdvancedFilter ? 'rotate-180' : ''}`} /></button>

@@ -59,8 +59,8 @@ test('merchant completes the field, batch, farm-record, trace-code, and public-s
   const batchRow = page.getByRole('row').filter({ hasText: batchNo });
   await expect(batchRow).toHaveCount(1);
   await batchRow.getByRole('button', { name: '生码', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '专属溯源标签批量引擎' })).toBeVisible();
-  await page.getByRole('spinbutton', { name: '预设批量总数' }).fill('1');
+  await expect(page.getByRole('heading', { name: '生成溯源标签' })).toBeVisible();
+  await page.getByRole('spinbutton', { name: '生成数量' }).fill('1');
   await page.getByRole('button', { name: '生成真实溯源码', exact: true }).click();
 
   const generationResponsePromise = page.waitForResponse((response) =>
@@ -68,14 +68,14 @@ test('merchant completes the field, batch, farm-record, trace-code, and public-s
       && response.url().includes('/api/trace/codes/')
       && response.url().includes('count=1'),
   );
-  await page.getByRole('button', { name: '确认生成', exact: true }).click();
+  await page.getByRole('button', { name: '确认 生成', exact: true }).click();
   const generationResponse = await generationResponsePromise;
   expect(generationResponse.ok()).toBeTruthy();
   const generated = await generationResponse.json() as Array<{ code: string }>;
   expect(generated).toHaveLength(1);
   const traceCode = generated[0]?.code;
   expect(traceCode).toBeTruthy();
-  await expect(page.getByRole('heading', { name: '可视化标签排版及导出引擎' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '溯源标签 PDF' })).toBeVisible();
 
   await page.goto(`/#/trace/${encodeURIComponent(traceCode!)}`);
   await expect(page.getByRole('heading', { name: cropName })).toBeVisible();

@@ -16,7 +16,6 @@ export const tokenPairSchema = z.object({
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
 });
-
 // ---- 个人账号(/auth/me):任意已登录角色自助查看/维护本人资料 ----
 // 个人资料视图:绝不含 passwordHash / wxOpenid 等敏感字段。
 export const meProfileViewSchema = z.object({

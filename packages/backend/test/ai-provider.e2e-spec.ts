@@ -5,6 +5,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+type CleanupStep = readonly [string, () => Promise<unknown> | unknown];
+
+async function runCleanupSteps(steps: CleanupStep[]): Promise<void> {
+  const errors: Error[] = [];
+  for (const [name, cleanup] of steps) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'AI provider e2e cleanup failed');
+}
+
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
@@ -18,7 +32,7 @@ describe('AiProvider e2e', () => {
   let prisma: PrismaService;
   let sysToken: string;
   let merchantToken: string;
-  let uniqueTenantId: string;
+  let providerTenantId: string;
   const createdIds: string[] = [];
 
   beforeAll(async () => {
@@ -29,18 +43,22 @@ describe('AiProvider e2e', () => {
     prisma = app.get(PrismaService);
     sysToken = await login(app, 'sysadmin');
     merchantToken = await login(app, 'merchantA');
-    const uniqueTenant = await prisma.tenant.create({
-      data: { name: 'AI provider unique-index E2E', code: `AIP-${Date.now()}` },
+    const tenant = await prisma.tenant.create({
+      data: { name: `AI Provider E2E ${Date.now()}`, code: `AIPROV-E2E-${Date.now()}` },
     });
-    uniqueTenantId = uniqueTenant.id;
+    providerTenantId = tenant.id;
   });
 
   afterAll(async () => {
-    if (createdIds.length) {
-      await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
-    }
-    await prisma.tenant.deleteMany({ where: { id: uniqueTenantId } });
-    await app.close();
+    await runCleanupSteps([
+      ['providers', async () => {
+        if (createdIds.length) {
+          await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
+        }
+      }],
+      ['tenant', () => prisma.tenant.deleteMany({ where: { id: providerTenantId } })],
+      ['app close', () => app.close()],
+    ]);
   });
 
   it('merchant 无权访问 AI 服务商管理端点 → 403', async () => {
@@ -81,7 +99,6 @@ describe('AiProvider e2e', () => {
     const res = await request(app.getHttpServer())
       .post('/api/ai/chat')
       .set('Authorization', `Bearer ${merchantToken}`)
-      .set('Idempotency-Key', 'e2e-ai-provider-chat-0001')
       .send({ message: '你好' });
     expect(res.status).toBe(400);
   });
@@ -96,9 +113,9 @@ describe('AiProvider e2e', () => {
   });
 
   it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {
-    // ai_providers.tenant_id 无 FK(#20 未纳入),用合成租户隔离真实数据。
+    // Use a suite-owned tenant to exercise the partial unique index against a valid FK.
     const base = {
-      tenantId: uniqueTenantId,
+      tenantId: providerTenantId,
       baseUrl: 'https://x.com/v1',
       apiKeyEnc: 'iv:tag:cipher',
       textModel: 'qwen-plus',
@@ -108,7 +125,7 @@ describe('AiProvider e2e', () => {
     createdIds.push(first.id);
     await expect(
       prisma.aiProvider.create({ data: { ...base, name: '启用B' } }),
-    ).rejects.toThrow(); // 偏唯一索引冲突(P2002)
+    ).rejects.toMatchObject({ code: 'P2002', name: 'PrismaClientKnownRequestError' });
     // enabled=false 不受约束:同租户可任意多条
     const disabled = await prisma.aiProvider.create({
       data: { ...base, name: '停用C', enabled: false },

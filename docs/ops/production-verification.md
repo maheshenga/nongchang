@@ -143,6 +143,20 @@ $response.Headers['X-Request-Id']
 The response header must equal the supplied ID. Find the same ID in the PM2 application log and confirm the completion entry is one JSON object containing `requestId`, `method`, `path`, `status`, and `durationMs`; authenticated requests may also contain `tenantId` and `userId`.
 
 Before release, use a non-production sentinel request to confirm logs do **not** contain Authorization values, cookies, request or response bodies, query secrets, AI messages/media, or integration credentials. The logger is intentionally allowlist-only; do not enable raw request dumps during troubleshooting.
+## Binding Production Cutover and Rollback Boundary
+
+The production cutover and rollback boundary is identical across the approved design and deployment runbooks:
+
+1. Before production, restore a current backup into a rehearsal database; record the `trace_events` row count and total relation size, migration duration, and observed lock behavior. Do not proceed without an operator-approved maintenance-window result.
+2. At cutover, enable maintenance mode and write quiescence, stop every PM2 backend instance before `prisma:deploy`, and verify no old backend process listens on port `3001`; old and new versions must never serve writes concurrently.
+3. While writes remain stopped, take and verify the pre-cutover database backup, deploy the migration, and start only the new build.
+4. Pre-open smoke writes are allowed only as uniquely tagged, release-owned disposable fixtures; record the release ID and every created ID. Keep maintenance mode and write quiescence active while readiness and focused smoke checks run.
+5. If any pre-open check fails, keep writes stopped and restore the pre-cutover backup; that restore removes the disposable smoke writes, and rollback to the old build is allowed only together with that backup restore.
+6. If checks pass, remove every disposable smoke fixture in FK-safe order and verify zero residue before reopening user traffic.
+7. The irreversible boundary is the first non-disposable user write accepted after maintenance mode is removed, not the controlled smoke write.
+8. After that boundary, old-build/database rollback is forbidden; re-enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
+
+No broad historical reconciler or automatic backfill is part of this cutover.
 
 ## E2E Blocker Interpretation
 
@@ -224,6 +238,35 @@ corepack pnpm@10.33.2 --filter @nongchang/backend upload:cleanup -- --older-than
 The command deletes the OSS object before marking the asset `DELETED` and releasing counters. It is idempotent; a non-zero exit status means some objects or rows remain for investigation. Never delete upload ledger rows manually to hide quota drift.
 
 ## Phase 1-6 And Stage C Coverage Matrix
+## Trace Label PDF Preflight And Smoke
+
+Before enabling the Web label workspace, verify the backend with the real production font and public URL:
+
+```bash
+test -r "$TRACE_PDF_FONT_PATH"
+file "$TRACE_PDF_FONT_PATH"
+fc-scan "$TRACE_PDF_FONT_PATH" | head -n 20
+case "${TRACE_PDF_FONT_PATH,,}" in
+  *.ttf|*.otf) ;;
+  *) echo 'TRACE_PDF_FONT_PATH must end in .ttf or .otf' >&2; exit 1 ;;
+esac
+```
+
+`WEB_BASE_URL` must be the real public HTTPS Web origin. `TRACE_PDF_FONT_PATH` must resolve to an embeddable standalone `.ttf/.otf`; a `.ttc`, missing path, directory, or unreadable file is a release blocker.
+
+Use an isolated batch containing three generated trace codes and save the endpoint response. Record all of the following in the release evidence:
+
+- actual font path and `sha256sum`;
+- execution time and operator;
+- HTTP status, `Content-Type`, `Content-Disposition`, and `Cache-Control`;
+- `%PDF-` magic and `pdfinfo` page count;
+- Chinese batch/crop text rendering without missing glyphs;
+- decoded destinations for at least three QR codes, each matching `${WEB_BASE_URL}/#/trace/<encoded-code>`;
+- confirmation that export did not change code count, scan count, or CODE credit balance.
+
+Deploy backend first and complete this smoke before deploying Web. This change has no database migration. Roll back Web first and backend second; no server-side PDF archive requires cleanup.
+
+## Phase 1-6 Coverage Matrix
 
 | Roadmap item | Evidence |
 | --- | --- |
