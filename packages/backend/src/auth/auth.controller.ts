@@ -17,6 +17,7 @@ import {
   loginSchema, refreshSchema, wechatLoginSchema, wechatRegisterSchema,
   updateMeSchema, changePasswordSchema,
   LoginDto, RefreshDto, WechatLoginDto, WechatRegisterDto, UpdateMeDto, ChangePasswordDto, AuthUser,
+  TokenPair,
   WebAccessTokenResponse,
 } from '@nongchang/shared';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -32,6 +33,14 @@ import {
 // 凭据类端点(登录/微信登录/注册)的防撞库限流:每 IP 60s 内最多 10 次。
 // 测试环境放到极高阈值,避免 e2e 中跨文件大量登录误触限流。
 const CREDENTIAL_LIMIT = process.env.NODE_ENV === 'test' ? 100_000 : 10;
+
+function toWebAccessTokenResponse(tokens: TokenPair): WebAccessTokenResponse {
+  return { accessToken: tokens.accessToken };
+}
+
+function useSecureWebRefreshCookie(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 @Controller('auth')
 export class AuthController {
@@ -72,11 +81,8 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<WebAccessTokenResponse> {
     const tokens = await this.auth.login(dto, true);
-    response.setHeader(
-      'Set-Cookie',
-      buildWebRefreshCookie(tokens.refreshToken, process.env.NODE_ENV === 'production'),
-    );
-    return { accessToken: tokens.accessToken };
+    response.setHeader('Set-Cookie', buildWebRefreshCookie(tokens.refreshToken, useSecureWebRefreshCookie()));
+    return toWebAccessTokenResponse(tokens);
   }
 
   @Public()
@@ -87,26 +93,17 @@ export class AuthController {
   ): Promise<WebAccessTokenResponse> {
     const refreshToken = parseWebRefreshCookie(request.headers.cookie);
     if (!refreshToken) {
-      response.setHeader(
-        'Set-Cookie',
-        buildExpiredWebRefreshCookie(process.env.NODE_ENV === 'production'),
-      );
+      response.setHeader('Set-Cookie', buildExpiredWebRefreshCookie(useSecureWebRefreshCookie()));
       throw new UnauthorizedException('刷新令牌无效');
     }
 
     try {
       const tokens = await this.auth.refresh(refreshToken, true);
-      response.setHeader(
-        'Set-Cookie',
-        buildWebRefreshCookie(tokens.refreshToken, process.env.NODE_ENV === 'production'),
-      );
-      return { accessToken: tokens.accessToken };
+      response.setHeader('Set-Cookie', buildWebRefreshCookie(tokens.refreshToken, useSecureWebRefreshCookie()));
+      return toWebAccessTokenResponse(tokens);
     } catch (error) {
       if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
-        response.setHeader(
-          'Set-Cookie',
-          buildExpiredWebRefreshCookie(process.env.NODE_ENV === 'production'),
-        );
+        response.setHeader('Set-Cookie', buildExpiredWebRefreshCookie(useSecureWebRefreshCookie()));
       }
       throw error;
     }

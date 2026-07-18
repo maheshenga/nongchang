@@ -1,6 +1,69 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto, PaginatedFarmRecords } from '@nongchang/shared';
+import { TraceEventType, type AuthUser, type CreateFarmRecordDto, type FarmRecordQueryDto, type PaginatedFarmRecords } from '@nongchang/shared';
+
+const MAX_PUBLIC_FARM_DESCRIPTION_CODE_POINTS = 2_000;
+
+export interface FarmRecordTraceSource {
+  id: string;
+  tenantId: string;
+  batchId: string;
+  action: string;
+  detail: unknown;
+  images: unknown;
+  recordedAt: Date;
+}
+
+export interface FarmRecordTraceEventData {
+  tenantId: string;
+  batchId: string;
+  type: typeof TraceEventType.FARM;
+  title: string;
+  actor: string;
+  location: string;
+  occurredAt: Date;
+  payload?: Prisma.InputJsonValue;
+  sourceFarmRecordId: string;
+}
+
+function publicDescription(detail: unknown): string | undefined {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return undefined;
+  const row = detail as Record<string, unknown>;
+  const raw = typeof row.note === 'string' && row.note.trim()
+    ? row.note
+    : typeof row.desc === 'string' && row.desc.trim()
+      ? row.desc
+      : '';
+  return raw
+    ? Array.from(raw.trim()).slice(0, MAX_PUBLIC_FARM_DESCRIPTION_CODE_POINTS).join('')
+    : undefined;
+}
+
+function firstPublicImage(images: unknown): string | undefined {
+  if (!Array.isArray(images)) return undefined;
+  return images.find((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+export function buildFarmRecordTraceEventData(input: {
+  record: FarmRecordTraceSource;
+  ownerDisplayName: string;
+  fieldName: string;
+}): FarmRecordTraceEventData {
+  const desc = publicDescription(input.record.detail);
+  const image = firstPublicImage(input.record.images);
+  const payload = { ...(desc ? { desc } : {}), ...(image ? { image } : {}) };
+  return {
+    tenantId: input.record.tenantId,
+    batchId: input.record.batchId,
+    type: TraceEventType.FARM,
+    title: input.record.action.trim(),
+    actor: input.ownerDisplayName,
+    location: input.fieldName,
+    occurredAt: input.record.recordedAt,
+    payload: Object.keys(payload).length ? payload : undefined,
+    sourceFarmRecordId: input.record.id,
+  };
+}
 
 export function serializeFarmRecord<T extends { supplyAmount: Prisma.Decimal | number | null }>(record: T) {
   return { ...record, supplyAmount: record.supplyAmount != null ? new Prisma.Decimal(record.supplyAmount).toNumber() : null };

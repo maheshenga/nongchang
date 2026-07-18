@@ -1,4 +1,4 @@
-import type { WebAccessTokenResponse } from '@nongchang/shared';
+import { webAccessTokenResponseSchema } from '@nongchang/shared';
 import {
   clearAccessToken,
   getAccessToken,
@@ -15,10 +15,15 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiFile {
+  blob: Blob;
+  fileName: string | null;
+}
+
 let onAuthExpired: (() => void) | null = null;
 
-export function setOnAuthExpired(cb: () => void): void {
-  onAuthExpired = cb;
+export function setOnAuthExpired(callback: () => void): void {
+  onAuthExpired = callback;
 }
 
 function expireWebSession(): void {
@@ -51,9 +56,8 @@ async function doRefresh(): Promise<string | null> {
   }
 
   try {
-    const body = (await response.json()) as WebAccessTokenResponse;
-    if (!body.accessToken) throw new Error('Missing access token');
-    return setAccessTokenIfCurrent(body.accessToken, expectedGeneration) ? body.accessToken : null;
+    const { accessToken } = webAccessTokenResponseSchema.parse(await response.json());
+    return setAccessTokenIfCurrent(accessToken, expectedGeneration) ? accessToken : null;
   } catch {
     expireWebSessionIfCurrent(expectedGeneration);
     return null;
@@ -99,14 +103,12 @@ async function send(path: string, init: RequestInit, accessToken: string | null)
   });
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function authorizedResponse(path: string, init: RequestInit): Promise<Response> {
   const accessToken = getAccessToken();
   const accessTokenGeneration = getAccessTokenGeneration();
   let response = await send(path, init, accessToken);
 
   if (response.status === 401) {
-    // A stale request must never revive or retry a session changed by logout,
-    // login, or another refresh while that request was in flight.
     if (!accessToken || getAccessTokenGeneration() !== accessTokenGeneration) {
       throw await parseError(response);
     }
@@ -119,9 +121,50 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   }
 
   if (!response.ok) throw await parseError(response);
+  return response;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await authorizedResponse(path, init);
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
   if (!text) return null as T;
   return JSON.parse(text) as T;
+}
+
+function safeResponseFileName(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const encodedMatch = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  const plainMatch = contentDisposition.match(/filename\s*=\s*"?([^";]+)"?/i);
+  let candidate: string | null = null;
+
+  if (encodedMatch) {
+    try {
+      candidate = decodeURIComponent(encodedMatch[1].trim().replace(/^"|"$/g, ''));
+    } catch {
+      candidate = null;
+    }
+  } else if (plainMatch) {
+    candidate = plainMatch[1].trim();
+  }
+
+  if (!candidate) return null;
+  const basename = candidate
+    .replace(/[\0\r\n]/g, '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .at(-1)
+    ?.trim();
+  if (!basename || basename === '.' || basename === '..') return null;
+  return basename;
+}
+
+export async function requestFile(path: string, init: RequestInit = {}): Promise<ApiFile> {
+  const response = await authorizedResponse(path, init);
+  return {
+    blob: await response.blob(),
+    fileName: safeResponseFileName(response.headers.get('Content-Disposition')),
+  };
 }

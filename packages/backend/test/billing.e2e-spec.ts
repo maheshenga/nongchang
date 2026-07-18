@@ -5,6 +5,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+type CleanupStep = readonly [string, () => Promise<unknown> | unknown];
+
+async function runCleanupSteps(steps: CleanupStep[]): Promise<void> {
+  const errors: Error[] = [];
+  for (const [name, cleanup] of steps) {
+    try {
+      await cleanup();
+    } catch (error) {
+      errors.push(new Error(`${name}: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Billing e2e cleanup failed');
+}
+
 async function login(app: INestApplication, username: string): Promise<string> {
   const res = await request(app.getHttpServer())
     .post('/api/auth/login')
@@ -20,6 +34,7 @@ async function codeBalance(app: INestApplication, token: string): Promise<number
 }
 
 describe('Billing e2e', () => {
+  const previousAllowManualPay = process.env.ALLOW_MANUAL_PAY;
   let app: INestApplication;
   let prisma: PrismaService;
   let sysToken: string;
@@ -34,10 +49,8 @@ describe('Billing e2e', () => {
   let createdFieldId: string | null = null;
   const createdPlanIds: string[] = [];
   const createdOrderIds: string[] = [];
-  let previousManualPay: string | undefined;
 
   beforeAll(async () => {
-    previousManualPay = process.env.ALLOW_MANUAL_PAY;
     process.env.ALLOW_MANUAL_PAY = 'true';
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = mod.createNestApplication();
@@ -48,7 +61,10 @@ describe('Billing e2e', () => {
     agentToken = await login(app, 'agentA');
     merchantToken = await login(app, 'merchantA');
 
-    const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
+    const demoTenant = await prisma.tenant.findUnique({ where: { code: 'DEMO' } });
+    const userA = await prisma.user.findUnique({
+      where: { tenantId_username: { tenantId: demoTenant!.id, username: 'merchantA' } },
+    });
     merchantUserId = userA!.id;
     merchantTenantId = userA!.tenantId;
     agentId = userA!.agentId!;
@@ -72,27 +88,47 @@ describe('Billing e2e', () => {
   });
 
   afterAll(async () => {
-    if (createdCodes.length) {
-      await prisma.traceCode.deleteMany({ where: { code: { in: createdCodes } } });
-    }
-    if (createdOrderIds.length) {
-      await prisma.creditLedger.deleteMany({ where: { refType: 'order', refId: { in: createdOrderIds } } });
-      await prisma.creditOrder.deleteMany({ where: { id: { in: createdOrderIds } } });
-    }
-    if (createdPlanIds.length) {
-      await prisma.creditPlan.deleteMany({ where: { id: { in: createdPlanIds } } });
-    }
-    if (createdBatchId) await prisma.batch.deleteMany({ where: { id: createdBatchId } });
-    if (createdFieldId) await prisma.field.deleteMany({ where: { id: createdFieldId } });
+    await runCleanupSteps([
+      ['trace codes', async () => {
+        if (createdCodes.length) {
+          await prisma.traceCode.deleteMany({ where: { code: { in: createdCodes } } });
+        }
+      }],
+      ['order ledgers', async () => {
+        if (createdOrderIds.length) {
+          await prisma.creditLedger.deleteMany({ where: { refType: 'order', refId: { in: createdOrderIds } } });
+        }
+      }],
+      ['orders', async () => {
+        if (createdOrderIds.length) {
+          await prisma.creditOrder.deleteMany({ where: { id: { in: createdOrderIds } } });
+        }
+      }],
+      ['plans', async () => {
+        if (createdPlanIds.length) {
+          await prisma.creditPlan.deleteMany({ where: { id: { in: createdPlanIds } } });
+        }
+      }],
+      ['batch', async () => {
+        if (createdBatchId) await prisma.batch.deleteMany({ where: { id: createdBatchId } });
+      }],
+      ['field', async () => {
+        if (createdFieldId) await prisma.field.deleteMany({ where: { id: createdFieldId } });
+      }],
     // 本套用例会把 merchantA 的 CODE 余额压到 2(熔断用例),恢复到种子额度,
     // 避免后续 e2e(如 trace-codes)因余额不足被计费硬熔断而误报 403。
-    await prisma.creditAccount.updateMany({
-      where: { ownerType: 'MERCHANT', ownerId: merchantUserId },
-      data: { codeBalance: 10000 },
-    });
-    if (previousManualPay === undefined) delete process.env.ALLOW_MANUAL_PAY;
-    else process.env.ALLOW_MANUAL_PAY = previousManualPay;
-    await app.close();
+      ['merchant balance', async () => {
+        await prisma.creditAccount.updateMany({
+          where: { ownerType: 'MERCHANT', ownerId: merchantUserId },
+          data: { codeBalance: 10000 },
+        });
+      }],
+      ['app close', () => app.close()],
+      ['restore ALLOW_MANUAL_PAY', () => {
+        if (previousAllowManualPay === undefined) delete process.env.ALLOW_MANUAL_PAY;
+        else process.env.ALLOW_MANUAL_PAY = previousAllowManualPay;
+      }],
+    ]);
   });
 
   it('充值 + 三级分配:平台→代理→商户,商户 CODE 余额增加 200', async () => {

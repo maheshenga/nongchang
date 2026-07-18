@@ -108,6 +108,17 @@ export type {
 export { uploadResponseSchema } from './dto/upload.dto';
 export type { UploadResponse } from './dto/upload.dto';
 
+export {
+  traceLabelPaperSizeSchema,
+  TRACE_LABEL_PAPER_DEFAULTS,
+  traceLabelPdfInputSchema,
+} from './dto/trace-label-pdf.dto';
+export type {
+  TraceLabelPaperSize,
+  TraceLabelPdfInput,
+  ResolvedTraceLabelPdfInput,
+} from './dto/trace-label-pdf.dto';
+
 export type { AuthUser, TokenPair } from './types';
 
 export { listQuerySchema, isPaginated } from './dto/list-query.dto';

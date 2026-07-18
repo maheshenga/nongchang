@@ -43,7 +43,7 @@ pnpm install
 pnpm build:shared
 pnpm build:backend
 psql "$DATABASE_URL" -f packages/backend/prisma/audit-data-consistency.sql
-pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 migrate dev
+# prisma:deploy 只能在下述原子切换流程中、全部后端停止后执行
 ```
 `audit-data-consistency.sql` 应返回 0 行。若返回跨商家/跨租户脏数据或重复微信 appId,先备份并清洗数据,再执行迁移。
 可选:初始化演示数据:
@@ -76,6 +76,20 @@ pnpm --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --lim
 ```
 
 Only after reviewing the dry-run count, add `--execute`. Execution attempts OSS deletion first and then releases the durable reservation. A non-zero exit status means at least one asset still needs investigation; rerunning is safe because terminal assets are released idempotently.
+## Binding Production Cutover and Rollback Boundary
+
+The production cutover and rollback boundary is identical across the approved design and deployment runbooks:
+
+1. Before production, restore a current backup into a rehearsal database; record the `trace_events` row count and total relation size, migration duration, and observed lock behavior. Do not proceed without an operator-approved maintenance-window result.
+2. At cutover, enable maintenance mode and write quiescence, stop every PM2 backend instance before `prisma:deploy`, and verify no old backend process listens on port `3001`; old and new versions must never serve writes concurrently.
+3. While writes remain stopped, take and verify the pre-cutover database backup, deploy the migration, and start only the new build.
+4. Pre-open smoke writes are allowed only as uniquely tagged, release-owned disposable fixtures; record the release ID and every created ID. Keep maintenance mode and write quiescence active while readiness and focused smoke checks run.
+5. If any pre-open check fails, keep writes stopped and restore the pre-cutover backup; that restore removes the disposable smoke writes, and rollback to the old build is allowed only together with that backup restore.
+6. If checks pass, remove every disposable smoke fixture in FK-safe order and verify zero residue before reopening user traffic.
+7. The irreversible boundary is the first non-disposable user write accepted after maintenance mode is removed, not the controlled smoke write.
+8. After that boundary, old-build/database rollback is forbidden; re-enter maintenance mode if necessary and forward-fix. Historical pending records have no completion timestamp that can safely distinguish missed mixed-version publication from intentional historical non-backfill.
+
+No broad historical reconciler or automatic backfill is part of this cutover.
 
 ## 4. PM2 管理器启动后端
 
@@ -114,6 +128,49 @@ curl --fail --silent http://127.0.0.1:3001/api/health/ready
 - 短暂数据库故障导致的 readiness `503` 不等于 Node 进程失活。不要仅因为一次或短时 readiness 失败就重启 PM2；数据库恢复后探针会自动恢复为 `200`。
 
 建议在宝塔「计划任务」或外部监控中每 30 秒检查 liveness，并在发布切流前连续检查 readiness。单实例部署无法真正“摘流”时，应让 Nginx 保留 `503`，进入维护页或由上游负载均衡停止转发，而不是伪造 `200`。
+  WEB_BASE_URL=https://farm.example.com
+  TRACE_PDF_FONT_PATH=/www/server/fonts/NotoSansSC-Regular.ttf
+  ```
+
+### 4.1 溯源标签 PDF 字体与上线 smoke
+
+标签 PDF 由 backend 直接生成，中文字体必须是允许服务端嵌入的独立 `.ttf` 或 `.otf` 文件。不要配置系统字体集合 `.ttc`，也不要把字体二进制提交到仓库。
+
+1. 在宝塔服务器准备字体目录并安装/上传 Noto Sans SC Regular：
+
+   ```bash
+   mkdir -p /www/server/fonts
+   chmod 755 /www/server/fonts
+   test -r /www/server/fonts/NotoSansSC-Regular.ttf
+   file /www/server/fonts/NotoSansSC-Regular.ttf
+   fc-scan /www/server/fonts/NotoSansSC-Regular.ttf | head -n 20
+   sha256sum /www/server/fonts/NotoSansSC-Regular.ttf
+   ```
+
+   `file`/`fc-scan` 必须识别为单字体 TrueType/OpenType；若显示 TrueType Collection 或路径以 `.ttc` 结尾，停止部署并更换字体。确认字体许可证允许 PDF 嵌入。
+
+2. 在 `packages/backend/.env` 配置真实公网 HTTPS 站点和字体绝对路径，随后通过宝塔 PM2 重启并保存进程列表。二维码地址只取 `WEB_BASE_URL`，不会从 `Host`、`Origin` 或代理请求头推导。
+
+3. backend 发布后、Web 发布前，用具备 `trace:view` 权限的测试账号取得短期 access token，并对独立测试批次执行 smoke：
+
+   ```bash
+   TOKEN='替换为短期测试 token'
+   BATCH_ID='替换为独立测试批次 UUID'
+   curl -fsS -D /tmp/trace-labels.headers \
+     -H "Authorization: Bearer ${TOKEN}" \
+     -H 'Content-Type: application/json' \
+     --data '{"paperSize":"A4"}' \
+     "https://farm.example.com/api/trace/codes/${BATCH_ID}/labels.pdf" \
+     -o /tmp/trace-labels-smoke.pdf
+   head -c 5 /tmp/trace-labels-smoke.pdf
+   file /tmp/trace-labels-smoke.pdf
+   pdfinfo /tmp/trace-labels-smoke.pdf
+   grep -Ei 'content-type|content-disposition|cache-control' /tmp/trace-labels.headers
+   ```
+
+   必须看到 `%PDF-`、正确页数、`application/pdf`、RFC 5987 文件名以及 `Cache-Control: private, no-store`。打开 PDF 检查中文无方框/乱码，并从不同页抽查至少 3 个二维码，确认都打开对应 code 的公开溯源页。
+
+4. 只有 backend smoke 通过后才发布 Web。此功能没有数据库迁移；回滚时先回滚 Web，再回滚 backend。已经下载到用户本地的 PDF 不存储在服务器，不受回滚影响。
 
 ## 5. 构建前端
 
