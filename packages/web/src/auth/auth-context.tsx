@@ -12,6 +12,7 @@ import { clearAccessToken, setAccessToken } from './token-store';
 import { decodeToken } from './decode-token';
 import { getMe, webLogin, webLogout } from '../api/auth';
 import { refreshWebSession, setOnAuthExpired } from '../api/request';
+import { resetAppQueryCache } from '../query-client';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -34,6 +35,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionEpochRef = useRef(0);
 
   const setCurrentUser = useCallback((next: AuthUser | null) => {
+    const previous = userRef.current;
+    const previousIdentity = previous
+      ? `${previous.userId}:${previous.tenantId ?? ''}:${previous.role}`
+      : null;
+    const nextIdentity = next
+      ? `${next.userId}:${next.tenantId ?? ''}:${next.role}`
+      : null;
+    if (previousIdentity !== nextIdentity) void resetAppQueryCache();
     userRef.current = next;
     setUser(next);
   }, []);

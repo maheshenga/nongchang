@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ForbiddenException, ConflictException, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
@@ -15,6 +15,7 @@ import {
   type SessionAuthUser,
   type SessionTokenClaims,
 } from './auth.model';
+import { SessionValidationCacheService } from './session-validation-cache.service';
 
 const WX_SESSION_URL = 'https://api.weixin.qq.com/sns/jscode2session';
 const WX_TIMEOUT_MS = 8000;
@@ -34,6 +35,7 @@ export class AuthService {
     private jwt: JwtService,
     private integrations: IntegrationConfigService,
     private groups: UserGroupService,
+    @Optional() private sessions?: SessionValidationCacheService,
   ) {}
 
   async login(dto: LoginDto, web = false): Promise<TokenPair> {
@@ -172,7 +174,7 @@ export class AuthService {
     }
     if (payload.sessionKind !== 'web' || !Number.isInteger(payload.webSessionVersion)) return;
 
-    await this.prisma.user.updateMany({
+    const result = await this.prisma.user.updateMany({
       where: {
         id: payload.userId,
         sessionVersion: payload.sessionVersion ?? 0,
@@ -180,6 +182,7 @@ export class AuthService {
       },
       data: { webSessionVersion: { increment: 1 } },
     });
+    if (result.count > 0) await this.sessions?.invalidateUser(payload.tenantId, payload.userId);
   }
 
   // ── 个人账号(/auth/me)── 任意已登录角色自助查看/维护本人资料。
@@ -214,6 +217,7 @@ export class AuthService {
       where: { id: actor.userId },
       data: { passwordHash, sessionVersion: { increment: 1 } },
     });
+    await this.sessions?.invalidateUser(actor.tenantId, actor.userId);
     return { ok: true };
   }
 

@@ -37,6 +37,8 @@ model Tenant {
   creditPlans        CreditPlan[]
   creditOrders       CreditOrder[]
   aiOperations       AiOperation[]
+  uploadAssets       UploadAsset[]
+  uploadQuotaUsage   UploadQuotaUsage?
 
   @@map("tenants")
 }
@@ -79,6 +81,7 @@ model User {
   farmRecords    FarmRecord[]
   ownedSupplies  Supply[]
   supplyIssues   SupplyIssue[]
+  uploadAssets   UploadAsset[]
 
   @@unique([tenantId, username])
   @@unique([tenantId, wxOpenid])
@@ -236,6 +239,7 @@ model TraceScan {
   @@index([tenantId])
   @@index([code, scannedAt])
   @@index([batchId])
+  @@index([tenantId, scannedAt(sort: Desc), code, ip], map: "trace_scans_tenant_scanned_code_ip_idx")
   @@map("trace_scans")
 }
 
@@ -437,6 +441,13 @@ enum AiOperationStatus {
   REVIEW_REQUIRED
 }
 
+enum UploadAssetStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  DELETED
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -500,6 +511,7 @@ model AiOperation {
   reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
   status        AiOperationStatus  @default(RESERVED)
   errorCategory String?            @map("error_category")
+  resultEnvelope Json?             @map("result_envelope")
   createdAt     DateTime           @default(now()) @map("created_at")
   updatedAt     DateTime           @updatedAt @map("updated_at")
   tenant        Tenant             @relation(fields: [tenantId], references: [id])
@@ -507,6 +519,37 @@ model AiOperation {
   @@unique([tenantId, operationKey])
   @@index([tenantId, status, createdAt])
   @@map("ai_operations")
+}
+
+model UploadAsset {
+  id        String            @id @default(uuid())
+  tenantId  String            @map("tenant_id")
+  userId    String            @map("user_id")
+  purpose   String
+  objectKey String            @unique @map("object_key")
+  url       String?
+  sizeBytes BigInt            @map("size_bytes")
+  checksum  String
+  status    UploadAssetStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([userId, createdAt])
+  @@map("upload_assets")
+}
+
+model UploadQuotaUsage {
+  tenantId    String   @id @map("tenant_id")
+  dayKey      String   @map("day_key")
+  dailyBytes  BigInt   @default(0) @map("daily_bytes")
+  activeBytes BigInt   @default(0) @map("active_bytes")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("upload_quota_usage")
 }
 
 model CreditLedger {

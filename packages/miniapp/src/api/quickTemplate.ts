@@ -1,7 +1,7 @@
+import { quickTemplateViewSchema, type QuickTemplateView } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
-import type { QuickTemplateView } from '@nongchang/shared';
 
-// 拉取租户共享的快捷模板列表(小程序只读使用)。
-export function listQuickTemplates(): Promise<QuickTemplateView[]> {
-  return request<QuickTemplateView[]>({ url: '/quick-templates' });
+export async function listQuickTemplates(): Promise<QuickTemplateView[]> {
+  return parseResponse(quickTemplateViewSchema.array(), await request<unknown>({ url: '/quick-templates' }), 'quickTemplate.list');
 }

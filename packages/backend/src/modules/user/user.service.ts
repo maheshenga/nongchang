@@ -1,9 +1,10 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Optional } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, ListQuery, Paginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
 import {
   MerchantFieldAggregateRow,
   MerchantListRow,
@@ -26,7 +27,11 @@ import {
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private sessions?: SessionValidationCacheService,
+  ) {}
 
   async create(actor: AuthUser, dto: CreateUserDto) {
     const agentId = resolveCreateUserAgentId(actor, dto);
@@ -104,20 +109,24 @@ export class UserService {
     const data: Record<string, unknown> = {};
     if (dto.displayName !== undefined) data.displayName = dto.displayName;
     if (dto.phone !== undefined) data.phone = dto.phone;
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id }, data,
       select: { id: true, username: true, displayName: true, phone: true, status: true },
     });
+    await this.sessions?.invalidateUser(actor.tenantId, id);
+    return updated;
   }
 
   async setStatus(actor: AuthUser, id: string, status: 'active' | 'suspended') {
     if (!id) throw new ForbiddenException('缺少用户 id');
     const target = await this.prisma.user.findFirst({ where: buildMerchantTargetWhere(actor, id, 'manageable') });
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id }, data: buildUserStatusUpdateData(status),
       select: { id: true, status: true },
     });
+    await this.sessions?.invalidateUser(actor.tenantId, id);
+    return updated;
   }
 
   private scopedWhere(actor: AuthUser): Record<string, string> {
@@ -144,6 +153,7 @@ export class UserService {
     if (!target) throw new ForbiddenException('目标用户不存在或不在可管理范围');
     const status = reviewActionToStatus(dto.action);
     await this.prisma.user.update({ where: { id: userId }, data: { status } });
+    await this.sessions?.invalidateUser(actor.tenantId, userId);
     return { id: userId, status };
   }
 }

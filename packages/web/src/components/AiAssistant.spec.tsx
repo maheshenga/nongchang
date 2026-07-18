@@ -76,7 +76,7 @@ describe('AiAssistant Fluent production AI surface', () => {
     const file = new File(['leaf'], 'leaf.png', { type: 'image/png' });
     fireEvent.change(screen.getByLabelText('选择诊断图片'), { target: { files: [file] } });
 
-    await waitFor(() => expect(uploadMocks.uploadImage).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(uploadMocks.uploadImage).toHaveBeenCalledWith(file, 'ai-diagnose'));
     fireEvent.change(screen.getByPlaceholderText('补充说明（可选）'), {
       target: { value: '  叶背有白色粉末  ' },
     });

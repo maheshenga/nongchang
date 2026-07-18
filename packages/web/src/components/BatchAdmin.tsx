@@ -19,8 +19,8 @@ import { useBatchAdminFilters } from './batch-admin/useBatchAdminFilters';
 
 // 生成真实溯源码 · 导出溯源报告 · 数据来源于批次、农事记录、溯源事件与扫码统计接口
 export default function BatchAdmin() {
-  const { data: rawBatches, loading, error, reload } = useApi(listBatches);
-  const { data: fields } = useApi(listFields);
+  const { data: rawBatches, loading, error, reload } = useApi(listBatches, { cacheKey: 'batches' });
+  const { data: fields } = useApi(listFields, { cacheKey: 'fields' });
   const batches = useMemo(() => (rawBatches ?? []).map(toViewBatch), [rawBatches]);
   const filters = useBatchAdminFilters(batches);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

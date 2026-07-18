@@ -139,11 +139,12 @@ describe('api/request', () => {
       data: JSON.stringify({ url: 'https://cdn.example.com/a.jpg' }),
     });
 
-    const out = await uploadFile('/tmp/a.jpg');
+    const out = await uploadFile('/tmp/a.jpg', 'ai-diagnose');
 
     expect(out).toBe('https://cdn.example.com/a.jpg');
     expect((taro.request as any).mock.calls[0][0].url).toMatch(/\/auth\/refresh$/);
     expect((taro.uploadFile as any).mock.calls[0][0].header.Authorization).toBe(`Bearer ${freshAccess}`);
+    expect((taro.uploadFile as any).mock.calls[0][0].url).toMatch(/\/uploads\?purpose=ai-diagnose$/);
   });
 
   it('refreshes and retries once when upload returns 401', async () => {
@@ -160,7 +161,7 @@ describe('api/request', () => {
       data: { accessToken: freshAccess, refreshToken: 'refresh-upload-4' },
     });
 
-    const out = await uploadFile('/tmp/b.jpg');
+    const out = await uploadFile('/tmp/b.jpg', 'farm-record');
 
     expect(out).toBe('https://cdn.example.com/b.jpg');
     expect(taro.uploadFile).toHaveBeenCalledTimes(2);
@@ -174,7 +175,7 @@ describe('api/request', () => {
       data: JSON.stringify({ message: 'unauthorized' }),
     });
 
-    await expect(uploadFile('/tmp/c.jpg')).rejects.toThrow('登录已失效');
+    await expect(uploadFile('/tmp/c.jpg', 'farm-record')).rejects.toThrow('登录已失效');
 
     expect(taro.redirectTo).toHaveBeenCalledWith({ url: '/pages/login/index' });
     expect(getToken()).toBe('');
@@ -194,7 +195,7 @@ describe('api/request', () => {
       data: { accessToken: freshAccess, refreshToken: 'refresh-upload-6' },
     });
 
-    await expect(uploadFile('/tmp/d.jpg')).rejects.toThrow('登录已失效');
+    await expect(uploadFile('/tmp/d.jpg', 'farm-record')).rejects.toThrow('登录已失效');
 
     expect(taro.uploadFile).toHaveBeenCalledTimes(2);
     expect(taro.redirectTo).toHaveBeenCalledWith({ url: '/pages/login/index' });

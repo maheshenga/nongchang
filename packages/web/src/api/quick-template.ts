@@ -1,15 +1,22 @@
-import type { QuickTemplateView, QuickTemplateInput } from '@nongchang/shared';
+import { okResponseSchema, quickTemplateViewSchema, type QuickTemplateInput, type QuickTemplateView } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-export function listQuickTemplates(): Promise<QuickTemplateView[]> {
-  return request<QuickTemplateView[]>('/quick-templates');
+export async function listQuickTemplates(): Promise<QuickTemplateView[]> {
+  return parseResponse(quickTemplateViewSchema.array(), await request<unknown>('/quick-templates'), 'quickTemplate.list');
 }
-export function createQuickTemplate(input: QuickTemplateInput): Promise<QuickTemplateView> {
-  return request<QuickTemplateView>('/quick-templates', { method: 'POST', body: JSON.stringify(input) });
+export async function createQuickTemplate(input: QuickTemplateInput): Promise<QuickTemplateView> {
+  return parseResponse(quickTemplateViewSchema, await request<unknown>('/quick-templates', {
+    method: 'POST', body: JSON.stringify(input),
+  }), 'quickTemplate.create');
 }
-export function updateQuickTemplate(id: string, input: QuickTemplateInput): Promise<QuickTemplateView> {
-  return request<QuickTemplateView>(`/quick-templates/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+export async function updateQuickTemplate(id: string, input: QuickTemplateInput): Promise<QuickTemplateView> {
+  return parseResponse(quickTemplateViewSchema, await request<unknown>(`/quick-templates/${encodeURIComponent(id)}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }), 'quickTemplate.update');
 }
-export function deleteQuickTemplate(id: string): Promise<{ ok: true }> {
-  return request<{ ok: true }>(`/quick-templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export async function deleteQuickTemplate(id: string): Promise<{ ok: true }> {
+  return parseResponse(okResponseSchema, await request<unknown>(`/quick-templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }), 'quickTemplate.delete');
 }

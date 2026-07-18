@@ -1,12 +1,21 @@
-import type { OssConfigView, OssConfigInput, AiTestResponse } from '@nongchang/shared';
+import {
+  aiTestResponseSchema,
+  ossConfigViewSchema,
+  type AiTestResponse,
+  type OssConfigInput,
+  type OssConfigView,
+} from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-export function getOssConfig(): Promise<OssConfigView | null> {
-  return request<OssConfigView | null>('/oss-config');
+export async function getOssConfig(): Promise<OssConfigView | null> {
+  return parseResponse(ossConfigViewSchema.nullable(), await request<unknown>('/oss-config'), 'oss.get');
 }
-export function upsertOssConfig(input: OssConfigInput): Promise<OssConfigView> {
-  return request<OssConfigView>('/oss-config', { method: 'PUT', body: JSON.stringify(input) });
+export async function upsertOssConfig(input: OssConfigInput): Promise<OssConfigView> {
+  return parseResponse(ossConfigViewSchema, await request<unknown>('/oss-config', {
+    method: 'PUT', body: JSON.stringify(input),
+  }), 'oss.upsert');
 }
-export function testOssConfig(): Promise<AiTestResponse> {
-  return request<AiTestResponse>('/oss-config/test', { method: 'POST' });
+export async function testOssConfig(): Promise<AiTestResponse> {
+  return parseResponse(aiTestResponseSchema, await request<unknown>('/oss-config/test', { method: 'POST' }), 'oss.test');
 }

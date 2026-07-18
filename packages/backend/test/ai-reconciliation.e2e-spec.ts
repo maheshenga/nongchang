@@ -120,4 +120,32 @@ describe('AI billing reconciliation e2e', () => {
     ]));
     expect(terminalLedgers.some((ledger) => ledger.idempotencyKey === `${operationPrefix}:in-flight`)).toBe(false);
   });
+
+  it('charges once and replays the confirmed result for the same operation key', async () => {
+    const operationKey = `${operationPrefix}:replay`;
+    const input = {
+      user,
+      providerId: 'provider:e2e',
+      kind: 'ai.chat',
+      operationKey,
+      amount: 2,
+      ref: { refType: 'ai.chat', idempotencyKey: operationKey },
+    };
+    let providerCalls = 0;
+
+    const first = await coordinator.execute(input, async () => {
+      providerCalls += 1;
+      return 'sanitized result';
+    });
+    const second = await coordinator.execute(input, async () => {
+      providerCalls += 1;
+      return 'must not run';
+    });
+
+    expect(first).toBe('sanitized result');
+    expect(second).toBe('sanitized result');
+    expect(providerCalls).toBe(1);
+    expect(await prisma.creditReservation.count({ where: { accountId, idempotencyKey: operationKey } })).toBe(1);
+    expect(await prisma.creditLedger.count({ where: { accountId, reason: 'RESERVED', idempotencyKey: operationKey } })).toBe(1);
+  });
 });

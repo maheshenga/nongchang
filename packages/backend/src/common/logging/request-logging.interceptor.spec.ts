@@ -8,6 +8,7 @@ function contextFixture() {
     method: 'POST',
     url: '/api/ai/chat?secret=DO_NOT_LOG',
     route: { path: '/ai/chat' },
+    baseUrl: '/api',
     headers: {
       'x-request-id': 'client-request-1',
       authorization: 'Bearer DO_NOT_LOG',
@@ -26,11 +27,12 @@ function contextFixture() {
 
 describe('RequestLoggingInterceptor', () => {
   const log = vi.fn();
+  const observeHttp = vi.fn();
   let interceptor: RequestLoggingInterceptor;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    interceptor = new RequestLoggingInterceptor();
+    interceptor = new RequestLoggingInterceptor({ observeHttp } as never);
     (interceptor as unknown as { logger: { log(value: string): void } }).logger = { log };
   });
 
@@ -52,6 +54,13 @@ describe('RequestLoggingInterceptor', () => {
       durationMs: expect.any(Number),
       tenantId: 'tenant-1',
       userId: 'user-1',
+    });
+    expect(observeHttp).toHaveBeenCalledWith({
+      method: 'POST',
+      routeTemplate: '/api/ai/chat',
+      rawUrl: '/api/ai/chat?secret=DO_NOT_LOG',
+      statusCode: 201,
+      durationSeconds: expect.any(Number),
     });
   });
 

@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { AuthUser, CreateFieldDto, ListQuery, Paginated } from '@nongchang/shared';
 import { isPaginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
 import {
   buildFieldCreateData,
   buildFieldIds,
@@ -17,7 +18,11 @@ import {
 
 @Injectable()
 export class FieldService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private cache?: PublicTraceCacheService,
+  ) {}
 
   async create(user: AuthUser, dto: CreateFieldDto) {
     const { lng, lat } = dto;
@@ -29,6 +34,7 @@ export class FieldService {
       `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
       lng, lat, field.id,
     );
+    await this.cache?.invalidateTenant(user.tenantId);
     return field;
   }
 

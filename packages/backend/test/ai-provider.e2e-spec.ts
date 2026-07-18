@@ -81,8 +81,18 @@ describe('AiProvider e2e', () => {
     const res = await request(app.getHttpServer())
       .post('/api/ai/chat')
       .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', 'e2e-ai-provider-chat-0001')
       .send({ message: '你好' });
     expect(res.status).toBe(400);
+  });
+
+  it('billable AI endpoints require Idempotency-Key', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/ai/chat')
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .send({ message: 'hello' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Idempotency-Key/);
   });
 
   it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {

@@ -7,8 +7,8 @@ import { fluentButton, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 
 export default function AntiFakeMonitor() {
-  const { data: scans, loading: scansLoading, error: scansError, reload: reloadScans } = useApi(listScans);
-  const { data: alerts, loading: alertsLoading, error: alertsError, reload: reloadAlerts } = useApi(listAlerts);
+  const { data: scans, loading: scansLoading, error: scansError, reload: reloadScans } = useApi(listScans, { cacheKey: 'anti-fake-scans' });
+  const { data: alerts, loading: alertsLoading, error: alertsError, reload: reloadAlerts } = useApi(listAlerts, { cacheKey: 'anti-fake-alerts' });
 
   const reloadAll = useCallback(() => {
     void reloadScans();

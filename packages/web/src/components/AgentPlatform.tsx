@@ -4,7 +4,7 @@ import { useApi } from '../hooks/useApi';
 import { listMerchants, type MerchantUser } from '../api/agents';
 
 export default function AgentPlatform() {
-  const { data: rawMerchants, loading, error, reload } = useApi(listMerchants);
+  const { data: rawMerchants, loading, error, reload } = useApi(listMerchants, { cacheKey: 'merchants' });
   const merchants = (rawMerchants ?? []).map((m: MerchantUser) => ({
     id: m.id,
     name: m.displayName,

@@ -1,104 +1,151 @@
-import type {
-  BillingSummary, CreditAccountItem, PaginatedLedger, LedgerQuery,
-  AllocateInput, RechargeInput,
-  CreditPlanView, CreateCreditPlanInput, UpdateCreditPlanInput,
-  CreateOrderInput, CreditOrderView, OrderQuery, PaginatedOrders,
-  AlipayConfigInput, AlipayConfigView, CreatePaymentInput, PaymentView,
-  ListQuery, Paginated,
+import {
+  alipayConfigViewSchema,
+  billingSummarySchema,
+  creditAccountItemSchema,
+  creditOrderViewSchema,
+  creditPlanViewSchema,
+  idResponseSchema,
+  okResponseSchema,
+  paginatedLedgerSchema,
+  paginatedOrdersSchema,
+  paginatedResponseSchema,
+  paymentViewSchema,
+  type AlipayConfigInput,
+  type AlipayConfigView,
+  type AllocateInput,
+  type BillingSummary,
+  type CreateCreditPlanInput,
+  type CreateOrderInput,
+  type CreatePaymentInput,
+  type CreditAccountItem,
+  type CreditOrderView,
+  type CreditPlanView,
+  type LedgerQuery,
+  type ListQuery,
+  type OrderQuery,
+  type Paginated,
+  type PaginatedLedger,
+  type PaginatedOrders,
+  type PaymentView,
+  type RechargeInput,
+  type UpdateCreditPlanInput,
 } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-export function getBillingSummary(): Promise<BillingSummary> {
-  return request<BillingSummary>('/billing/summary');
+export async function getBillingSummary(): Promise<BillingSummary> {
+  return parseResponse(billingSummarySchema, await request<unknown>('/billing/summary'), 'billing.summary');
 }
 
 function withListQuery(path: string, query: Partial<ListQuery> = {}) {
   const qs = new URLSearchParams();
   if (query.page) qs.set('page', String(query.page));
   if (query.pageSize) qs.set('pageSize', String(query.pageSize));
-  const s = qs.toString();
-  return `${path}${s ? `?${s}` : ''}`;
+  const value = qs.toString();
+  return `${path}${value ? `?${value}` : ''}`;
 }
 
-export function listCreditAccounts<T extends Partial<ListQuery> | undefined = undefined>(
+export async function listCreditAccounts<T extends Partial<ListQuery> | undefined = undefined>(
   query?: T,
 ): Promise<T extends undefined ? CreditAccountItem[] : Paginated<CreditAccountItem>> {
-  return request(withListQuery('/billing/accounts', query ?? {}));
+  const value = await request<unknown>(withListQuery('/billing/accounts', query ?? {}));
+  if (query === undefined) {
+    return parseResponse(creditAccountItemSchema.array(), value, 'billing.accounts') as
+      T extends undefined ? CreditAccountItem[] : Paginated<CreditAccountItem>;
+  }
+  return parseResponse(paginatedResponseSchema(creditAccountItemSchema), value, 'billing.accounts') as
+    T extends undefined ? CreditAccountItem[] : Paginated<CreditAccountItem>;
 }
 
-export function getLedger(query: Partial<LedgerQuery> = {}): Promise<PaginatedLedger> {
+export async function getLedger(query: Partial<LedgerQuery> = {}): Promise<PaginatedLedger> {
   const qs = new URLSearchParams();
   if (query.resource) qs.set('resource', query.resource);
   if (query.reason) qs.set('reason', query.reason);
   if (query.page) qs.set('page', String(query.page));
   if (query.pageSize) qs.set('pageSize', String(query.pageSize));
-  const s = qs.toString();
-  return request<PaginatedLedger>(`/billing/ledger${s ? `?${s}` : ''}`);
+  const value = qs.toString();
+  return parseResponse(paginatedLedgerSchema, await request<unknown>(
+    `/billing/ledger${value ? `?${value}` : ''}`,
+  ), 'billing.ledger');
 }
 
-export function allocateCredit(input: AllocateInput): Promise<unknown> {
-  return request('/billing/allocate', { method: 'POST', body: JSON.stringify(input) });
+export async function allocateCredit(input: AllocateInput): Promise<{ ok: true }> {
+  return parseResponse(okResponseSchema, await request<unknown>('/billing/allocate', {
+    method: 'POST', body: JSON.stringify(input),
+  }), 'billing.allocate');
 }
 
-export function rechargeCredit(input: RechargeInput): Promise<unknown> {
-  return request('/billing/recharge', { method: 'POST', body: JSON.stringify(input) });
+export async function rechargeCredit(input: RechargeInput): Promise<{ ok: true }> {
+  return parseResponse(okResponseSchema, await request<unknown>('/billing/recharge', {
+    method: 'POST', body: JSON.stringify(input),
+  }), 'billing.recharge');
 }
 
-// ── 套餐 ──
-export function listCreditPlans<T extends Partial<ListQuery> | undefined = undefined>(
+export async function listCreditPlans<T extends Partial<ListQuery> | undefined = undefined>(
   query?: T,
 ): Promise<T extends undefined ? CreditPlanView[] : Paginated<CreditPlanView>> {
-  return request(withListQuery('/billing/plans', query ?? {}));
+  const value = await request<unknown>(withListQuery('/billing/plans', query ?? {}));
+  if (query === undefined) {
+    return parseResponse(creditPlanViewSchema.array(), value, 'billing.plans') as
+      T extends undefined ? CreditPlanView[] : Paginated<CreditPlanView>;
+  }
+  return parseResponse(paginatedResponseSchema(creditPlanViewSchema), value, 'billing.plans') as
+    T extends undefined ? CreditPlanView[] : Paginated<CreditPlanView>;
 }
 
-export function createCreditPlan(input: CreateCreditPlanInput): Promise<CreditPlanView> {
-  return request<CreditPlanView>('/billing/plans', { method: 'POST', body: JSON.stringify(input) });
+export async function createCreditPlan(input: CreateCreditPlanInput): Promise<CreditPlanView> {
+  return parseResponse(creditPlanViewSchema, await request<unknown>('/billing/plans', {
+    method: 'POST', body: JSON.stringify(input),
+  }), 'billing.createPlan');
 }
 
-export function updateCreditPlan(id: string, input: UpdateCreditPlanInput): Promise<CreditPlanView> {
-  return request<CreditPlanView>(`/billing/plans/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+export async function updateCreditPlan(id: string, input: UpdateCreditPlanInput): Promise<CreditPlanView> {
+  return parseResponse(creditPlanViewSchema, await request<unknown>(`/billing/plans/${id}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  }), 'billing.updatePlan');
 }
 
-export function removeCreditPlan(id: string): Promise<unknown> {
-  return request(`/billing/plans/${id}`, { method: 'DELETE' });
+export async function removeCreditPlan(id: string): Promise<{ id: string }> {
+  return parseResponse(idResponseSchema, await request<unknown>(`/billing/plans/${id}`, { method: 'DELETE' }), 'billing.removePlan');
 }
 
-// ── 购买订单 ──
-export function listOrders(query: Partial<OrderQuery> = {}): Promise<PaginatedOrders> {
+export async function listOrders(query: Partial<OrderQuery> = {}): Promise<PaginatedOrders> {
   const qs = new URLSearchParams();
   if (query.status) qs.set('status', query.status);
   if (query.page) qs.set('page', String(query.page));
   if (query.pageSize) qs.set('pageSize', String(query.pageSize));
-  const s = qs.toString();
-  return request<PaginatedOrders>(`/billing/orders${s ? `?${s}` : ''}`);
+  const value = qs.toString();
+  return parseResponse(paginatedOrdersSchema, await request<unknown>(
+    `/billing/orders${value ? `?${value}` : ''}`,
+  ), 'billing.orders');
 }
 
+async function order(path: string, init: RequestInit | undefined, label: string): Promise<CreditOrderView> {
+  return parseResponse(creditOrderViewSchema, await request<unknown>(path, init), label);
+}
 export function getOrder(id: string): Promise<CreditOrderView> {
-  return request<CreditOrderView>(`/billing/orders/${id}`);
+  return order(`/billing/orders/${id}`, undefined, 'billing.getOrder');
 }
-
 export function createOrder(input: CreateOrderInput): Promise<CreditOrderView> {
-  return request<CreditOrderView>('/billing/orders', { method: 'POST', body: JSON.stringify(input) });
+  return order('/billing/orders', { method: 'POST', body: JSON.stringify(input) }, 'billing.createOrder');
 }
-
 export function payOrder(id: string): Promise<CreditOrderView> {
-  return request<CreditOrderView>(`/billing/orders/${id}/pay`, { method: 'POST' });
+  return order(`/billing/orders/${id}/pay`, { method: 'POST' }, 'billing.payOrder');
 }
-
 export function cancelOrder(id: string): Promise<CreditOrderView> {
-  return request<CreditOrderView>(`/billing/orders/${id}/cancel`, { method: 'POST' });
+  return order(`/billing/orders/${id}/cancel`, { method: 'POST' }, 'billing.cancelOrder');
 }
 
-// ── 支付宝配置(SYSTEM_ADMIN) ──
-export function getAlipayConfig(): Promise<AlipayConfigView | null> {
-  return request<AlipayConfigView | null>('/billing/alipay/config');
+export async function getAlipayConfig(): Promise<AlipayConfigView | null> {
+  return parseResponse(alipayConfigViewSchema.nullable(), await request<unknown>('/billing/alipay/config'), 'billing.alipay.get');
 }
-
-export function saveAlipayConfig(input: AlipayConfigInput): Promise<AlipayConfigView> {
-  return request<AlipayConfigView>('/billing/alipay/config', { method: 'PUT', body: JSON.stringify(input) });
+export async function saveAlipayConfig(input: AlipayConfigInput): Promise<AlipayConfigView> {
+  return parseResponse(alipayConfigViewSchema, await request<unknown>('/billing/alipay/config', {
+    method: 'PUT', body: JSON.stringify(input),
+  }), 'billing.alipay.save');
 }
-
-// ── 发起真实支付 ──
-export function createPayment(input: CreatePaymentInput): Promise<PaymentView> {
-  return request<PaymentView>('/billing/payments', { method: 'POST', body: JSON.stringify(input) });
+export async function createPayment(input: CreatePaymentInput): Promise<PaymentView> {
+  return parseResponse(paymentViewSchema, await request<unknown>('/billing/payments', {
+    method: 'POST', body: JSON.stringify(input),
+  }), 'billing.payment');
 }

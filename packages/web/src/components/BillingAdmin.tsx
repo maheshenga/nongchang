@@ -23,13 +23,13 @@ export default function BillingAdmin() {
   const isSystemAdmin = user?.role === 'system_admin';
   const canAllocate = user?.role === 'system_admin' || user?.role === 'agent_admin';
 
-  const sum = useApi(getBillingSummary);
+  const sum = useApi(getBillingSummary, { cacheKey: 'billing-summary' });
   const [accountPageNumber, setAccountPageNumber] = useState(1);
   const fetchAccounts = useCallback(
     () => listCreditAccounts({ page: accountPageNumber, pageSize: MANAGEMENT_PAGE_SIZE }),
     [accountPageNumber],
   );
-  const acc = useApi(fetchAccounts);
+  const acc = useApi(fetchAccounts, { cacheKey: `billing-accounts-page-${accountPageNumber}` });
   const accountPage = normalizePage<CreditAccountItem>(acc.data, accountPageNumber);
   const accounts = accountPage.items;
 

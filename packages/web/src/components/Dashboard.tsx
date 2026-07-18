@@ -8,9 +8,9 @@ import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 const DashboardDemo = lazy(() => import('./DashboardDemo'));
 
 function ProductionDashboardStatus({ onEnterDemo }: { onEnterDemo: () => void }) {
-  const batches = useApi(listBatches);
-  const fields = useApi(listFields);
-  const records = useApi(listFarmRecords);
+  const batches = useApi(listBatches, { cacheKey: 'batches' });
+  const fields = useApi(listFields, { cacheKey: 'fields' });
+  const records = useApi(listFarmRecords, { cacheKey: 'farm-records' });
 
   const batchItems = batches.data ?? [];
   const fieldItems = fields.data ?? [];

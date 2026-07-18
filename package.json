@@ -9,19 +9,31 @@
     "typecheck:web": "pnpm --filter web lint",
     "build:web": "pnpm --filter web build",
     "build:miniapp": "pnpm --filter @nongchang/miniapp build:weapp",
-    "audit:prod": "pnpm audit --prod --audit-level high",
+    "audit:prod": "pnpm audit --prod --audit-level high && node scripts/release/check-advisory-budget.mjs",
     "test": "pnpm test:unit",
     "test:unit": "pnpm build:shared && pnpm --filter @nongchang/shared test && pnpm --filter @nongchang/backend test:unit && pnpm --filter web test && pnpm --filter @nongchang/miniapp test",
     "test:e2e": "pnpm build:shared && pnpm --filter @nongchang/backend test:e2e",
+    "test:browser:prepare": "pnpm build:shared && pnpm build:backend && pnpm --filter @nongchang/backend prisma:deploy && pnpm --filter @nongchang/backend prisma:seed:demo",
+    "test:browser": "pnpm test:browser:prepare && playwright test --grep-invert @a11y",
+    "test:accessibility": "pnpm test:browser:prepare && playwright test --grep @a11y",
     "verify:local": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm build:web && pnpm build:miniapp && pnpm audit:prod",
-    "verify:production": "pnpm verify:local && pnpm test:e2e"
+    "verify:production": "pnpm verify:local && pnpm test:e2e",
+    "backup:postgres": "node scripts/backup-postgres.mjs",
+    "backup:restore": "node scripts/restore-postgres.mjs",
+    "backup:verify-restore": "node scripts/verify-backup-restore.mjs",
+    "release:artifact": "node scripts/release/build-artifact.mjs",
+    "release:preflight": "node scripts/release/migration-preflight.mjs",
+    "release:smoke": "node scripts/release/smoke.mjs",
+    "release:rollback": "node scripts/release/rollback.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@10.33.2",
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.61.1",
     "eslint": "^10.5.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",

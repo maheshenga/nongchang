@@ -24,9 +24,9 @@ describe('ai.model operation refs', () => {
     expect(ref).toEqual({
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: 'ai.advice:t1:u1:abcdef0123456789',
+      idempotencyKey: 'ai.advice:t1:u1:b1:abcdef0123456789',
     });
-    expect(ref.idempotencyKey).toMatch(/^ai\.advice:t1:u1:[a-f0-9]{16}$/);
+    expect(ref.idempotencyKey).toMatch(/^ai\.advice:t1:u1:b1:[a-f0-9]{16}$/);
   });
 
   it('omits refId when the operation has no resource id', () => {

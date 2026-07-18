@@ -1,0 +1,8 @@
+name: nongchang-codeql
+paths:
+  - packages
+  - scripts
+paths-ignore:
+  - packages/**/dist
+  - packages/**/coverage
+  - node_modules

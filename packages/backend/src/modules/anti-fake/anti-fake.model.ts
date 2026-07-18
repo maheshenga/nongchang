@@ -1,8 +1,45 @@
 import type { AntiFakeAlert, FreezeResponse, TraceScanItem } from '@nongchang/shared';
+import { BadRequestException } from '@nestjs/common';
 
 export const ANTI_FAKE_ALERT_WINDOW_MS = 3_600_000;
 export const ANTI_FAKE_MIN_DISTINCT_IPS = 3;
 export const ANTI_FAKE_MIN_SCANS = 5;
+
+export interface AntiFakeAlertQuery {
+  windowMinutes: number;
+  minScans: number;
+  minDistinctIps: number;
+  limit: number;
+  now: Date;
+}
+
+export type AntiFakeAlertQueryInput = Omit<Partial<AntiFakeAlertQuery>,
+  'windowMinutes' | 'minScans' | 'minDistinctIps' | 'limit' | 'now'> & {
+  windowMinutes?: number | string;
+  minScans?: number | string;
+  minDistinctIps?: number | string;
+  limit?: number | string;
+  now?: Date;
+};
+
+function boundedInteger(value: number | string | undefined, fallback: number, min: number, max: number, name: string): number {
+  if (value === undefined || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new BadRequestException(`${name} must be an integer between ${min} and ${max}`);
+  }
+  return parsed;
+}
+
+export function normalizeAntiFakeAlertQuery(input: AntiFakeAlertQueryInput = {}): AntiFakeAlertQuery {
+  return {
+    windowMinutes: boundedInteger(input.windowMinutes, 60, 1, 1_440, 'windowMinutes'),
+    minScans: boundedInteger(input.minScans, ANTI_FAKE_MIN_SCANS, 1, 10_000, 'minScans'),
+    minDistinctIps: boundedInteger(input.minDistinctIps, ANTI_FAKE_MIN_DISTINCT_IPS, 1, 1_000, 'minDistinctIps'),
+    limit: boundedInteger(input.limit, 50, 1, 200, 'limit'),
+    now: input.now ?? new Date(),
+  };
+}
 
 export interface ScanRow {
   id: string;

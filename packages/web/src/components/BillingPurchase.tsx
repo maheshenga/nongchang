@@ -59,8 +59,8 @@ function statusTag(order: CreditOrderView) {
 }
 
 export default function BillingPurchase({ onPaid }: { onPaid?: () => void }) {
-  const plansApi = useApi(listCreditPlans);
-  const ordersApi = useApi(() => listOrders({ pageSize: 20 }));
+  const plansApi = useApi(listCreditPlans, { cacheKey: 'billing-plans-purchase' });
+  const ordersApi = useApi(() => listOrders({ pageSize: 20 }), { cacheKey: 'billing-orders-page-1-size-20' });
   const plans: CreditPlanView[] = plansApi.data ?? [];
   const orders: CreditOrderView[] = ordersApi.data?.items ?? [];
 

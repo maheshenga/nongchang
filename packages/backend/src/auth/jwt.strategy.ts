@@ -4,25 +4,36 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthUser, Role } from '@nongchang/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SessionTokenClaims } from './auth.model';
+import { SessionValidationCacheService } from './session-validation-cache.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: SessionValidationCacheService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_SECRET as string,
     });
   }
+
   async validate(payload: SessionTokenClaims & { sub?: string }): Promise<AuthUser> {
     if (payload.sessionKind !== 'generic' && payload.sessionKind !== 'web') {
       throw new UnauthorizedException('登录状态已失效');
     }
+
+    const tokenVersion = payload.sessionVersion ?? 0;
+    if (payload.sessionKind === 'generic') {
+      const cached = await this.cache.get(payload.tenantId, payload.userId, tokenVersion);
+      if (cached) return cached;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
       include: { tenant: { select: { status: true } } },
     });
-    const tokenVersion = payload.sessionVersion ?? 0;
     const tokenWebSessionVersion = payload.sessionKind === 'web'
       ? payload.webSessionVersion
       : undefined;
@@ -46,7 +57,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!agent || agent.status !== 'active') throw new UnauthorizedException('登录状态已失效');
     }
 
-    return {
+    const validated: AuthUser = {
       userId: user.id,
       tenantId: user.tenantId,
       role: user.role as Role,
@@ -54,5 +65,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ownerId: user.role === Role.MERCHANT ? user.id : null,
       sessionVersion: user.sessionVersion ?? 0,
     };
+    if (payload.sessionKind === 'generic') await this.cache.set(validated);
+    return validated;
   }
 }

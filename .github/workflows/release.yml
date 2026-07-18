@@ -1,0 +1,64 @@
+name: Immutable release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-once:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: nongchang
+          POSTGRES_PASSWORD: nongchang
+          POSTGRES_DB: nongchang
+        ports: ['5544:5432']
+        options: >-
+          --health-cmd "pg_isready -U nongchang -d nongchang"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ['56379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
+      REDIS_URL: redis://127.0.0.1:56379
+      RUNTIME_STATE_DRIVER: redis
+      JWT_SECRET: ci-jwt-secret-not-for-production-use-only
+      JWT_REFRESH_SECRET: ci-jwt-refresh-secret-not-for-production-use
+      APP_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      TARO_APP_API: https://api.ci.invalid/api
+      TARO_APP_WX_APPID: wx0000000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @nongchang/backend exec prisma generate
+      - run: pnpm --filter @nongchang/backend exec prisma migrate deploy
+      - run: pnpm --filter @nongchang/backend prisma:seed
+      - run: pnpm release:preflight
+      - run: pnpm verify:production
+      - run: pnpm audit:prod
+      - run: pnpm release:artifact -- --output-dir "$RUNNER_TEMP/nongchang-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nongchang-${{ github.sha }}
+          path: ${{ runner.temp }}/nongchang-release/
+          if-no-files-found: error
+          retention-days: 30

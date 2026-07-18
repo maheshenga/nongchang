@@ -55,7 +55,7 @@ export default function AiPanel({ mode, onClose }: Props) {
     }
     setUploading(true);
     try {
-      setImageUrl(await uploadImage(tempPath));
+      setImageUrl(await uploadImage(tempPath, 'ai-diagnose'));
     } catch (e: any) {
       Taro.showToast({ title: e.message || '上传失败', icon: 'none' });
     } finally {

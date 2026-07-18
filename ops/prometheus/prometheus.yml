@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: nongchang-backend
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: [host.docker.internal:3001]
+
+# Production deployments must keep /api/metrics off the public ingress.
+# If METRICS_BEARER_TOKEN is configured, add an authorization.credentials_file
+# entry backed by the deployment secret store rather than checking a token in.

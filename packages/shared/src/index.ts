@@ -1,6 +1,6 @@
 export { Role, Permission, BatchStatus, TraceEventType, FarmRecordSource } from './enums';
 
-export { loginSchema, refreshSchema, webAccessTokenResponseSchema, meProfileViewSchema, updateMeSchema, changePasswordSchema } from './dto/auth.dto';
+export { loginSchema, refreshSchema, webAccessTokenResponseSchema, tokenPairSchema, meProfileViewSchema, updateMeSchema, changePasswordSchema } from './dto/auth.dto';
 export type { LoginDto, RefreshDto, WebAccessTokenResponse, MeProfileView, UpdateMeDto, ChangePasswordDto } from './dto/auth.dto';
 
 export {
@@ -39,6 +39,7 @@ export {
   createCropPhenologySchema,
   updateCropPhenologySchema,
   cropPhenologyItemSchema,
+  batchDeviationSchema,
 } from './dto/entities.dto';
 export type {
   CreateUserDto,
@@ -68,6 +69,9 @@ export type {
 } from './dto/entities.dto';
 
 export {
+  PUBLIC_TRACE_EVENT_LIMIT,
+  PUBLIC_TRACE_CREDENTIAL_LIMIT,
+  PUBLIC_TRACE_CACHE_TTL_MS,
   publicTraceEventSchema,
   publicTraceBatchSchema,
   publicTraceResponseSchema,
@@ -132,6 +136,7 @@ export {
   createAiProviderSchema, updateAiProviderSchema, aiProviderViewSchema,
   aiChatSchema, aiDiagnoseSchema, ossConfigSchema, ossConfigViewSchema,
   aiAdviceSchema, aiAskSchema,
+  aiChatResponseSchema, aiDiagnoseResponseSchema, aiTranscribeResponseSchema, aiTestResponseSchema,
 } from './dto/ai.dto';
 export type {
   CreateAiProviderInput, UpdateAiProviderInput, AiProviderView,
@@ -177,6 +182,9 @@ export {
   createOrderSchema, creditOrderViewSchema, orderQuerySchema, paginatedOrdersSchema,
   alipayConfigSchema, alipayConfigViewSchema, payChannelSchema, createPaymentSchema, paymentViewSchema,
 } from './dto/billing.dto';
+
+export { okResponseSchema, idResponseSchema, pendingResponseSchema, paginatedResponseSchema } from './dto/common.dto';
+export type { OkResponse, IdResponse, PendingResponse } from './dto/common.dto';
 export type {
   CreditOwnerType, CreditResource, LedgerReason, BillingSummary,
   CreditAccountItem, CreditLedgerItem, LedgerQuery, PaginatedLedger,

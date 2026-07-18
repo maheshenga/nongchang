@@ -5,7 +5,7 @@ import { JwtStrategy } from './jwt.strategy';
 
 const activeTenant = { status: 'active' };
 
-function makeStrategy(user: any, agent: any = null) {
+function makeStrategy(user: any, agent: any = null, cached: any = null) {
   const prisma = {
     user: {
       findUnique: vi.fn().mockResolvedValue(user),
@@ -14,10 +14,26 @@ function makeStrategy(user: any, agent: any = null) {
       findFirst: vi.fn().mockResolvedValue(agent),
     },
   } as any;
-  return { strategy: new JwtStrategy(prisma), prisma };
+  const cache = {
+    get: vi.fn().mockResolvedValue(cached),
+    set: vi.fn().mockResolvedValue(undefined),
+  } as any;
+  return { strategy: new JwtStrategy(prisma, cache), prisma, cache };
 }
 
 describe('JwtStrategy session revocation', () => {
+  it('uses a short-lived validated session cache without querying PostgreSQL', async () => {
+    const cached = {
+      userId: 'u1', tenantId: 't1', role: Role.MERCHANT,
+      agentId: null, ownerId: 'u1', sessionVersion: 2,
+    };
+    const { strategy, prisma, cache } = makeStrategy(null, null, cached);
+
+    await expect(strategy.validate({ ...cached, sessionKind: 'generic', sub: 'u1' })).resolves.toEqual(cached);
+    expect(cache.get).toHaveBeenCalledWith('t1', 'u1', 2);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
   it('returns current DB-backed user when token version matches', async () => {
     const { strategy, prisma } = makeStrategy({
       id: 'u1',
@@ -120,7 +136,11 @@ describe('JwtStrategy session revocation', () => {
   });
 
   it('rejects stale web-session access tokens after web logout', async () => {
-    const { strategy } = makeStrategy({
+    const cached = {
+      userId: 'u1', tenantId: 't1', role: Role.MERCHANT,
+      agentId: null, ownerId: 'u1', sessionVersion: 0,
+    };
+    const { strategy, cache } = makeStrategy({
       id: 'u1',
       tenantId: 't1',
       role: Role.MERCHANT,
@@ -129,7 +149,7 @@ describe('JwtStrategy session revocation', () => {
       sessionVersion: 0,
       webSessionVersion: 2,
       tenant: activeTenant,
-    });
+    }, null, cached);
 
     await expect(strategy.validate({
       userId: 'u1',
@@ -142,6 +162,7 @@ describe('JwtStrategy session revocation', () => {
       sessionKind: 'web',
       sub: 'u1',
     } as never)).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(cache.get).not.toHaveBeenCalled();
   });
 
   it('keeps non-web access tokens valid when only the web session version changes', async () => {

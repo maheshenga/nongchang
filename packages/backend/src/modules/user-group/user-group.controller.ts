@@ -19,11 +19,13 @@ export class UserGroupController {
   }
 
   @Post()
+  @Roles(Role.SYSTEM_ADMIN)
   create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(userGroupInputSchema)) dto: UserGroupInput) {
     return this.svc.create(user, dto);
   }
 
   @Patch(':id')
+  @Roles(Role.SYSTEM_ADMIN)
   update(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -33,6 +35,7 @@ export class UserGroupController {
   }
 
   @Delete(':id')
+  @Roles(Role.SYSTEM_ADMIN)
   async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     await this.svc.remove(user, id);
     return { ok: true as const };

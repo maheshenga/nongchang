@@ -1,22 +1,35 @@
-import type {
-  IntegrationConfigView, IntegrationProvider,
-  WechatConfigInput, XfyunConfigInput, TiandituConfigInput, TiandituPublicView,
+import {
+  integrationConfigViewSchema,
+  tiandituPublicSchema,
+  type IntegrationConfigView,
+  type IntegrationProvider,
+  type TiandituConfigInput,
+  type TiandituPublicView,
+  type WechatConfigInput,
+  type XfyunConfigInput,
 } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-export function getIntegrationConfig(provider: IntegrationProvider): Promise<IntegrationConfigView | null> {
-  return request<IntegrationConfigView | null>(`/integration-configs/${encodeURIComponent(provider)}`);
+export async function getIntegrationConfig(provider: IntegrationProvider): Promise<IntegrationConfigView | null> {
+  return parseResponse(integrationConfigViewSchema.nullable(), await request<unknown>(
+    `/integration-configs/${encodeURIComponent(provider)}`,
+  ), 'integration.get');
+}
+async function upsert(path: string, input: unknown, label: string): Promise<IntegrationConfigView> {
+  return parseResponse(integrationConfigViewSchema, await request<unknown>(path, {
+    method: 'PUT', body: JSON.stringify(input),
+  }), label);
 }
 export function upsertWechatConfig(input: WechatConfigInput): Promise<IntegrationConfigView> {
-  return request<IntegrationConfigView>('/integration-configs/wechat', { method: 'PUT', body: JSON.stringify(input) });
+  return upsert('/integration-configs/wechat', input, 'integration.wechat');
 }
 export function upsertXfyunConfig(input: XfyunConfigInput): Promise<IntegrationConfigView> {
-  return request<IntegrationConfigView>('/integration-configs/xfyun', { method: 'PUT', body: JSON.stringify(input) });
+  return upsert('/integration-configs/xfyun', input, 'integration.xfyun');
 }
 export function upsertTiandituConfig(input: TiandituConfigInput): Promise<IntegrationConfigView> {
-  return request<IntegrationConfigView>('/integration-configs/tianditu', { method: 'PUT', body: JSON.stringify(input) });
+  return upsert('/integration-configs/tianditu', input, 'integration.tianditu');
 }
-// 取本租户启用中的天地图 key(供加载底图脚本),未启用返回 { key: null }
-export function getTiandituKey(): Promise<TiandituPublicView> {
-  return request<TiandituPublicView>('/integration-configs/tianditu/public-key');
+export async function getTiandituKey(): Promise<TiandituPublicView> {
+  return parseResponse(tiandituPublicSchema, await request<unknown>('/integration-configs/tianditu/public-key'), 'integration.tiandituKey');
 }

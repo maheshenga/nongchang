@@ -69,6 +69,14 @@ Only after reviewing candidates should an operator add `--execute --resource=AI`
 intentionally unchanged; compare provider telemetry and the credit ledger before a
 controlled manual decision. Never automatically release these rows.
 
+Preview stale pending upload assets without changing OSS or database state:
+
+```bash
+pnpm --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --limit 100
+```
+
+Only after reviewing the dry-run count, add `--execute`. Execution attempts OSS deletion first and then releases the durable reservation. A non-zero exit status means at least one asset still needs investigation; rerunning is safe because terminal assets are released idempotently.
+
 ## 4. PM2 管理器启动后端
 
 宝塔「PM2 管理器」添加项目:
@@ -84,7 +92,13 @@ controlled manual decision. Never automatically release these rows.
   JWT_REFRESH_SECRET=另一个强随机值
   PORT=3001
   ALLOW_MANUAL_PAY=false
+  TRUST_PROXY_HOPS=1
+  UPLOAD_DAILY_BYTES_LIMIT=104857600
+  UPLOAD_ACTIVE_BYTES_LIMIT=5368709120
+  UPLOAD_PENDING_MAX_AGE_MINUTES=60
   ```
+
+`TRUST_PROXY_HOPS=1` 对应“客户端 → 单层 Nginx → Node”。如果前面还有 CDN/WAF，必须按实际可信代理层数调整；不要为了让任意 `X-Forwarded-For` 生效而填大值。应用仅信任右侧已声明的代理链，限流和扫码 IP 记录据此识别真实客户端。
 
 ### PM2 与健康探针职责
 
@@ -127,6 +141,8 @@ location / {
 ```
 
 `/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，未提供或格式非法时自动生成 UUID，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
+
+发布或停止时，PM2 应发送 `SIGTERM` 并给进程留出优雅退出时间。应用收到关闭信号后会先把 readiness 切为 `503 not_ready`，再等待 Nest/Prisma 关闭；负载均衡必须先摘流，不能继续把新请求送入正在排空的实例。
 
 ### 结构化请求日志
 

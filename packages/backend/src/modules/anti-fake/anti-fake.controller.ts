@@ -15,8 +15,14 @@ export class AntiFakeController {
   }
 
   @Get('alerts')
-  listAlerts(@CurrentUser() user: AuthUser) {
-    return this.svc.listAlerts(user);
+  listAlerts(
+    @CurrentUser() user: AuthUser,
+    @Query('windowMinutes') windowMinutes?: string,
+    @Query('minScans') minScans?: string,
+    @Query('minDistinctIps') minDistinctIps?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.svc.listAlerts(user, { windowMinutes, minScans, minDistinctIps, limit });
   }
 
   // 冻结/解冻防伪码属风控写操作:显式声明授权角色;服务层通过 batch.owner 关系做 fail-closed 范围校验。

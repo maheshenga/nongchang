@@ -41,7 +41,7 @@ function statusTone(status: Crop['status']): Parameters<typeof fluentStatusTag>[
 }
 
 export default function MerchantAdmin({ onNavigate }: MerchantAdminProps) {
-  const { data: rawBatches, loading, error, reload } = useApi(listBatches);
+  const { data: rawBatches, loading, error, reload } = useApi(listBatches, { cacheKey: 'batches' });
   const crops: Crop[] = (rawBatches ?? []).map(toCrop);
   const [selectedCropIds, setSelectedCropIds] = useState<Set<string>>(new Set());
   const [showPrintPreview, setShowPrintPreview] = useState(false);
