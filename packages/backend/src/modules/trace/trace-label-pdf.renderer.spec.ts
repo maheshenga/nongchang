@@ -104,6 +104,16 @@ describe('trace label PDF renderer', () => {
     await expect(renderTraceLabelPdf(input('A4', 1))).rejects.toBeInstanceOf(TraceLabelPdfFontError);
   });
 
+  it('rejects an embeddable font that lacks a glyph required by rendered label text', async () => {
+    const toQrPng = vi.fn(async () => pngBytes);
+    const renderInput = input('A4', 1);
+    renderInput.cropName = '阳光玫瑰';
+
+    await expect(renderTraceLabelPdf(renderInput, testDependencies(toQrPng)))
+      .rejects.toBeInstanceOf(TraceLabelPdfFontError);
+    expect(toQrPng).not.toHaveBeenCalled();
+  });
+
   it('exposes an injectable production renderer with the same contract', () => {
     expect(new TraceLabelPdfRenderer()).toBeInstanceOf(TraceLabelPdfRenderer);
   });

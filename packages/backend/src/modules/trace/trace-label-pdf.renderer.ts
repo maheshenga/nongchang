@@ -90,6 +90,36 @@ function resolveDependencies(overrides: TraceLabelPdfRenderDependencies): Requir
   };
 }
 
+function assertFontSupportsRenderedText(
+  font: PDFFont,
+  layout: TraceLabelLayout,
+  input: TraceLabelPdfRenderInput,
+  copy: TraceLabelPdfCopy,
+  pageCount: number,
+): void {
+  const renderedText = [
+    `${copy.batch}: ${input.batchNo}`,
+    copy.scanPrompt,
+    ...(input.options.showProductName ? [`${copy.product}: ${input.cropName}`] : []),
+    ...(input.options.showSerial ? input.codes.map(({ code }) => code) : []),
+    ...(layout.footerHeightPt > 0
+      ? Array.from({ length: pageCount }, (_, index) => copy.page(index + 1, pageCount))
+      : []),
+  ];
+
+  try {
+    const characterSet = new Set(font.getCharacterSet());
+    for (const text of renderedText) {
+      for (const character of Array.from(text)) {
+        if (!characterSet.has(character.codePointAt(0)!)) throw new TraceLabelPdfFontError();
+      }
+    }
+  } catch (error) {
+    if (error instanceof TraceLabelPdfFontError) throw error;
+    throw new TraceLabelPdfFontError();
+  }
+}
+
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
@@ -289,9 +319,10 @@ export async function renderTraceLabelPdf(
 ): Promise<TraceLabelPdfRenderResult> {
   const dependencies = resolveDependencies(dependencyOverrides);
   const layout = resolveTraceLabelLayout(input.options);
+  const pages = paginateTraceLabels(input.codes, layout.capacity);
   const document = await PDFDocument.create();
   const font = await dependencies.embedFont(document, input.fontBytes);
-  const pages = paginateTraceLabels(input.codes, layout.capacity);
+  assertFontSupportsRenderedText(font, layout, input, dependencies.copy, pages.length);
   const qrLevel: QrErrorCorrectionLevel = input.options.paperSize === 'A4' ? 'M' : 'H';
 
   document.setTitle(`Trace labels ${input.batchNo}`);

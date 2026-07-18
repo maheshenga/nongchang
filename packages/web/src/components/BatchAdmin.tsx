@@ -789,7 +789,7 @@ export default function BatchAdmin() {
                 <h3 className="flex items-center gap-2 text-lg font-semibold text-[#242424]"><QrCode className="h-5 w-5 text-[#0078D4]" />生成溯源标签</h3>
                 <p className="mt-1 text-sm text-[#605E5C]">批次 {activeBatch.code} · {activeBatch.type}</p>
               </div>
-              <button type="button" onClick={() => setShowQrModal(null)} aria-label="关闭生成设置" title="关闭" className={fluentButton('subtle')}><X className="h-4 w-4" /></button>
+              <button type="button" onClick={() => setShowQrModal(null)} disabled={generating} aria-label="关闭生成设置" title="关闭" className={fluentButton('subtle')}><X className="h-4 w-4" /></button>
             </div>
             <div className="space-y-5 px-6 py-5">
               <label className="block text-sm font-semibold text-[#323130]">
@@ -819,7 +819,7 @@ export default function BatchAdmin() {
               </div>
             </div>
             <div className="flex flex-wrap justify-end gap-2 border-t border-[#E1DFDD] px-6 py-4">
-              <button type="button" onClick={() => setShowQrModal(null)} className={fluentButton('secondary')}>暂缓生成</button>
+              <button type="button" onClick={() => setShowQrModal(null)} disabled={generating} className={fluentButton('secondary')}>暂缓生成</button>
               <button
                 type="button"
                 disabled={!qrAmountValid || generating}
@@ -1036,12 +1036,13 @@ export default function BatchAdmin() {
                  </div>
               </div>
               <div className="p-5 flex justify-end gap-3 bg-white">
-                 <button 
-                    onClick={() => setPendingAction(null)} 
-                    className="px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
-                 >
+                  <button
+                    onClick={() => setPendingAction(null)}
+                    disabled={generating}
+                    className="px-5 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  >
                     取消
-                 </button>
+                  </button>
                  <button
                     onClick={() => pendingAction.onConfirm()}
                     disabled={generating || isExporting !== null || isExportingReport !== null}
@@ -1147,15 +1148,15 @@ export default function BatchAdmin() {
       {codesBatchId && (() => {
         const b = batches.find(x => x.id === codesBatchId);
         return (
-          <div className="absolute inset-0 z-[75] flex items-center justify-center bg-slate-900/60 p-4" role="dialog" aria-modal="true" aria-label="已生成溯源码">
-            <div className="bg-white rounded-[6px] shadow-lg w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-              <div className="p-6 border-b border-slate-100 bg-violet-50 flex justify-between items-center shrink-0">
-                <h3 className="font-bold text-violet-900 text-lg flex items-center gap-3">
-                  <div className="p-2 bg-violet-200 text-violet-700 rounded-lg shadow-sm"><ScanLine className="w-5 h-5" /></div>
-                  已生成溯源码 · <span className="font-mono text-violet-700">{b?.code}</span>
-                  <span className="text-xs font-mono bg-white text-violet-600 px-2 py-0.5 rounded border border-violet-200">{codesList.length} 个</span>
+          <div className="fixed inset-0 z-[75] flex items-center justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4" role="dialog" aria-modal="true" aria-label="已生成溯源码">
+            <div className="flex max-h-[calc(100vh-1rem)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-[6px] bg-white shadow-lg animate-in zoom-in-95 duration-200 sm:max-h-[85vh]">
+              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 bg-violet-50 p-4 sm:p-6">
+                <h3 className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-lg font-bold text-violet-900">
+                  <div className="shrink-0 rounded-lg bg-violet-200 p-2 text-violet-700 shadow-sm"><ScanLine className="h-5 w-5" /></div>
+                  已生成溯源码 · <span className="min-w-0 max-w-full break-all font-mono text-violet-700">{b?.code}</span>
+                  <span className="shrink-0 rounded border border-violet-200 bg-white px-2 py-0.5 font-mono text-xs text-violet-600">{codesList.length} 个</span>
                 </h3>
-                <button onClick={closeCodes} aria-label="关闭已生成码" title="关闭" className="text-violet-400 hover:text-violet-700 hover:bg-violet-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+                <button onClick={closeCodes} aria-label="关闭已生成码" title="关闭" className="shrink-0 rounded-lg p-2 text-violet-400 transition-colors hover:bg-violet-100 hover:text-violet-700"><X className="h-5 w-5" /></button>
               </div>
               <div className="flex flex-wrap items-center gap-2 border-b border-[#E1DFDD] px-6 py-3 text-sm">
                 <span className="mr-auto font-semibold text-[#323130]">已选择 {selectedCodeIds.size} / {MAX_LABEL_EXPORT}</span>

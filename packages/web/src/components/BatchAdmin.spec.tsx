@@ -233,6 +233,25 @@ describe('BatchAdmin Fluent console', () => {
     expect((screen.getByLabelText('生成数量') as HTMLInputElement).value).toBe('7');
   });
 
+  it('locks generation cancellation after the quota-consuming request starts', async () => {
+    const pending = deferred<ReturnType<typeof traceCode>[]>();
+    traceApiMock.generateCodes.mockReturnValueOnce(pending.promise);
+    render(<BatchAdmin />);
+
+    await openGenerationDialog();
+    fireEvent.change(screen.getByLabelText('生成数量'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: '生成真实溯源码' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认 生成' }));
+
+    await waitFor(() => expect(traceApiMock.generateCodes).toHaveBeenCalledOnce());
+    expect((screen.getByRole('button', { name: '取消' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '关闭生成设置' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '暂缓生成' }) as HTMLButtonElement).disabled).toBe(true);
+
+    pending.resolve([traceCode(1)]);
+    expect(await screen.findByLabelText('溯源标签 PDF 工作区')).toBeTruthy();
+  });
+
   it('distinguishes generated codes from a failed label file and retries only the PDF', async () => {
     traceApiMock.generateCodes.mockResolvedValueOnce([traceCode(1)]);
     traceApiMock.createTraceLabelPdf
@@ -278,6 +297,24 @@ describe('BatchAdmin Fluent console', () => {
       const input = traceApiMock.createTraceLabelPdf.mock.calls.at(-1)?.[1];
       expect(input).not.toHaveProperty('codeIds');
     });
+  });
+
+  it('keeps the existing-code dialog inside the mobile viewport with a wrapping header', async () => {
+    traceApiMock.listCodes.mockResolvedValueOnce([traceCode(1)]);
+    render(<BatchAdmin />);
+
+    fireEvent.click((await screen.findAllByRole('button', { name: '已生成码' }))[0]);
+    const dialog = await screen.findByRole('dialog', { name: '已生成溯源码' });
+    const heading = within(dialog).getByRole('heading', { name: /已生成溯源码/ });
+    const batchNo = within(heading).getByText('B20240520001');
+    const close = within(dialog).getByRole('button', { name: '关闭已生成码' });
+
+    expect(dialog.className).toContain('fixed');
+    expect(dialog.className).toContain('overflow-y-auto');
+    expect(heading.className).toContain('flex-wrap');
+    expect(heading.className).toContain('min-w-0');
+    expect(batchNo.className).toContain('break-all');
+    expect(close.className).toContain('shrink-0');
   });
 
   it('clears existing-code selection when the list closes or switches batch', async () => {

@@ -21,6 +21,7 @@ interface PdfPreview {
   blob: Blob;
   objectUrl: string;
   fileName: string;
+  layout: LayoutForm;
 }
 
 type WorkspaceState =
@@ -52,6 +53,15 @@ function makeLayoutForm(paperSize: TraceLabelPaperSize): LayoutForm {
     showProductName: true,
     showSerial: true,
   };
+}
+
+function layoutsMatch(left: LayoutForm, right: LayoutForm): boolean {
+  return left.paperSize === right.paperSize
+    && left.marginMm === right.marginMm
+    && left.gapMm === right.gapMm
+    && left.qrSizeMm === right.qrSizeMm
+    && left.showProductName === right.showProductName
+    && left.showSerial === right.showSerial;
 }
 
 function errorMessage(error: unknown): string {
@@ -146,6 +156,7 @@ export default function BatchLabelWorkspace({
           blob: file.blob,
           objectUrl,
           fileName: file.fileName || safeFileName(batchNo),
+          layout: { ...form },
         },
       });
     } catch (error) {
@@ -180,7 +191,7 @@ export default function BatchLabelWorkspace({
   };
 
   const handlePrint = () => {
-    if (workspace.status !== 'ready') return;
+    if (workspace.status !== 'ready' || !layoutsMatch(workspace.preview.layout, form)) return;
     const printWindow = window.open(workspace.preview.objectUrl, '_blank');
     if (!printWindow) {
       setPrintHint('打印窗口被浏览器拦截，请下载 PDF 后打印。');
@@ -190,6 +201,7 @@ export default function BatchLabelWorkspace({
   };
 
   const isLoading = workspace.status === 'loading';
+  const previewIsCurrent = workspace.status === 'ready' && layoutsMatch(workspace.preview.layout, form);
   const summaryPages = pageCount(labelCount, form.paperSize);
 
   return (
@@ -279,6 +291,9 @@ export default function BatchLabelWorkspace({
 
           <p className="mt-5 text-sm text-[#605E5C]">导出已生成溯源码不会再次扣减二维码额度。</p>
           <p className="mt-2 text-sm font-medium">{labelCount} 张标签 / {summaryPages} 页</p>
+          {workspace.status === 'ready' && !previewIsCurrent && (
+            <p className="mt-2 text-sm text-[#A4262C]" role="status">标签设置已更改，请先更新预览再下载或打印。</p>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-2">
             <button
@@ -292,7 +307,7 @@ export default function BatchLabelWorkspace({
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               更新预览
             </button>
-            {workspace.status === 'ready' ? (
+            {workspace.status === 'ready' && previewIsCurrent ? (
               <a
                 href={workspace.preview.objectUrl}
                 download={workspace.preview.fileName}
@@ -318,7 +333,7 @@ export default function BatchLabelWorkspace({
             <button
               type="button"
               onClick={handlePrint}
-              disabled={workspace.status !== 'ready'}
+              disabled={!previewIsCurrent}
               aria-label="打印 PDF"
               title="打印 PDF"
               className="inline-flex items-center gap-2 border border-[#8A8886] px-3 py-2 text-sm font-semibold hover:bg-[#F3F2F1] disabled:cursor-not-allowed disabled:opacity-60"

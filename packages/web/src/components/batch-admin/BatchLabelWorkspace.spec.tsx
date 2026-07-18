@@ -94,6 +94,35 @@ describe('BatchLabelWorkspace', () => {
     expect(createTraceLabelPdfMock).toHaveBeenCalledTimes(1);
   });
 
+  it('blocks download and printing when the layout no longer matches the ready PDF', async () => {
+    createObjectURL
+      .mockReturnValueOnce('blob:a4')
+      .mockReturnValueOnce('blob:4x6');
+    render(
+      <BatchLabelWorkspace
+        batchId="batch-1"
+        batchNo="BATCH-001"
+        cropName="阳光玫瑰"
+        labelCount={22}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByRole('link', { name: '下载 PDF' });
+    fireEvent.click(screen.getByLabelText('4x6 纸张规格'));
+
+    expect(screen.getByText('标签设置已更改，请先更新预览再下载或打印。')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '下载 PDF' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '打印 PDF' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('22 张标签 / 22 页')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '更新预览' }));
+    const download = await screen.findByRole('link', { name: '下载 PDF' });
+    expect(download.getAttribute('href')).toBe('blob:4x6');
+    expect(screen.queryByText('标签设置已更改，请先更新预览再下载或打印。')).toBeNull();
+    expect(createTraceLabelPdfMock).toHaveBeenLastCalledWith('batch-1', expect.objectContaining({ paperSize: '4x6' }));
+  });
+
   it('keeps the download available and explains how to proceed when printing is blocked', async () => {
     vi.spyOn(window, 'open').mockReturnValue(null);
     render(
