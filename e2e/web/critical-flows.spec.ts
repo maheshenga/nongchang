@@ -68,7 +68,7 @@ test('merchant completes the field, batch, farm-record, trace-code, and public-s
       && response.url().includes('/api/trace/codes/')
       && response.url().includes('count=1'),
   );
-  await page.getByRole('button', { name: '确认生成', exact: true }).click();
+  await page.getByRole('button', { name: '确认 生成', exact: true }).click();
   const generationResponse = await generationResponsePromise;
   expect(generationResponse.ok()).toBeTruthy();
   const generated = await generationResponse.json() as Array<{ code: string }>;
