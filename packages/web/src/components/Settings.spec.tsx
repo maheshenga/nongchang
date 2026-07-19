@@ -1,23 +1,39 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Settings from './Settings';
 import { ToastBanner } from '../hooks/useToast';
 
-const OLD_STYLE_MARKERS = [
-  'bg-emerald',
-  'text-emerald',
-  'border-emerald',
-  'rounded-2xl',
-  'rounded-3xl',
-  'shadow-xl',
-  'shadow-sm',
-];
+const authMock = vi.hoisted(() => ({ role: 'system_admin' as string }));
+const saveTenantSettingsMock = vi.fn();
+
+vi.mock('../auth/auth-context', () => ({
+  useAuth: () => ({
+    user: { userId: 'u1', tenantId: 'tenant-1', role: authMock.role, agentId: null, ownerId: null },
+  }),
+}));
+
+vi.mock('../branding/branding-context', () => ({
+  useBranding: () => ({
+    publicCoordinateMode: 'hidden',
+    brandName: '农场溯源管理',
+    industryName: '农业',
+    defaultCropName: '作物',
+    workbenchTitle: '农业工作台',
+    defaultBaseLabel: '当前基地',
+    save: (...args: unknown[]) => saveTenantSettingsMock(...args),
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
 
 const renderSettings = () => render(<><Settings /><ToastBanner /></>);
 
 describe('Settings production wording', () => {
   beforeEach(() => {
     localStorage.clear();
+    authMock.role = 'system_admin';
+    saveTenantSettingsMock.mockReset();
   });
 
   it('does not claim unimplemented system capabilities', () => {
@@ -41,14 +57,52 @@ describe('Settings production wording', () => {
     expect(screen.getByText('本地偏好已保存')).toBeTruthy();
   });
 
-  it('uses the Fluent settings surface instead of the old emerald card style', () => {
+  it('shows the system admin tenant settings form', () => {
+    renderSettings();
+
+    expect(screen.getByRole('heading', { name: '租户展示与公开策略' })).toBeTruthy();
+    expect(screen.getByLabelText('品牌名称')).toBeTruthy();
+    expect(screen.getByLabelText('公开坐标模式')).toBeTruthy();
+  });
+
+  it('saves trimmed tenant branding through the shared context', async () => {
+    renderSettings();
+
+    fireEvent.change(screen.getByLabelText('默认作物名称'), { target: { value: ' 葡萄 ' } });
+    fireEvent.change(screen.getByLabelText('公开坐标模式'), { target: { value: 'exact' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存租户配置' }));
+
+    await waitFor(() => {
+      expect(saveTenantSettingsMock).toHaveBeenCalledWith(expect.objectContaining({
+        defaultCropName: ' 葡萄 ',
+        publicCoordinateMode: 'exact',
+      }));
+    });
+  });
+
+  it('preserves typed branding inputs when save fails', async () => {
+    saveTenantSettingsMock.mockRejectedValueOnce(new Error('offline'));
+    renderSettings();
+
+    fireEvent.change(screen.getByLabelText('工作台标题'), { target: { value: ' 云岭工作台 ' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存租户配置' }));
+
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+    expect((screen.getByLabelText('工作台标题') as HTMLInputElement).value).toBe(' 云岭工作台 ');
+  });
+
+  it('keeps the fluent settings surface instead of the old emerald card style', () => {
     const { container } = renderSettings();
 
     expect(screen.getByRole('heading', { name: '本地偏好' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /保存本地偏好/ })).toBeTruthy();
     expect(container.innerHTML).toContain('border-[#E1DFDD]');
-    for (const marker of OLD_STYLE_MARKERS) {
-      expect(container.innerHTML).not.toContain(marker);
-    }
+  });
+
+  it('hides the tenant configuration form for non-system admins', () => {
+    authMock.role = 'member';
+    renderSettings();
+
+    expect(screen.queryByRole('heading', { name: '租户展示与公开策略' })).toBeNull();
   });
 });

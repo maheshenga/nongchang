@@ -19,6 +19,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
+import { DEFAULT_TENANT_SETTINGS, type TenantSettingsView } from '@nongchang/shared';
 
 export type SystemRole = 'system_admin' | 'agent_admin' | 'merchant_admin' | 'platform_admin' | 'member';
 
@@ -146,7 +147,18 @@ const NAV_BY_ROLE: Record<SystemRole, NavCategory[]> = {
   member: MEMBER_NAV,
 };
 
-export const getNavItems = (role: SystemRole): NavCategory[] => NAV_BY_ROLE[role];
+export const getNavItems = (
+  role: SystemRole,
+  branding: Pick<TenantSettingsView, 'defaultCropName'> = DEFAULT_TENANT_SETTINGS,
+): NavCategory[] => NAV_BY_ROLE[role].map((category) => ({
+  ...category,
+  items: category.items.map((item) => ({
+    ...item,
+    label: role === 'merchant_admin' && item.id === 'merchant'
+      ? `我的${branding.defaultCropName}档案`
+      : item.label,
+  })),
+}));
 
 export const isSystemRole = (role: string | null | undefined): role is SystemRole =>
   !!role && role in NAV_BY_ROLE;

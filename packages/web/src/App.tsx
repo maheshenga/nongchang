@@ -8,6 +8,7 @@ import { DialogHost } from './hooks/useDialog';
 import { ToastBanner } from './hooks/useToast';
 import { firstAllowedTab, getNavItems, isSystemRole, type AppTab, type SystemRole } from './navigation';
 import { fluentButton } from './ui/fluent';
+import { useBranding } from './branding/branding-context';
 
 const PublicLanding = lazy(() => import('./components/PublicLanding'));
 const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
@@ -62,6 +63,7 @@ function navLabel(id: AppTab, label: string): string {
 
 export default function App() {
   const { user, profile, isAuthenticated, isReady, logout } = useAuth();
+  const branding = useBranding();
   const systemRole: SystemRole | null = user ? toSystemRole(user.role) : null;
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
   const [mountedTabs, setMountedTabs] = useState<Set<AppTab>>(new Set());
@@ -72,7 +74,7 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const navRole = systemRole ?? 'system_admin';
-  const navItems = getNavItems(navRole);
+  const navItems = useMemo(() => getNavItems(navRole, branding), [navRole, branding.defaultCropName]);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
   const searchItems = useMemo(
     () => flatNavItems.map(item => ({ id: item.id, label: navLabel(item.id, item.label), icon: item.icon })),
@@ -228,7 +230,7 @@ export default function App() {
               <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">
                 <Leaf className="h-4 w-4" />
               </div>
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold">农场溯源管理</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{branding.brandName}</span>
               <button type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} className={fluentButton('icon')}>
                 <X className="h-4 w-4" />
               </button>
@@ -262,7 +264,7 @@ export default function App() {
             <div className="grid h-7 w-7 place-items-center rounded-[4px] bg-[#0078D4] text-white">
               <Leaf className="h-4 w-4" />
             </div>
-            <span className="truncate text-sm font-semibold">农场溯源管理</span>
+            <span className="truncate text-sm font-semibold">{branding.brandName}</span>
           </div>
 
           <nav className="fluent-scrollbar flex-1 overflow-y-auto py-2">

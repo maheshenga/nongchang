@@ -14,6 +14,12 @@ vi.mock('../api/trace', () => ({
   generateCodes: (...args: unknown[]) => generateCodesMock(...args),
 }));
 
+vi.mock('../branding/branding-context', () => ({
+  useBranding: () => ({
+    defaultCropName: '葡萄',
+  }),
+}));
+
 import MerchantAdmin from './MerchantAdmin';
 
 const batch = {
@@ -52,9 +58,18 @@ describe('MerchantAdmin production actions', () => {
     render(<MerchantAdmin onNavigate={onNavigate} />);
     await screen.findByText('Peony');
 
-    fireEvent.click(screen.getByRole('button', { name: /新增芍药繁育生产批次/ }));
+    fireEvent.click(screen.getByRole('button', { name: /新增葡萄生产批次/ }));
 
     expect(onNavigate).toHaveBeenCalledWith('batches');
+  });
+
+  it('uses tenant crop copy for search and table labels', async () => {
+    render(<MerchantAdmin />);
+    await screen.findByText('Peony');
+
+    expect(screen.getByPlaceholderText('搜索批次或葡萄品种...')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '葡萄品种/名称' })).toBeTruthy();
+    expect(screen.queryByText(/芍药/)).toBeNull();
   });
 
   it('generates trace codes through the real API from the side panel', async () => {
