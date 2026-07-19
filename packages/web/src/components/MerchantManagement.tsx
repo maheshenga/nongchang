@@ -2,16 +2,17 @@ import { useCallback, useState, type FormEvent } from 'react';
 import { CheckCircle2, Filter, Pencil, Plus, Power, Search, Store, X, XCircle } from 'lucide-react';
 import { Role, type CreateUserDto, type MerchantListItem, type UpdateUserDto } from '@nongchang/shared';
 import { createUser, listMerchants, setUserStatus, updateUser } from '../api/users';
+import { assignUserGroup, listUserGroups } from '../api/user-group';
 import { useApi } from '../hooks/useApi';
 import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { fluentButton, fluentInput, fluentStatusTag, fluentTable } from '../ui/fluent';
 import { EmptyState, ErrorState, LoadingState } from '../ui/state';
 import { MANAGEMENT_PAGE_SIZE, normalizePage, PaginationControls } from '../ui/pagination';
 
-type FormState = { displayName: string; username: string; phone: string };
+type FormState = { displayName: string; username: string; phone: string; groupId: string };
 type StatusFilter = 'all' | 'active' | 'suspended';
 
-const emptyForm: FormState = { displayName: '', username: '', phone: '' };
+const emptyForm: FormState = { displayName: '', username: '', phone: '', groupId: '' };
 
 function statusTag(status: string) {
   if (status === 'active') {
@@ -45,6 +46,10 @@ export default function MerchantManagement() {
   const { data: rawMerchants, loading, error, reload } = useApi(fetchMerchants, { cacheKey: `merchants-page-${page}` });
   const merchantPage = normalizePage<MerchantListItem>(rawMerchants, page);
   const merchants = merchantPage.items;
+  const { data: groupData, loading: groupsLoading, error: groupsError } = useApi(listUserGroups, {
+    cacheKey: 'merchant-user-groups',
+  });
+  const groups = groupData ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showModal, setShowModal] = useState(false);
@@ -62,13 +67,18 @@ export default function MerchantManagement() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, groupId: groups.find((group) => group.isDefault)?.id ?? '' });
     setShowModal(true);
   };
 
   const openEdit = (merchant: MerchantListItem) => {
     setEditingId(merchant.id);
-    setForm({ displayName: merchant.displayName, username: merchant.username, phone: merchant.phone ?? '' });
+    setForm({
+      displayName: merchant.displayName,
+      username: merchant.username,
+      phone: merchant.phone ?? '',
+      groupId: merchant.groupId ?? '',
+    });
     setShowModal(true);
   };
 
@@ -83,14 +93,19 @@ export default function MerchantManagement() {
     if (!form.displayName || !form.username) return;
     try {
       if (editingId) {
+        const original = merchants.find((merchant) => merchant.id === editingId);
         const dto: UpdateUserDto = { displayName: form.displayName, phone: form.phone || null };
         await updateUser(editingId, dto);
+        if (original && (original.groupId ?? '') !== form.groupId) {
+          await assignUserGroup({ userId: editingId, groupId: form.groupId || null });
+        }
       } else {
         const dto: CreateUserDto = {
           username: form.username,
           role: Role.MERCHANT,
           displayName: form.displayName,
           phone: form.phone || undefined,
+          groupId: form.groupId || undefined,
         };
         const result = await createUser(dto);
         await alertDialog({ title: '商户已创建', message: `商户已创建。初始密码: ${result.initialPassword}，请转交商户并提醒尽快修改。` });
@@ -172,12 +187,13 @@ export default function MerchantManagement() {
             <ErrorState message={error} onRetry={() => void reload()} className="m-4" />
           )}
           {!loading && !error && (
-            <table className={`${fluentTable.table} min-w-[980px]`}>
+            <table className={`${fluentTable.table} min-w-[1080px]`}>
               <thead className={fluentTable.thead}>
                 <tr>
                   <th className={fluentTable.th}>商户编号</th>
                   <th className={fluentTable.th}>企业名称</th>
                   <th className={fluentTable.th}>联系人 / 电话</th>
+                  <th className={fluentTable.th}>用户组</th>
                   <th className={fluentTable.th}>地块数</th>
                   <th className={fluentTable.th}>确权面积</th>
                   <th className={fluentTable.th}>状态</th>
@@ -198,6 +214,7 @@ export default function MerchantManagement() {
                       <div className="font-semibold text-[#323130]">{merchant.username}</div>
                       <div className="text-xs text-[#605E5C]">{merchant.phone ?? '未填'}</div>
                     </td>
+                    <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.groupName ?? '未分组'}</td>
                     <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.fieldCount}</td>
                     <td className={`${fluentTable.td} text-[#605E5C]`}>{merchant.totalArea.toFixed(1)} 亩</td>
                     <td className={fluentTable.td}>{statusTag(merchant.status)}</td>
@@ -228,7 +245,7 @@ export default function MerchantManagement() {
                 ))}
                 {filteredMerchants.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-0">
+                    <td colSpan={9} className="p-0">
                       <EmptyState title="暂无匹配商户" />
                     </td>
                   </tr>
@@ -301,6 +318,24 @@ export default function MerchantManagement() {
                       className={`${fluentInput} w-full`}
                     />
                   </div>
+                </div>
+                <div>
+                  <label htmlFor="merchant-group" className="mb-1.5 block text-sm font-semibold text-[#323130]">用户组</label>
+                  <select
+                    id="merchant-group"
+                    value={form.groupId}
+                    onChange={(event) => setForm({ ...form, groupId: event.target.value })}
+                    className={`${fluentInput} w-full`}
+                    disabled={groupsLoading || !!groupsError}
+                  >
+                    <option value="">自动使用默认用户组</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}{group.isDefault ? '（默认）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {groupsError && <p className="mt-1 text-xs text-[#A4262C]">用户组加载失败，暂无法调整分组。</p>}
                 </div>
               </div>
               <div className="flex justify-end gap-2 border-t border-[#E1DFDD] bg-[#FAFAFA] px-5 py-4">

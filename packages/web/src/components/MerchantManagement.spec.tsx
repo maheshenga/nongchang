@@ -1,17 +1,24 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { Role, type MerchantListItem } from '@nongchang/shared';
+import { Role, type MerchantListItem, type UserGroupView } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listMerchantsMock = vi.fn();
 const createUserMock = vi.fn();
 const updateUserMock = vi.fn();
 const setUserStatusMock = vi.fn();
+const listUserGroupsMock = vi.fn();
+const assignUserGroupMock = vi.fn();
 
 vi.mock('../api/users', () => ({
   listMerchants: (...args: unknown[]) => listMerchantsMock(...args),
   createUser: (...args: unknown[]) => createUserMock(...args),
   updateUser: (...args: unknown[]) => updateUserMock(...args),
   setUserStatus: (...args: unknown[]) => setUserStatusMock(...args),
+}));
+
+vi.mock('../api/user-group', () => ({
+  listUserGroups: () => listUserGroupsMock(),
+  assignUserGroup: (...args: unknown[]) => assignUserGroupMock(...args),
 }));
 
 import MerchantManagement from './MerchantManagement';
@@ -27,6 +34,8 @@ const merchants: MerchantListItem[] = [
     phone: '13800000001',
     status: 'active',
     agentId: 'agent-1',
+    groupId: 'group-default',
+    groupName: 'Default Farm Group',
     createdAt: '2026-07-01T00:00:00.000Z',
     fieldCount: 2,
     totalArea: 18.5,
@@ -38,15 +47,36 @@ const merchants: MerchantListItem[] = [
     phone: null,
     status: 'suspended',
     agentId: null,
+    groupId: null,
+    groupName: null,
     createdAt: '2026-07-02T00:00:00.000Z',
     fieldCount: 0,
     totalArea: 0,
   },
 ];
 
+const groups: UserGroupView[] = [
+  {
+    id: 'group-default',
+    name: 'Default Farm Group',
+    isDefault: true,
+    permissions: [],
+    createdAt: '2026-07-01T00:00:00.000Z',
+  },
+  {
+    id: 'group-alt',
+    name: 'Alternate Farm Group',
+    isDefault: false,
+    permissions: [],
+    createdAt: '2026-07-02T00:00:00.000Z',
+  },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   listMerchantsMock.mockResolvedValue(merchants);
+  listUserGroupsMock.mockResolvedValue(groups);
+  assignUserGroupMock.mockResolvedValue({ ok: true });
   createUserMock.mockResolvedValue({
     id: 'merchant-3',
     username: 'east-owner',
@@ -96,6 +126,7 @@ describe('MerchantManagement Fluent table', () => {
         role: Role.MERCHANT,
         displayName: 'East Farm',
         phone: '13800000003',
+        groupId: 'group-default',
       });
     });
     const dialog = await screen.findByRole('dialog', { name: '商户已创建' });
@@ -103,6 +134,22 @@ describe('MerchantManagement Fluent table', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '知道了' }));
 
     await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('creates a merchant with the selected tenant group', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
+    fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
+    fireEvent.change(screen.getByLabelText('联系人 / 用户名'), { target: { value: 'east-owner' } });
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
+
+    await waitFor(() => expect(createUserMock).toHaveBeenCalledWith(expect.objectContaining({
+      role: Role.MERCHANT,
+      groupId: 'group-alt',
+    })));
   });
 
   it('updates a merchant with username disabled and phone nullable', async () => {
@@ -118,6 +165,20 @@ describe('MerchantManagement Fluent table', () => {
     await waitFor(() => {
       expect(updateUserMock).toHaveBeenCalledWith('merchant-1', { displayName: 'North Updated', phone: null });
     });
+  });
+
+  it('reassigns an edited merchant only when its group changes', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(assignUserGroupMock).toHaveBeenCalledWith({
+      userId: 'merchant-1',
+      groupId: 'group-alt',
+    }));
   });
 
   it('toggles merchant status through the real status API', async () => {
