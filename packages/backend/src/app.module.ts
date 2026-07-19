@@ -37,6 +37,7 @@ import { RUNTIME_STATE, type RuntimeStateStore } from './common/runtime/runtime-
 import { RedisThrottlerStorage } from './common/runtime/redis-throttler.storage';
 import { OperationsModule } from './modules/operations/operations.module';
 import { TelemetryModule } from './telemetry/telemetry.module';
+import { TenantSettingsModule } from './modules/tenant-settings/tenant-settings.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { TelemetryModule } from './telemetry/telemetry.module';
     BillingModule,
     HealthModule,
     OperationsModule,
+    TenantSettingsModule,
   ],
   providers: [
     ScopeService,
