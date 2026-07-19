@@ -84,6 +84,77 @@ describe('DialogHost', () => {
 
     await waitFor(() => expect(result).toBe(false));
   });
+
+  it('presents concurrent confirmations in FIFO order', async () => {
+    render(<DialogHost />);
+    const results: boolean[] = [];
+
+    await act(async () => {
+      void confirmDialog({ title: 'First request', message: 'one' })
+        .then((value) => { results.push(value); });
+      void confirmDialog({ title: 'Second request', message: 'two' })
+        .then((value) => { results.push(value); });
+    });
+
+    expect(screen.getByRole('dialog', { name: 'First request' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Second request' })).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    });
+    expect(await screen.findByRole('dialog', { name: 'Second request' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    });
+    await waitFor(() => expect(results).toEqual([true, false]));
+  });
+
+  it('keeps an alert queued behind the active confirmation', async () => {
+    render(<DialogHost />);
+    const completions: string[] = [];
+
+    await act(async () => {
+      void confirmDialog({ title: 'Confirm first', message: 'one' })
+        .then(() => { completions.push('confirm'); });
+      void alertDialog({ title: 'Alert second', message: 'two' })
+        .then(() => { completions.push('alert'); });
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Confirm first' })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    });
+    expect(await screen.findByRole('dialog', { name: 'Alert second' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '知道了' }));
+    });
+    await waitFor(() => expect(completions).toEqual(['confirm', 'alert']));
+  });
+
+  it('resolves current and queued requests when the last host unmounts', async () => {
+    const view = render(<DialogHost />);
+    let confirmResult: boolean | undefined;
+    let alertResolved = false;
+
+    await act(async () => {
+      void confirmDialog({ title: 'Current request', message: 'one' })
+        .then((value) => { confirmResult = value; });
+      void alertDialog({ title: 'Queued request', message: 'two' })
+        .then(() => { alertResolved = true; });
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Current request' })).toBeTruthy();
+    await act(async () => {
+      view.unmount();
+    });
+
+    await waitFor(() => {
+      expect(confirmResult).toBe(false);
+      expect(alertResolved).toBe(true);
+    });
+  });
 });
 
 describe('native dialog usage', () => {
