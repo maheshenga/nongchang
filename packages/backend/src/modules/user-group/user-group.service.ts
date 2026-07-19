@@ -1,7 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { AuthUser, UserGroupInput, UserGroupView, AssignUserGroupInput } from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
 import { DEFAULT_USER_GROUP_PERMISSIONS } from './default-permissions';
 import {
   buildAssignUserScope,
@@ -15,7 +16,10 @@ import {
 
 @Injectable()
 export class UserGroupService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private sessions?: SessionValidationCacheService,
+  ) {}
 
   async list(user: AuthUser): Promise<UserGroupView[]> {
     const rows = (await this.prisma.userGroup.findMany({
@@ -86,6 +90,16 @@ export class UserGroupService {
     }
   }
 
+  async resolveForCreate(tenantId: string, requestedGroupId?: string): Promise<string> {
+    if (!requestedGroupId) return (await this.ensureDefault(tenantId)).id;
+    const group = await this.prisma.userGroup.findFirst({
+      where: buildUserGroupTenantWhere({ tenantId, id: requestedGroupId }),
+      select: { id: true },
+    });
+    if (!group) throw new NotFoundException('用户组不存在');
+    return group.id;
+  }
+
   async assignUserGroup(user: AuthUser, dto: AssignUserGroupInput): Promise<void> {
     // 范围收敛:agent_admin 仅可给本代理商旗下用户改组,防止跨范围越权。
     if (user.role === Role.AGENT_ADMIN && !user.agentId) throw new ForbiddenException('代理管理员缺少 agentId,拒绝操作');
@@ -104,6 +118,7 @@ export class UserGroupService {
       where: { id: dto.userId },
       data: { groupId: dto.groupId },
     });
+    await this.sessions?.invalidateUser(user.tenantId, dto.userId);
   }
 }
 

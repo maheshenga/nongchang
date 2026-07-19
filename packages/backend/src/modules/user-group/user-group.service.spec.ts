@@ -45,8 +45,12 @@ function makePrisma() {
 }
 
 describe('UserGroupService', () => {
-  let prisma: any; let svc: UserGroupService;
-  beforeEach(() => { prisma = makePrisma(); svc = new UserGroupService(prisma); });
+  let prisma: any; let svc: UserGroupService; let sessions: { invalidateUser: ReturnType<typeof vi.fn> };
+  beforeEach(() => {
+    prisma = makePrisma();
+    sessions = { invalidateUser: vi.fn().mockResolvedValue(undefined) };
+    svc = new UserGroupService(prisma, sessions as any);
+  });
 
   it('create + list 按租户隔离', async () => {
     await svc.create(user, { name: '默认农户', permissions: ['record:create'] });
@@ -97,10 +101,38 @@ describe('UserGroupService', () => {
     expect(prisma.groups).toHaveLength(1);
   });
 
+  it('resolveForCreate returns an explicitly requested group in the same tenant', async () => {
+    const group = await svc.create(user, { name: 'Production' });
+
+    await expect(svc.resolveForCreate('t1', group.id)).resolves.toBe(group.id);
+  });
+
+  it('resolveForCreate rejects a group owned by another tenant', async () => {
+    const foreign = await svc.create(otherTenant, { name: 'Foreign' });
+
+    await expect(svc.resolveForCreate('t1', foreign.id)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('resolveForCreate creates and returns the tenant default when groupId is omitted', async () => {
+    const groupId = await svc.resolveForCreate('t1');
+
+    expect(groupId).toBe(prisma.groups[0].id);
+    expect(prisma.groups[0]).toMatchObject({ tenantId: 't1', isDefault: true });
+  });
+
   it('assignUserGroup 改用户所属组(租户内)', async () => {
     const g = await svc.create(user, { name: 'A' });
     await svc.assignUserGroup(user, { userId: 'mem1', groupId: g.id });
     expect(prisma.users[0].groupId).toBe(g.id);
+  });
+
+  it('assignUserGroup invalidates the target session cache after update', async () => {
+    const group = await svc.create(user, { name: 'A' });
+
+    await svc.assignUserGroup(user, { userId: 'mem1', groupId: group.id });
+
+    expect(prisma.users[0].groupId).toBe(group.id);
+    expect(sessions.invalidateUser).toHaveBeenCalledWith('t1', 'mem1');
   });
 
   it('assignUserGroup 跨租户用户抛 NotFound', async () => {
