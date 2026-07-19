@@ -60,6 +60,13 @@ describe('Supply e2e', () => {
   afterAll(async () => {
     if (createdSupplyIds.length) {
       await prisma.supplyIssue.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
+      const records = await prisma.farmRecord.findMany({
+        where: { supplyId: { in: createdSupplyIds } },
+        select: { id: true },
+      });
+      await prisma.traceEvent.deleteMany({
+        where: { sourceFarmRecordId: { in: records.map((record) => record.id) } },
+      });
       await prisma.farmRecord.deleteMany({ where: { supplyId: { in: createdSupplyIds } } });
       await prisma.supply.deleteMany({ where: { id: { in: createdSupplyIds } } });
     }

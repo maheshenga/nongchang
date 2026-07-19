@@ -135,6 +135,7 @@ model FarmRecord {
   batch      Batch    @relation(fields: [batchId], references: [id])
   field      Field    @relation(fields: [fieldId], references: [id])
   operator   User     @relation(fields: [operatorId], references: [id])
+  traceEvent TraceEvent?
 
   @@index([tenantId])
   @@index([batchId])
@@ -185,8 +186,10 @@ model TraceEvent {
   location   String
   occurredAt DateTime @map("occurred_at")
   payload    Json?
+  sourceFarmRecordId String?     @unique @map("source_farm_record_id")
   createdAt  DateTime @default(now()) @map("created_at")
   batch      Batch    @relation(fields: [batchId], references: [id])
+  sourceFarmRecord   FarmRecord? @relation(fields: [sourceFarmRecordId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
   @@index([batchId])

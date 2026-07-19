@@ -174,7 +174,7 @@ export default function FarmRecords() {
   const handleComplete = async (id: string) => {
     try {
       await updateFarmRecordStatus(id, 'completed');
-      showToast('已标记完成并归档');
+      showToast('已完成并发布到公开溯源');
       void reload();
     } catch (e) {
       showToast(e instanceof Error ? e.message : '操作失败');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { Role, type AuthUser, type CreateFarmRecordDto } from '@nongchang/shared';
+import { Role, TraceEventType, type AuthUser, type CreateFarmRecordDto } from '@nongchang/shared';
 import {
   FARM_RECORD_LIST_ORDER_BY,
   FARM_RECORD_OWNER_BATCH_SELECT,
@@ -9,6 +9,7 @@ import {
   buildFarmRecordListFindManyArgs,
   buildFarmRecordListWhere,
   buildFarmRecordCreateData,
+  buildFarmRecordTraceEventData,
   buildFarmRecordOwnerBatchWhere,
   buildFarmRecordOwnerWhere,
   enrichFarmRecordRows,
@@ -117,6 +118,72 @@ describe('farm record model helpers', () => {
     const out = enrichFarmRecordRows([{ id: 'r1', batchId: 'b1', supplyAmount: null }], [], []);
 
     expect(out).toEqual([{ id: 'r1', batchId: 'b1', supplyAmount: null, ownerName: null }]);
+  });
+});
+
+describe('buildFarmRecordTraceEventData', () => {
+  const base = {
+    record: {
+      id: 'fr1',
+      tenantId: 'tenant1',
+      batchId: 'batch1',
+      action: '  fertilize  ',
+      detail: { note: '  leaf feeding completed  ', cost: 200, labor: 3, material: 'internal formula' },
+      images: ['https://cdn.example/farm-1.jpg', 'https://cdn.example/farm-2.jpg'],
+      recordedAt: new Date('2026-07-17T01:02:03.000Z'),
+    },
+    ownerDisplayName: 'Demo Farm',
+    fieldName: 'Field One',
+  };
+
+  it('maps a completed record to the public farm-event allowlist', () => {
+    expect(buildFarmRecordTraceEventData(base)).toEqual({
+      tenantId: 'tenant1',
+      batchId: 'batch1',
+      type: TraceEventType.FARM,
+      title: 'fertilize',
+      actor: 'Demo Farm',
+      location: 'Field One',
+      occurredAt: new Date('2026-07-17T01:02:03.000Z'),
+      payload: { desc: 'leaf feeding completed', image: 'https://cdn.example/farm-1.jpg' },
+      sourceFarmRecordId: 'fr1',
+    });
+  });
+
+  it('supports web detail.desc and excludes private or unknown fields', () => {
+    const result = buildFarmRecordTraceEventData({
+      ...base,
+      record: {
+        ...base.record,
+        detail: { desc: 'weeding completed', cost: 99, labor: 8, supplyId: 'hidden', extra: 'hidden' },
+        images: [],
+      },
+    });
+
+    expect(result.payload).toEqual({ desc: 'weeding completed' });
+    const publicJson = JSON.stringify(result);
+    expect(publicJson).not.toContain('cost');
+    expect(publicJson).not.toContain('labor');
+    expect(publicJson).not.toContain('supplyId');
+    expect(publicJson).not.toContain('extra');
+  });
+
+  it('uses no payload when no public description or valid image exists', () => {
+    expect(buildFarmRecordTraceEventData({
+      ...base,
+      record: { ...base.record, detail: { cost: 1 }, images: [1, null] },
+    }).payload).toBeUndefined();
+  });
+
+  it('trims descriptions to 2000 Unicode code points', () => {
+    const desc = `${'a'.repeat(2000)}tail`;
+    const result = buildFarmRecordTraceEventData({
+      ...base,
+      record: { ...base.record, detail: { note: desc }, images: null },
+    });
+
+    expect(Array.from((result.payload as { desc: string }).desc)).toHaveLength(2000);
+    expect((result.payload as { desc: string }).desc.endsWith('tail')).toBe(false);
   });
 });
 
