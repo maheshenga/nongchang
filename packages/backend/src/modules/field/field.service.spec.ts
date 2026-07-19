@@ -7,14 +7,50 @@ const merchant: AuthUser = { userId: 'op1', tenantId: 't1', role: Role.MERCHANT,
 const sysadmin: AuthUser = { userId: 's', tenantId: 't1', role: Role.SYSTEM_ADMIN, agentId: null, ownerId: null };
 const dto: CreateFieldDto = { ownerId: 'someoneElse', name: 'A区', area: 10, lng: 100, lat: 25 };
 
-function make(ownerFound = true) {
+function make(ownerFound = true, overrides: { coordinateWriteError?: Error } = {}) {
   let created: any;
-  const prisma = {
-    field: { create: async (a: any) => { created = a; return { id: 'f1', ...a.data }; } },
-    user: { findFirst: vi.fn().mockResolvedValue(ownerFound ? { id: 'mX' } : null), findMany: vi.fn().mockResolvedValue([]) },
-    $executeRawUnsafe: async () => 1,
+  let transactionCommitted = false;
+  const cache = { invalidateTenant: vi.fn().mockResolvedValue(undefined) };
+  const tx = {
+    field: {
+      create: vi.fn(async (a: any) => {
+        created = a;
+        return {
+          id: 'f1',
+          ...a.data,
+          createdAt: new Date('2026-06-14T10:00:00.000Z'),
+        };
+      }),
+    },
+    user: {
+      findUnique: vi.fn().mockResolvedValue({ displayName: '张三农场' }),
+    },
+    $executeRawUnsafe: vi.fn(async () => {
+      if (overrides.coordinateWriteError) throw overrides.coordinateWriteError;
+      return 1;
+    }),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([{ id: 'f1', lng: 100, lat: 25 }]),
   };
-  return { svc: new FieldService(prisma as any, new ScopeService()), get created() { return created; } };
+  const prisma = {
+    field: tx.field,
+    user: {
+      findFirst: vi.fn().mockResolvedValue(ownerFound ? { id: 'mX' } : null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    $executeRawUnsafe: tx.$executeRawUnsafe,
+    $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<unknown>) => {
+      const result = await callback(tx);
+      transactionCommitted = true;
+      return result;
+    }),
+  };
+  return {
+    svc: new FieldService(prisma as any, new ScopeService(), cache as any),
+    tx,
+    cache,
+    get created() { return created; },
+    get transactionCommitted() { return transactionCommitted; },
+  };
 }
 
 describe('FieldService.create #23', () => {
@@ -32,6 +68,27 @@ describe('FieldService.create #23', () => {
     const h = make(false);
     await expect(h.svc.create(sysadmin, dto)).rejects.toThrow();
     expect(h.created).toBeUndefined();
+  });
+
+  it('rolls back the field when coordinate persistence fails', async () => {
+    const h = make(true, { coordinateWriteError: new Error('postgis unavailable') });
+
+    await expect(h.svc.create(merchant, dto)).rejects.toThrow('postgis unavailable');
+
+    expect(h.transactionCommitted).toBe(false);
+    expect((h.svc as any).prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(h.cache.invalidateTenant).not.toHaveBeenCalled();
+  });
+
+  it('returns the final field view with persisted coordinates', async () => {
+    const h = make();
+
+    await expect(h.svc.create(merchant, dto)).resolves.toMatchObject({
+      id: 'f1',
+      ownerName: '张三农场',
+      lng: 100,
+      lat: 25,
+    });
   });
 });
 

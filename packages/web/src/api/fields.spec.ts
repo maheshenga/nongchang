@@ -15,12 +15,17 @@ beforeEach(() => requestMock.mockReset());
 
 describe('field api response contracts', () => {
   it('parses create responses and normalizes enriched fields', async () => {
-    requestMock.mockResolvedValue(field);
+    requestMock.mockResolvedValue({
+      ...field,
+      ownerName: '张三农场',
+      lng: 100,
+      lat: 25,
+    });
     await expect(createField({} as never)).resolves.toEqual({
       ...field,
-      ownerName: null,
-      lng: null,
-      lat: null,
+      ownerName: '张三农场',
+      lng: 100,
+      lat: 25,
     });
   });
 
