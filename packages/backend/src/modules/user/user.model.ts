@@ -28,6 +28,8 @@ export const MERCHANT_USER_LIST_SELECT = {
   phone: true,
   status: true,
   agentId: true,
+  groupId: true,
+  group: { select: { name: true } },
   createdAt: true,
 } as const;
 
@@ -45,6 +47,8 @@ export interface MerchantListRow {
   phone: string | null;
   status: string;
   agentId: string | null;
+  groupId: string | null;
+  group: { name: string } | null;
   createdAt: Date;
 }
 
@@ -135,6 +139,8 @@ export function toMerchantListItems(merchants: MerchantListRow[], aggregates: Me
       phone: merchant.phone,
       status: merchant.status,
       agentId: merchant.agentId,
+      groupId: merchant.groupId,
+      groupName: merchant.group?.name ?? null,
       createdAt: merchant.createdAt.toISOString(),
       fieldCount: aggregate?._count._all ?? 0,
       totalArea: aggregate?._sum.area ?? 0,
