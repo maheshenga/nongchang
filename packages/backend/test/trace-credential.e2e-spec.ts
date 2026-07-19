@@ -20,7 +20,9 @@ describe('TraceCredential e2e', () => {
   let tokenB: string;
   let batchAId: string;
   let tenantAId: string;
+  let previousOssBaseUrl: string | undefined;
   const scanCode = `CRED-E2E-${Date.now()}`;
+  const trustedBaseUrl = 'https://oss.example.com/uploads';
   const createdIds: string[] = [];
 
   beforeAll(async () => {
@@ -29,6 +31,8 @@ describe('TraceCredential e2e', () => {
     app.setGlobalPrefix('api');
     await app.init();
     prisma = app.get(PrismaService);
+    previousOssBaseUrl = process.env.OSS_BASE_URL;
+    process.env.OSS_BASE_URL = trustedBaseUrl;
     tokenA = await login(app, 'merchantA');
     tokenB = await login(app, 'merchantB');
     const userA = await prisma.user.findFirst({ where: { username: 'merchantA' } });
@@ -40,10 +44,13 @@ describe('TraceCredential e2e', () => {
   });
 
   afterAll(async () => {
-    if (createdIds.length) {
-      await prisma.traceCredential.deleteMany({ where: { id: { in: createdIds } } });
+    const ids = createdIds.filter((id): id is string => Boolean(id));
+    if (ids.length) {
+      await prisma.traceCredential.deleteMany({ where: { id: { in: ids } } });
     }
     await prisma.traceCode.deleteMany({ where: { code: scanCode } });
+    if (previousOssBaseUrl === undefined) delete process.env.OSS_BASE_URL;
+    else process.env.OSS_BASE_URL = previousOssBaseUrl;
     await app.close();
   });
 
@@ -54,7 +61,7 @@ describe('TraceCredential e2e', () => {
         batchId: batchAId, type: 'certificate', title: 'e2e绿色食品认证',
         issuer: '中国绿色食品发展中心', serialNo: 'LB-2026-001',
         issuedAt: '2026-01-10T00:00:00.000Z',
-        fileUrl: 'https://example.com/cert.pdf',
+        fileUrl: `${trustedBaseUrl}/cert.pdf`,
       });
     expect(create.status).toBe(201);
     const id = create.body.id;
@@ -80,7 +87,7 @@ describe('TraceCredential e2e', () => {
       .post('/api/trace/credentials').set('Authorization', `Bearer ${tokenB}`)
       .send({
         batchId: batchAId, type: 'report', title: '越权检测报告',
-        issuer: '某机构', fileUrl: 'https://example.com/r.pdf',
+        issuer: '某机构', fileUrl: `${trustedBaseUrl}/r.pdf`,
       });
     expect(createB.status).toBe(403);
 
@@ -96,7 +103,7 @@ describe('TraceCredential e2e', () => {
         batchId: batchAId, type: 'report', title: 'e2e农残检测报告',
         issuer: '云南省检测院', serialNo: 'JC-2026-777',
         issuedAt: '2026-02-20T00:00:00.000Z',
-        fileUrl: 'https://example.com/report.pdf',
+        fileUrl: `${trustedBaseUrl}/report.pdf`,
       });
     const id = create.body.id;
     createdIds.push(id);
@@ -108,7 +115,7 @@ describe('TraceCredential e2e', () => {
     expect(found.type).toBe('report');
     expect(found.issuer).toBe('云南省检测院');
     expect(found.issuedAt).toBe('2026-02-20T00:00:00.000Z');
-    expect(found.fileUrl).toBe('https://example.com/report.pdf');
+    expect(found.fileUrl).toBe(`${trustedBaseUrl}/report.pdf`);
     const json = JSON.stringify(found);
     expect(json).not.toContain('serialNo');
     expect(json).not.toContain('JC-2026-777');

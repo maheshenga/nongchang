@@ -29,6 +29,7 @@
     "ali-oss": "^6.23.0",
     "alipay-sdk": "3.6.2",
     "bcryptjs": "^3.0.3",
+    "express": "4.22.1",
     "helmet": "^8.2.0",
     "nestjs-cls": "^4.4.0",
     "passport": "^0.7.0",
