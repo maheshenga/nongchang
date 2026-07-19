@@ -74,7 +74,8 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [authView, setAuthView] = useState<'landing' | 'login'>('landing');
   const navRole = systemRole ?? 'system_admin';
-  const navItems = useMemo(() => getNavItems(navRole, branding), [navRole, branding.defaultCropName]);
+  const defaultCropName = branding.defaultCropName;
+  const navItems = useMemo(() => getNavItems(navRole, { defaultCropName }), [navRole, defaultCropName]);
   const flatNavItems = useMemo(() => navItems.flatMap(category => category.items), [navItems]);
   const searchItems = useMemo(
     () => flatNavItems.map(item => ({ id: item.id, label: navLabel(item.id, item.label), icon: item.icon })),
