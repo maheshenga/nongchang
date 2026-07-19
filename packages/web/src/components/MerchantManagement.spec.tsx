@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Role, type MerchantListItem, type UserGroupView } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +26,12 @@ import { DialogHost } from '../hooks/useDialog';
 
 const renderWithDialog = () => render(<><MerchantManagement /><DialogHost /></>);
 const waitForGroups = () => screen.findByRole('option', { name: 'Default Farm Group（默认）' });
+const waitForGroupData = async () => {
+  await waitFor(() => expect(listUserGroupsMock).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    await listUserGroupsMock.mock.results[0]?.value;
+  });
+};
 
 const merchants: MerchantListItem[] = [
   {
@@ -114,9 +120,11 @@ describe('MerchantManagement Fluent table', () => {
   it('creates a merchant user and shows the backend generated initial password', async () => {
     renderWithDialog();
     await screen.findByText('North Farm');
+    await waitForGroupData();
 
     fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
     await waitForGroups();
+    expect((screen.getByLabelText('用户组') as HTMLSelectElement).value).toBe('group-default');
     fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
     fireEvent.change(screen.getByLabelText('联系人 / 用户名'), { target: { value: 'east-owner' } });
     fireEvent.change(screen.getByLabelText('手机号码'), { target: { value: '13800000003' } });
@@ -141,9 +149,11 @@ describe('MerchantManagement Fluent table', () => {
   it('creates a merchant with the selected tenant group', async () => {
     renderWithDialog();
     await screen.findByText('North Farm');
+    await waitForGroupData();
 
     fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
     await waitForGroups();
+    expect((screen.getByLabelText('用户组') as HTMLSelectElement).value).toBe('group-default');
     fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
     fireEvent.change(screen.getByLabelText('联系人 / 用户名'), { target: { value: 'east-owner' } });
     fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
@@ -182,6 +192,8 @@ describe('MerchantManagement Fluent table', () => {
       displayName: 'North Farm',
       phone: '13800000001',
     }));
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog', { name: '编辑商户档案' })).toBeNull();
     expect(assignUserGroupMock).not.toHaveBeenCalled();
   });
 
@@ -228,6 +240,8 @@ describe('MerchantManagement Fluent table', () => {
       displayName: 'South Farm',
       phone: null,
     }));
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog', { name: '编辑商户档案' })).toBeNull();
     expect(assignUserGroupMock).not.toHaveBeenCalled();
   });
 
@@ -243,8 +257,12 @@ describe('MerchantManagement Fluent table', () => {
 
     const errorDialog = await screen.findByRole('dialog', { name: '操作失败' });
     expect(within(errorDialog).getByText('group assignment failed')).toBeTruthy();
-    expect(screen.getByRole('dialog', { name: '编辑商户档案' })).toBeTruthy();
-    expect(listMerchantsMock).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(errorDialog).getByRole('button', { name: '知道了' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '操作失败' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: '编辑商户档案' })).toBeTruthy();
+      expect(listMerchantsMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('toggles merchant status through the real status API', async () => {
