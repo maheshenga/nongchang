@@ -1,6 +1,6 @@
 CREATE TABLE "tenant_settings" (
-  "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-  "tenant_id" UUID NOT NULL,
+  "id" TEXT NOT NULL,
+  "tenant_id" TEXT NOT NULL,
   "public_coordinate_mode" TEXT NOT NULL DEFAULT 'hidden',
   "brand_name" TEXT NOT NULL DEFAULT '农场溯源管理',
   "industry_name" TEXT NOT NULL DEFAULT '农业',

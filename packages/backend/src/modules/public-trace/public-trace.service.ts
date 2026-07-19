@@ -20,6 +20,37 @@ export class PublicTraceService {
     },
   ) {}
 
+  private async recordPublicScan(
+    traceCode: { tenantId: string; code: string; batchId: string },
+    meta?: { ip: string; userAgent: string | null },
+  ): Promise<number> {
+    if (!meta) {
+      const updated = await this.prisma.traceCode.update({
+        where: { code: traceCode.code },
+        data: { scanCount: { increment: 1 } },
+        select: { scanCount: true },
+      });
+      return updated.scanCount;
+    }
+    return this.prisma.$transaction(async (tx) => {
+      await tx.traceScan.create({
+        data: {
+          tenantId: traceCode.tenantId,
+          code: traceCode.code,
+          batchId: traceCode.batchId,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+      });
+      const updated = await tx.traceCode.update({
+        where: { code: traceCode.code },
+        data: { scanCount: { increment: 1 } },
+        select: { scanCount: true },
+      });
+      return updated.scanCount;
+    });
+  }
+
   async getByCode(
     code: string,
     meta?: { ip: string; userAgent: string | null },
@@ -92,27 +123,7 @@ export class PublicTraceService {
       await this.cache.set(code, traceCode.tenantId, traceCode.batchId, response);
     }
 
-    const updated = await this.prisma.traceCode.update({
-      where: { code },
-      data: { scanCount: { increment: 1 } },
-    });
-
-    if (meta) {
-      try {
-        await this.prisma.traceScan.create({
-          data: {
-            tenantId: traceCode.tenantId,
-            code: traceCode.code,
-            batchId: traceCode.batchId,
-            ip: meta.ip,
-            userAgent: meta.userAgent,
-          },
-        });
-      } catch {
-        // Scan-detail analytics are best-effort and must not roll back the public response.
-      }
-    }
-
-    return { ...response, scanCount: updated.scanCount };
+    const scanCount = await this.recordPublicScan(traceCode, meta);
+    return { ...response, scanCount };
   }
 }
