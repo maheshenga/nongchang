@@ -1,4 +1,4 @@
-import type { PublicTraceResult } from '@nongchang/shared';
+import type { PublicCoordinateMode, PublicTraceResult } from '@nongchang/shared';
 
 export const PUBLIC_PAYLOAD_KEYS = ['desc', 'image', 'tag', 'weather', 'data', 'temp'] as const;
 
@@ -13,6 +13,23 @@ export function pickPublicPayload(payload: unknown): Record<string, unknown> | n
 }
 
 export type PublicTraceOpenResult = Extract<PublicTraceResult, { frozen: false }>;
+
+export function projectPublicCoordinates(
+  mode: PublicCoordinateMode,
+  lng: number | null,
+  lat: number | null,
+): { fieldLng: number | null; fieldLat: number | null } {
+  if (mode === 'hidden' || lng == null || lat == null) {
+    return { fieldLng: null, fieldLat: null };
+  }
+  if (mode === 'approximate') {
+    return {
+      fieldLng: Math.round(lng * 100) / 100,
+      fieldLat: Math.round(lat * 100) / 100,
+    };
+  }
+  return { fieldLng: lng, fieldLat: lat };
+}
 
 export interface PublicTraceResponseInput {
   code: string;
