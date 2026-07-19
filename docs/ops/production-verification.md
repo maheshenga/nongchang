@@ -28,10 +28,10 @@ values above with the real production API URL and AppID for a release build.
 
 ## Full Production Gate
 
-Start the local PostGIS database:
+Start the local PostGIS database and Redis:
 
 ```powershell
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d db redis
 ```
 
 Prepare the database:
@@ -106,7 +106,7 @@ When multiple worktrees need isolated local services, override the fixed default
 $env:POSTGRES_CONTAINER_NAME='nongchang-postgis-r4'
 $env:POSTGRES_HOST_PORT='5545'
 $env:REDIS_CONTAINER_NAME='nongchang-redis-r4'
-$env:REDIS_HOST_PORT='56380'
+$env:REDIS_HOST_PORT='57380'
 docker compose -p nongchang-r4 -f docker-compose.dev.yml up -d db redis
 ```
 

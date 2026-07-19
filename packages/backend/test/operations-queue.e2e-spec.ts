@@ -3,7 +3,7 @@ import { Queue, QueueEvents, Worker, type ConnectionOptions } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OperationsProcessor } from '../src/modules/operations/operations.processor';
 
-const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://127.0.0.1:56379');
+const redisUrl = new URL(process.env.REDIS_URL ?? 'redis://127.0.0.1:57379');
 const connection: ConnectionOptions = {
   host: redisUrl.hostname,
   port: Number(redisUrl.port || 6379),
