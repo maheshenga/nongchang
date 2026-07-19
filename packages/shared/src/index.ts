@@ -17,6 +17,17 @@ export type {
   TenantListItem,
   CreateTenantResponse,
 } from './dto/tenant.dto';
+export {
+  DEFAULT_TENANT_SETTINGS,
+  publicCoordinateModeSchema,
+  tenantSettingsViewSchema,
+  updateTenantSettingsSchema,
+} from './dto/tenant-settings.dto';
+export type {
+  PublicCoordinateMode,
+  TenantSettingsView,
+  UpdateTenantSettingsInput,
+} from './dto/tenant-settings.dto';
 
 export {
   createUserSchema,

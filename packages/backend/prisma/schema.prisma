@@ -39,8 +39,25 @@ model Tenant {
   aiOperations       AiOperation[]
   uploadAssets       UploadAsset[]
   uploadQuotaUsage   UploadQuotaUsage?
+  settings           TenantSettings?
 
   @@map("tenants")
+}
+
+model TenantSettings {
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique @map("tenant_id")
+  publicCoordinateMode String   @default("hidden") @map("public_coordinate_mode")
+  brandName            String   @default("农场溯源管理") @map("brand_name")
+  industryName         String   @default("农业") @map("industry_name")
+  defaultCropName      String   @default("作物") @map("default_crop_name")
+  workbenchTitle       String   @default("农业工作台") @map("workbench_title")
+  defaultBaseLabel     String   @default("当前基地") @map("default_base_label")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
 }
 
 model Agent {
