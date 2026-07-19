@@ -34,3 +34,9 @@ Object.defineProperty(window, 'localStorage', {
   configurable: true,
   value: storage,
 });
+
+afterEach(async () => {
+  await resetAppQueryCache();
+});
+import { afterEach } from 'vitest';
+import { resetAppQueryCache } from './query-client';

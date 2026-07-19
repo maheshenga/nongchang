@@ -1,33 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LoginDto } from '@nongchang/shared';
 import { webLogin, webLogout } from './auth';
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-const loginDto: LoginDto = { tenantCode: 'tenant-a', username: 'farmer', password: 'password123' };
 
 describe('web auth API', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('uses the web login endpoint with same-origin credentials and returns only access', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ accessToken: 'access.token' }));
+  it('logs in through the HttpOnly-cookie web endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ accessToken: 'access.token' }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
+    const dto = { tenantCode: 'demo', username: 'admin', password: 'secret1' };
 
-    await expect(webLogin(loginDto)).resolves.toEqual({ accessToken: 'access.token' });
+    await expect(webLogin(dto)).resolves.toEqual({ accessToken: 'access.token' });
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/web/login', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginDto),
+      body: JSON.stringify(dto),
     });
   });
 
-  it('uses the web logout endpoint with same-origin credentials', async () => {
+  it('logs out through the cookie-clearing endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
 

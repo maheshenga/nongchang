@@ -6,7 +6,10 @@ import { Role, type AuthUser } from '@nongchang/shared';
 const pageExec = vi.fn();
 const checkNotifySign = vi.fn();
 vi.mock('alipay-sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({ pageExec, checkNotifySign })),
+  default: class AlipaySdkMock {
+    pageExec = pageExec;
+    checkNotifySign = checkNotifySign;
+  },
 }));
 
 import { AlipayService } from './alipay.service';

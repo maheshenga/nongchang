@@ -31,7 +31,8 @@ export type AiProviderView = z.infer<typeof aiProviderViewSchema>;
 
 export const aiChatSchema = z.object({ message: z.string().min(1).max(2000) });
 export type AiChatInput = z.infer<typeof aiChatSchema>;
-export type AiChatResponse = { answer: string };
+export const aiChatResponseSchema = z.object({ answer: z.string() });
+export type AiChatResponse = z.infer<typeof aiChatResponseSchema>;
 
 export const aiAdviceSchema = z.object({ batchId: z.string().min(1) });
 export type AiAdviceInput = z.infer<typeof aiAdviceSchema>;
@@ -44,10 +45,12 @@ export const aiDiagnoseSchema = z.object({
   note: z.string().max(500).optional(),
 }).refine(d => !!d.imageUrl || !!d.imageBase64, { message: '需提供 imageUrl 或 imageBase64' });
 export type AiDiagnoseInput = z.infer<typeof aiDiagnoseSchema>;
-export type AiDiagnoseResponse = { result: string };
+export const aiDiagnoseResponseSchema = z.object({ result: z.string() });
+export type AiDiagnoseResponse = z.infer<typeof aiDiagnoseResponseSchema>;
 
 // 语音转写:小程序上传录音 → 后端走讯飞 IAT → 返回识别文字
-export type AiTranscribeResponse = { text: string };
+export const aiTranscribeResponseSchema = z.object({ text: z.string() });
+export type AiTranscribeResponse = z.infer<typeof aiTranscribeResponseSchema>;
 
 export const ossConfigSchema = z.object({
   region: z.string().min(1),
@@ -69,4 +72,9 @@ export const ossConfigViewSchema = z.object({
 });
 export type OssConfigView = z.infer<typeof ossConfigViewSchema>;
 
-export type AiTestResponse = { ok: boolean; latencyMs?: number; error?: string };
+export const aiTestResponseSchema = z.object({
+  ok: z.boolean(),
+  latencyMs: z.number().optional(),
+  error: z.string().optional(),
+});
+export type AiTestResponse = z.infer<typeof aiTestResponseSchema>;

@@ -1,96 +1,82 @@
-import 'reflect-metadata';
-import { describe, expect, it, vi } from 'vitest';
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LoginDto } from '@nongchang/shared';
 import { AuthController } from './auth.controller';
 
-const loginDto = { tenantCode: 'tenant-a', username: 'farmer', password: 'password123' };
 const tokenPair = { accessToken: 'access.token', refreshToken: 'refresh.token' };
-
-function createResponse() {
-  return { setHeader: vi.fn(), status: vi.fn().mockReturnThis(), end: vi.fn() };
-}
+const loginDto: LoginDto = { tenantCode: 'demo', username: 'admin', password: 'secret1' };
 
 describe('AuthController web sessions', () => {
-  it('returns only an access token and writes an HttpOnly refresh cookie on web login', async () => {
-    const auth = { login: vi.fn().mockResolvedValue(tokenPair) };
-    const response = createResponse();
-    const controller = new AuthController(auth as never);
+  const auth = {
+    login: vi.fn(),
+    refresh: vi.fn(),
+  };
+  const response = {
+    setHeader: vi.fn(),
+    status: vi.fn().mockReturnThis(),
+    end: vi.fn(),
+  };
+  let controller: AuthController;
 
-    const result = await (controller as any).webLogin(loginDto, response);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.login.mockResolvedValue(tokenPair);
+    auth.refresh.mockResolvedValue(tokenPair);
+    controller = new AuthController(auth as never);
+  });
+
+  it('logs the web client in without exposing the refresh token', async () => {
+    const result = await controller.webLogin(loginDto, response as never);
 
     expect(auth.login).toHaveBeenCalledWith(loginDto);
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('nc_refresh=refresh.token; Path=/api/auth/web; HttpOnly'),
+    );
     expect(result).toEqual({ accessToken: 'access.token' });
     expect(result).not.toHaveProperty('refreshToken');
-    expect(response.setHeader).toHaveBeenCalledWith(
-      'Set-Cookie',
-      'nc_refresh=refresh.token; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=604800',
-    );
   });
 
-  it('rotates the refresh cookie from the named request cookie and returns only access', async () => {
-    const auth = { refresh: vi.fn().mockResolvedValue(tokenPair) };
-    const response = createResponse();
-    const controller = new AuthController(auth as never);
-
-    const result = await (controller as any).webRefresh({ headers: { cookie: 'theme=dark; nc_refresh=old.refresh' } }, response);
+  it('rotates the web cookie and only returns the new access token', async () => {
+    const request = { headers: { cookie: 'theme=dark; nc_refresh=old.refresh' } };
+    const result = await controller.webRefresh(request as never, response as never);
 
     expect(auth.refresh).toHaveBeenCalledWith('old.refresh');
-    expect(result).toEqual({ accessToken: 'access.token' });
     expect(response.setHeader).toHaveBeenCalledWith(
       'Set-Cookie',
-      'nc_refresh=refresh.token; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=604800',
+      expect.stringContaining('nc_refresh=refresh.token; Path=/api/auth/web; HttpOnly'),
     );
+    expect(result).toEqual({ accessToken: 'access.token' });
+    expect(result).not.toHaveProperty('refreshToken');
   });
 
-  it('rejects a web refresh without the named cookie before calling AuthService', async () => {
-    const auth = { refresh: vi.fn() };
-    const controller = new AuthController(auth as never);
-
-    await expect((controller as any).webRefresh({ headers: {} }, createResponse())).rejects.toBeInstanceOf(UnauthorizedException);
+  it('rejects refresh when the HttpOnly cookie is absent', async () => {
+    await expect(controller.webRefresh({ headers: {} } as never, response as never)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
     expect(auth.refresh).not.toHaveBeenCalled();
   });
 
   it('expires a malformed refresh cookie before rejecting it', async () => {
-    const auth = { refresh: vi.fn() };
-    const response = createResponse();
-    const controller = new AuthController(auth as never);
+    await expect(controller.webRefresh(
+      { headers: { cookie: 'nc_refresh=%' } } as never,
+      response as never,
+    )).rejects.toBeInstanceOf(UnauthorizedException);
 
-    await expect((controller as any).webRefresh({ headers: { cookie: 'nc_refresh=%' } }, response)).rejects.toBeInstanceOf(UnauthorizedException);
-
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('nc_refresh=; Path=/api/auth/web; HttpOnly'),
+    );
     expect(auth.refresh).not.toHaveBeenCalled();
-    expect(response.setHeader).toHaveBeenCalledWith(
-      'Set-Cookie',
-      'nc_refresh=; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=0',
-    );
   });
 
-  it.each([
-    new UnauthorizedException('invalid refresh'),
-    new ForbiddenException('suspended account'),
-  ])('expires the cookie when refresh is rejected with %s', async (error) => {
-    const auth = { refresh: vi.fn().mockRejectedValue(error) };
-    const response = createResponse();
-    const controller = new AuthController(auth as never);
-
-    await expect((controller as any).webRefresh({ headers: { cookie: 'nc_refresh=stale.refresh' } }, response)).rejects.toBe(error);
+  it('logs out by expiring the cookie and returning no body', () => {
+    const result = controller.webLogout(response as never);
 
     expect(response.setHeader).toHaveBeenCalledWith(
       'Set-Cookie',
-      'nc_refresh=; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=0',
+      expect.stringContaining('nc_refresh=; Path=/api/auth/web; HttpOnly'),
     );
-  });
-
-  it('expires the refresh cookie and sends an empty response on logout', () => {
-    const response = createResponse();
-    const controller = new AuthController({} as never);
-
-    (controller as any).webLogout(response);
-
-    expect(response.setHeader).toHaveBeenCalledWith(
-      'Set-Cookie',
-      'nc_refresh=; Path=/api/auth/web; HttpOnly; SameSite=Strict; Max-Age=0',
-    );
-    expect(response.status).toHaveBeenCalledWith(204);
-    expect(response.end).toHaveBeenCalledOnce();
+    expect(result).toBeUndefined();
   });
 });

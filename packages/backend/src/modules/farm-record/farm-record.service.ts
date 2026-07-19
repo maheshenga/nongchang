@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuthUser, CreateFarmRecordDto, FarmRecordQueryDto, UpdateFarmRecordStatusDto } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
 import {
   assertSupplyQuotaWithinLimit,
   buildFarmRecordCreateData,
@@ -19,7 +20,11 @@ import {
 
 @Injectable()
 export class FarmRecordService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private cache?: PublicTraceCacheService,
+  ) {}
 
   private async createAndPublish(
     tx: Prisma.TransactionClient,
@@ -51,7 +56,7 @@ export class FarmRecordService {
     const data = buildFarmRecordCreateData({ tenantId: user.tenantId, operatorId: user.userId, dto });
     if (shouldApplySupplyQuota(dto)) {
       // 校验 supply 在调用方作用域内,防止跨商家核销他人农资配额(只读鉴权,事务外)。
-      const scopeWhere = await this.scope.ownedScopeWhere(this.prisma, user);
+      const scopeWhere = this.scope.ownedEntityWhere(user);
       const sup = await this.prisma.supply.findFirst({
         where: { id: dto.supplyId, ...(scopeWhere as object) } as Prisma.SupplyWhereInput,
         select: { id: true, ownerId: true },
@@ -79,25 +84,25 @@ export class FarmRecordService {
         });
         return this.createAndPublish(tx, data, context);
       });
+      if (created.status === 'completed') await this.cache?.invalidateBatch(dto.batchId);
       return serializeFarmRecord(created);
     }
     const context = { ownerDisplayName: batch.owner.displayName ?? '农场', fieldName: batch.field.name };
     const created = await this.prisma.$transaction((tx) => this.createAndPublish(tx, data, context));
+    if (created.status === 'completed') await this.cache?.invalidateBatch(dto.batchId);
     return serializeFarmRecord(created);
   }
 
   async list(user: AuthUser, query: FarmRecordQueryDto) {
-    let scopedBatchIds: string[] | undefined;
+    let batchScope: Prisma.BatchWhereInput | undefined;
     if (query.batchId) {
       // 指定批次:校验归属在调用方作用域内,fail-closed。
       await this.scope.assertInScope(this.prisma, user, 'batch', query.batchId);
     } else {
       // 未指定:限定在调用方作用域内的全部批次。
-      const batchWhere = await this.scope.ownedScopeWhere(this.prisma, user);
-      const batches = await this.prisma.batch.findMany({ where: batchWhere, select: { id: true } });
-      scopedBatchIds = batches.map(batch => batch.id);
+      batchScope = this.scope.ownedEntityWhere(user) as Prisma.BatchWhereInput;
     }
-    const where = buildFarmRecordListWhere(user, query, scopedBatchIds);
+    const where = buildFarmRecordListWhere(user, query, batchScope);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.farmRecord.findMany(buildFarmRecordListFindManyArgs(where, query)),
       this.prisma.farmRecord.count({ where }),
@@ -120,7 +125,7 @@ export class FarmRecordService {
     if (!scoped) throw new ForbiddenException('农事记录不在可操作范围内');
     await this.scope.assertInScope(this.prisma, user, 'batch', scoped.batchId);
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM farm_records WHERE id = ${id} FOR UPDATE`;
       const current = await tx.farmRecord.findFirst({
         where: { id, tenantId: user.tenantId },
@@ -134,9 +139,9 @@ export class FarmRecordService {
 
       if (current.status === 'completed') {
         if (dto.status === 'pending') throw new BadRequestException('已完成农事记录不可退回待完成');
-        return record;
+        return { record, published: false };
       }
-      if (dto.status === 'pending') return record;
+      if (dto.status === 'pending') return { record, published: false };
 
       const completed = await tx.farmRecord.update({ where: { id }, data: { status: 'completed' } });
       await tx.traceEvent.create({
@@ -146,8 +151,9 @@ export class FarmRecordService {
           fieldName: field.name,
         }),
       });
-      return completed;
+      return { record: completed, published: true };
     });
-    return serializeFarmRecord(updated);
+    if (result.published) await this.cache?.invalidateBatch(scoped.batchId);
+    return serializeFarmRecord(result.record);
   }
 }

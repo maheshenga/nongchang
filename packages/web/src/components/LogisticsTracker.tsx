@@ -19,8 +19,8 @@ const unitOptions = ['箱', '包(50kg)', '桶(20L)', '件'];
 export default function LogisticsTracker() {
   const { user } = useAuth();
   const isMerchant = user?.role === Role.MERCHANT;
-  const { data: supplies, loading: suppliesLoading, error: suppliesError, reload: reloadSupplies } = useApi(listSupplies);
-  const { data: batches, loading: batchesLoading, error: batchesError } = useApi(listBatches);
+  const { data: supplies, loading: suppliesLoading, error: suppliesError, reload: reloadSupplies } = useApi(listSupplies, { cacheKey: 'supplies' });
+  const { data: batches, loading: batchesLoading, error: batchesError } = useApi(listBatches, { cacheKey: 'batches' });
   const [showInboundModal, setShowInboundModal] = useState(false);
   const [showOutboundModal, setShowOutboundModal] = useState(false);
   const [issuePayload, setIssuePayload] = useState({ supplyId: '', amount: 0, batchId: '' });

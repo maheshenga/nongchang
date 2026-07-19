@@ -10,3 +10,6 @@ coverage/
 .worktrees/
 .codegraph/
 .codebase-memory/
+test-results/
+playwright-report/
+blob-report/

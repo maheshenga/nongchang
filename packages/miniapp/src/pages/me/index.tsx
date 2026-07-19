@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Map, Input, Button } from '@tarojs/components';
+import { View, Text, Input, Button } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken, clearToken } from '../../store/auth';
 import { request } from '../../api/request';
@@ -7,7 +7,7 @@ import { getMe, updateMe, changePassword } from '../../api/auth';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
-import { wgs84ToGcj02 } from '../../utils/geo';
+import MeFieldSection from './MeFieldSection';
 import './index.scss';
 
 export default function Me() {
@@ -194,44 +194,7 @@ export default function Me() {
 
       <View className="me__menu-section">
         <Text className="me__section-title">农场服务</Text>
-        <View className="me__item" onClick={toggleFields}>
-          <Text className="me__item-text">承包地块管理</Text>
-          <Text className="me__item-arrow">{fields ? '收起' : '展开'}</Text>
-        </View>
-        {fields && (
-          <View className="me__fields">
-            {fields.length === 0 && <Text className="me__field-empty">暂无地块</Text>}
-            {(() => {
-              const located = fields.filter((f) => f.lng != null && f.lat != null);
-              if (located.length === 0) return null;
-              // DB 存 WGS84,原生 <map> 用 GCJ-02,渲染前转换
-              const pts = located.map((f) => ({ f, c: wgs84ToGcj02(f.lng, f.lat) }));
-              const markers = pts.map(({ f, c }, i) => ({
-                id: i,
-                latitude: c.lat,
-                longitude: c.lng,
-                title: `${f.name} · ${f.area} 亩`,
-                iconPath: '',
-                width: 24,
-                height: 24,
-              }));
-              return (
-                <Map
-                  className="me__field-map"
-                  longitude={pts[0].c.lng}
-                  latitude={pts[0].c.lat}
-                  scale={12}
-                  markers={markers}
-                  showLocation
-                  onError={() => Taro.showToast({ title: '地图加载失败', icon: 'none' })}
-                />
-              );
-            })()}
-            {fields.map((f) => (
-              <Text className="me__field" key={f.id}>{f.name} · {f.area} 亩</Text>
-            ))}
-          </View>
-        )}
+        <MeFieldSection fields={fields} onToggle={() => void toggleFields()} />
         <View className="me__item" onClick={() => Taro.navigateTo({ url: '/pages/usage/index' })}>
           <Text className="me__item-text">算力与额度用量</Text>
           <Text className="me__item-arrow">›</Text>

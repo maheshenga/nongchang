@@ -113,7 +113,7 @@ describe('ProfileSettings Fluent account modal', () => {
     expect(changePasswordMock).not.toHaveBeenCalled();
   });
 
-  it('changes password through the real API wrapper and clears password inputs', async () => {
+  it('changes password, revokes the web session, and requires a fresh login', async () => {
     render(<ProfileSettings onClose={vi.fn()} />);
 
     await screen.findByText('merchantA');
@@ -126,7 +126,7 @@ describe('ProfileSettings Fluent account modal', () => {
     await waitFor(() => {
       expect(changePasswordMock).toHaveBeenCalledWith({ oldPassword: 'old-pass', newPassword: 'new-pass' });
     });
-    expect(logoutMock).toHaveBeenCalledOnce();
+    await waitFor(() => expect(logoutMock).toHaveBeenCalledOnce());
     expect(screen.getByText('密码已修改')).toBeTruthy();
     expect((screen.getByLabelText('原密码') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('新密码') as HTMLInputElement).value).toBe('');

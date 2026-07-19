@@ -129,9 +129,14 @@ export default function FarmRecords() {
   const [toastMessage, setToastMessage] = useState('');
 
   const fetchRecords = useCallback(() => listFarmRecords(query), [query]);
-  const { data: rawRecords, loading, error, reload } = useApi<FarmRecord[]>(fetchRecords);
-  const { data: batches } = useApi(listBatches);
-  const { data: deviations } = useApi(listDeviations);
+  const recordQueryKey = new URLSearchParams(
+    Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  ).toString();
+  const { data: rawRecords, loading, error, reload } = useApi<FarmRecord[]>(fetchRecords, {
+    cacheKey: `farm-records:${recordQueryKey}`,
+  });
+  const { data: batches } = useApi(listBatches, { cacheKey: 'batches' });
+  const { data: deviations } = useApi(listDeviations, { cacheKey: 'batch-deviations' });
 
   const tasks: RecordTask[] = (rawRecords ?? []).map(toRecordTask);
   const alertDeviations: BatchDeviation[] = (deviations ?? []).filter((d) => d.alert);

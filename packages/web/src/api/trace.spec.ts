@@ -3,9 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const requestMock = vi.fn();
 vi.mock('./request', () => ({ request: (...args: unknown[]) => requestMock(...args) }));
 
-import { createTraceGenerationRequestKey, generateCodes } from './trace';
+import { createTraceGenerationRequestKey, generateCodes, listEvents } from './trace';
 
-beforeEach(() => requestMock.mockReset().mockResolvedValue(undefined));
+beforeEach(() => requestMock.mockReset().mockResolvedValue([]));
 
 describe('trace api client', () => {
   it('generateCodes sends Idempotency-Key when requestKey is provided', async () => {
@@ -18,7 +18,7 @@ describe('trace api client', () => {
   });
 
   it('generateCodes rejects blank request keys before sending', async () => {
-    expect(() => generateCodes('batch-1', 1, '   ')).toThrow('Missing trace generation request key');
+    await expect(generateCodes('batch-1', 1, '   ')).rejects.toThrow('Missing trace generation request key');
 
     expect(requestMock).not.toHaveBeenCalled();
   });
@@ -27,5 +27,14 @@ describe('trace api client', () => {
     const key = createTraceGenerationRequestKey('merchant-side-panel', 'batch-1', 5);
 
     expect(key).toMatch(/^merchant-side-panel:batch-1:5:/);
+  });
+
+  it('rejects malformed trace event responses', async () => {
+    requestMock.mockResolvedValue([{
+      tenantId: 'tenant-1', batchId: 'batch-1', type: 'farm', title: 'Fertilize',
+      actor: 'Operator', location: 'Field A', occurredAt: '2026-07-13T00:00:00.000Z',
+      payload: null, createdAt: '2026-07-13T00:00:00.000Z',
+    }]);
+    await expect(listEvents('batch-1')).rejects.toThrow();
   });
 });

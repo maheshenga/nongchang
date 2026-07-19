@@ -21,16 +21,8 @@ export class ScopeService {
     throw new ForbiddenException('未知角色,拒绝范围查询');
   }
 
-  async merchantIdsForAgent(prisma: any, tenantId: string, agentId: string): Promise<string[]> {
-    const rows = await prisma.user.findMany({
-      where: { tenantId, role: 'merchant', agentId }, select: { id: true },
-    });
-    return rows.map((r: { id: string }) => r.id);
-  }
-
-  /** 业务表(带 ownerId)的范围 where。agent_admin 按旗下 merchant ids 过滤。
-   *  安全关键:与 ownedWhere 一致,角色要求的归属 id 缺失时 fail-closed 抛错,绝不退化为整租户可见。 */
-  async ownedScopeWhere(prisma: any, user: AuthUser): Promise<Record<string, unknown>> {
+  /** 带 owner 关系的业务实体范围 where。agent_admin 通过关系条件过滤，避免先展开 merchant ids。 */
+  ownedEntityWhere(user: AuthUser): Record<string, unknown> {
     const where: Record<string, unknown> = { tenantId: user.tenantId };
     if (user.role === Role.SYSTEM_ADMIN) return where;
     if (user.role === Role.MERCHANT) {
@@ -40,17 +32,22 @@ export class ScopeService {
     }
     if (user.role === Role.AGENT_ADMIN) {
       if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId,拒绝越权范围查询');
-      const ids = await this.merchantIdsForAgent(prisma, user.tenantId, user.agentId);
-      where.ownerId = { in: ids };
+      where.owner = {
+        is: {
+          tenantId: user.tenantId,
+          agentId: user.agentId,
+          role: Role.MERCHANT,
+        },
+      };
       return where;
     }
     throw new ForbiddenException('未知角色,拒绝范围查询');
   }
 
-  /** 校验某 batch/field 在调用方作用域内。缺归属即 fail-closed(ownedScopeWhere 抛错)。 */
+  /** 校验某 batch/field 在调用方作用域内。缺归属即 fail-closed。 */
   async assertInScope(prisma: any, user: AuthUser, entity: 'batch' | 'field', id: string): Promise<void> {
     if (!id) throw new ForbiddenException(`缺少 ${entity} id,拒绝操作`);
-    const scopeWhere = await this.ownedScopeWhere(prisma, user);
+    const scopeWhere = this.ownedEntityWhere(user);
     const found = await prisma[entity].findFirst({
       where: { id, ...scopeWhere }, select: { id: true },
     });
@@ -60,16 +57,23 @@ export class ScopeService {
   /** 校验目标 ownerId(role=merchant 的 User)在调用方作用域内。 */
   async assertOwnerInScope(prisma: any, user: AuthUser, ownerId: string): Promise<void> {
     if (!ownerId) throw new ForbiddenException('缺少目标商家 ownerId,拒绝操作');
-    const scopeWhere = await this.ownedScopeWhere(prisma, user);
-    // ownedScopeWhere 的 ownerId 维度即 User.id;用 AND 数组避免 id 键冲突。
-    const { ownerId: ownerConstraint, ...rest } = scopeWhere;
+    const where: Record<string, unknown> = {
+      id: ownerId,
+      role: Role.MERCHANT,
+      tenantId: user.tenantId,
+    };
+    if (user.role === Role.MERCHANT) {
+      if (!user.ownerId || user.ownerId !== ownerId) {
+        throw new ForbiddenException('目标商家不在可管理范围内');
+      }
+    } else if (user.role === Role.AGENT_ADMIN) {
+      if (!user.agentId) throw new ForbiddenException('agent_admin 缺少 agentId,拒绝越权范围查询');
+      where.agentId = user.agentId;
+    } else if (user.role !== Role.SYSTEM_ADMIN) {
+      throw new ForbiddenException('未知角色,拒绝范围查询');
+    }
     const found = await prisma.user.findFirst({
-      where: {
-        AND: [
-          { id: ownerId, role: Role.MERCHANT, ...rest },
-          ownerConstraint !== undefined ? { id: ownerConstraint } : {},
-        ],
-      },
+      where,
       select: { id: true },
     });
     if (!found) throw new ForbiddenException('目标商家不在可管理范围内');

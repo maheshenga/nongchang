@@ -30,7 +30,7 @@ function knownPermissions(permissions: string[]): PermissionValue[] {
 }
 
 export default function UserGroups() {
-  const { data, loading, error, reload } = useApi(listUserGroups);
+  const { data, loading, error, reload } = useApi(listUserGroups, { cacheKey: 'user-groups' });
   const [edit, setEdit] = useState<EditState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);

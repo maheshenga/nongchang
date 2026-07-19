@@ -1,9 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { AuthUser, LoginDto, MeProfileView } from '@nongchang/shared';
 import { clearAccessToken, setAccessToken } from './token-store';
 import { decodeToken } from './decode-token';
 import { getMe, webLogin, webLogout } from '../api/auth';
 import { refreshWebSession, setOnAuthExpired } from '../api/request';
+import { resetAppQueryCache } from '../query-client';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -25,68 +34,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const userRef = useRef<AuthUser | null>(null);
 
   const setCurrentUser = useCallback((next: AuthUser | null) => {
+    const previous = userRef.current;
+    const previousIdentity = previous
+      ? `${previous.userId}:${previous.tenantId ?? ''}:${previous.role}`
+      : null;
+    const nextIdentity = next
+      ? `${next.userId}:${next.tenantId ?? ''}:${next.role}`
+      : null;
+    if (previousIdentity !== nextIdentity) void resetAppQueryCache();
     userRef.current = next;
     setUser(next);
   }, []);
 
-  const clearSession = useCallback(() => {
+  const clearClientSession = useCallback(() => {
     clearAccessToken();
     setCurrentUser(null);
     setProfile(null);
   }, [setCurrentUser]);
 
-  const applyAccessToken = useCallback((accessToken: string) => {
-    const decoded = decodeToken(accessToken);
-    if (!decoded) {
-      clearSession();
-      throw new Error('登录令牌无效');
-    }
-    setProfile(null);
-    setCurrentUser(decoded);
-  }, [clearSession, setCurrentUser]);
-
   const updateProfile = useCallback((me: MeProfileView) => {
-    if (userRef.current?.userId !== me.id) return;
+    const current = userRef.current;
+    if (current?.userId !== me.id) return;
     setProfile(me);
   }, []);
 
-  const logout = useCallback(async () => {
-    clearSession();
-    try {
-      await webLogout();
-    } catch {
-      // The local session is already cleared when the browser is offline.
-    }
-  }, [clearSession]);
+  useEffect(() => {
+    setOnAuthExpired(clearClientSession);
+    return () => setOnAuthExpired(() => undefined);
+  }, [clearClientSession]);
 
   useEffect(() => {
-    setOnAuthExpired(clearSession);
-    return () => setOnAuthExpired(() => {});
-  }, [clearSession]);
+    let cancelled = false;
 
-  useEffect(() => {
-    let active = true;
     void refreshWebSession()
       .then((accessToken) => {
-        if (!active) return;
-        if (!accessToken) {
-          clearSession();
+        if (cancelled || !accessToken) return;
+        const decoded = decodeToken(accessToken);
+        if (!decoded) {
+          clearAccessToken();
           return;
         }
-        try {
-          applyAccessToken(accessToken);
-        } catch {
-          clearSession();
-        }
+        setAccessToken(accessToken);
+        setCurrentUser(decoded);
       })
       .catch(() => {
-        if (active) clearSession();
+        if (!cancelled) clearClientSession();
       })
       .finally(() => {
-        if (active) setIsReady(true);
+        if (!cancelled) setIsReady(true);
       });
-    return () => { active = false; };
-  }, [applyAccessToken, clearSession]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clearClientSession, setCurrentUser]);
 
   const reloadProfile = useCallback(async () => {
     const requestedUserId = userRef.current?.userId;
@@ -100,23 +101,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
+
     let cancelled = false;
     const requestedUserId = user.userId;
-    getMe()
+    void getMe()
       .then((me) => {
         if (!cancelled && userRef.current?.userId === requestedUserId) updateProfile(me);
       })
       .catch(() => {
         if (!cancelled && userRef.current?.userId === requestedUserId) setProfile(null);
       });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, updateProfile]);
 
   const login = useCallback(async (dto: LoginDto) => {
-    const { accessToken } = await webLogin(dto);
-    setAccessToken(accessToken);
-    applyAccessToken(accessToken);
-  }, [applyAccessToken]);
+    const response = await webLogin(dto);
+    const decoded = decodeToken(response.accessToken);
+    if (!decoded) throw new Error('登录令牌无效');
+
+    setAccessToken(response.accessToken);
+    setCurrentUser(decoded);
+  }, [setCurrentUser]);
+
+  const logout = useCallback(async () => {
+    clearClientSession();
+    try {
+      await webLogout();
+    } catch {
+      // Local memory is already cleared; a network failure must not restore the session.
+    }
+  }, [clearClientSession]);
 
   return (
     <AuthContext.Provider value={{

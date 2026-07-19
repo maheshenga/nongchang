@@ -1,0 +1,66 @@
+groups:
+  - name: nongchang-platform
+    rules:
+      - alert: NongchangReadinessUnavailable
+        expr: up{job="nongchang-backend"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: Nongchang backend metrics/readiness target is unavailable
+          runbook_url: https://runbooks.example.invalid/nongchang/readiness
+
+      - alert: NongchangHighHttp5xxRate
+        expr: sum(rate(nongchang_http_request_duration_seconds_count{status_class="5xx"}[5m])) / clamp_min(sum(rate(nongchang_http_request_duration_seconds_count[5m])), 0.001) > 0.05
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: HTTP 5xx rate is above 5 percent
+          runbook_url: https://runbooks.example.invalid/nongchang/http-errors
+
+      - alert: NongchangHighHttpP95Latency
+        expr: histogram_quantile(0.95, sum by (le) (rate(nongchang_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: HTTP p95 latency is above one second
+          runbook_url: https://runbooks.example.invalid/nongchang/latency
+
+      - alert: NongchangDatabasePoolSaturated
+        expr: nongchang_database_pool_saturation_ratio > 0.85
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Database connection usage exceeds 85 percent of configured capacity
+          runbook_url: https://runbooks.example.invalid/nongchang/database-pool
+
+      - alert: NongchangRedisUnavailable
+        expr: nongchang_runtime_state_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: Redis runtime state is unavailable
+          runbook_url: https://runbooks.example.invalid/nongchang/redis
+
+      - alert: NongchangOperationsQueueBacklog
+        expr: nongchang_queue_oldest_job_age_seconds{queue="platform-operations"} > 900
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: Oldest operations job is more than 15 minutes old
+          runbook_url: https://runbooks.example.invalid/nongchang/operations-queue
+
+      - alert: NongchangReconciliationErrors
+        expr: increase(nongchang_reconciliation_errors_total[15m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: A reconciliation operation reported an error
+          runbook_url: https://runbooks.example.invalid/nongchang/reconciliation
+
+      - alert: NongchangBackupTooOld
+        expr: nongchang_backup_age_seconds > 90000
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: Latest verified backup is older than 25 hours
+          runbook_url: https://runbooks.example.invalid/nongchang/backup

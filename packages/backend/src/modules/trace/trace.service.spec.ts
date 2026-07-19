@@ -16,6 +16,7 @@ function make(batchInScope = true) {
     confirmReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
     releaseReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
   };
+  const cache = { invalidateBatch: vi.fn() };
   const prisma = {
     batch: { findFirst: vi.fn().mockResolvedValue(batchInScope ? { id: 'b1' } : null) },
     traceCode: {
@@ -35,7 +36,7 @@ function make(batchInScope = true) {
     $queryRaw: vi.fn().mockResolvedValue([{ id: 'b1' }]),
     $transaction: vi.fn(async (fn: any) => fn(prisma)),
   };
-  return { svc: new TraceService(prisma as any, new ScopeService(), billing as any), prisma, created, billing };
+  return { svc: new TraceService(prisma as any, new ScopeService(), billing as any, cache as any), prisma, created, billing, cache };
 }
 
 describe('TraceService #24 batch 归属校验', () => {
@@ -43,6 +44,7 @@ describe('TraceService #24 batch 归属校验', () => {
     const h = make(true);
     await h.svc.addEvent(merchant, evt);
     expect(h.prisma.traceEvent.create).toHaveBeenCalled();
+    expect(h.cache.invalidateBatch).toHaveBeenCalledWith('b1');
   });
   it('addEvent:batch 不在范围则抛 Forbidden(不创建)', async () => {
     const h = make(false);

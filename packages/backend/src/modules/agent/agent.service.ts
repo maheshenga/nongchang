@@ -1,7 +1,9 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Optional } from '@nestjs/common';
 import { AuthUser, CreateAgentDto, UpdateAgentDto, ListQuery, Paginated } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
+import { PublicTraceCacheService } from '../public-trace/public-trace-cache.service';
+import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
 import {
   AGENT_LIST_SELECT,
   MERCHANT_LIST_SELECT,
@@ -17,10 +19,17 @@ import {
 
 @Injectable()
 export class AgentService {
-  constructor(private prisma: PrismaService, private scope: ScopeService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scope: ScopeService,
+    @Optional() private cache?: PublicTraceCacheService,
+    @Optional() private sessions?: SessionValidationCacheService,
+  ) {}
 
-  create(user: AuthUser, dto: CreateAgentDto) {
-    return this.prisma.agent.create({ data: buildAgentCreateData(user, dto) });
+  async create(user: AuthUser, dto: CreateAgentDto) {
+    const created = await this.prisma.agent.create({ data: buildAgentCreateData(user, dto) });
+    await this.cache?.invalidateTenant(user.tenantId);
+    return created;
   }
 
   async list(user: AuthUser, query?: ListQuery): Promise<any[] | Paginated<any>> {
@@ -53,7 +62,10 @@ export class AgentService {
     const target = await this.prisma.agent.findFirst({ where: { tenantId: user.tenantId, id } });
     if (!target) throw new ForbiddenException('代理商不存在或不在可管理范围');
     const data = buildAgentUpdateData(dto);
-    return this.prisma.agent.update({ where: { id }, data, select: { id: true, name: true, region: true, status: true } });
+    const updated = await this.prisma.agent.update({ where: { id }, data, select: { id: true, name: true, region: true, status: true } });
+    await this.cache?.invalidateTenant(user.tenantId);
+    await this.sessions?.invalidateTenant(user.tenantId);
+    return updated;
   }
 
   async setStatus(user: AuthUser, id: string, status: 'active' | 'suspended') {
@@ -61,14 +73,17 @@ export class AgentService {
     const target = await this.prisma.agent.findFirst({ where: { tenantId: user.tenantId, id } });
     if (!target) throw new ForbiddenException('代理商不存在或不在可管理范围');
     const updateAgent = this.prisma.agent.update({ where: { id }, data: buildAgentStatusUpdateData(status), select: { id: true, status: true } });
-    if (status !== 'suspended') return updateAgent;
-    const [updated] = await this.prisma.$transaction([
-      updateAgent,
-      this.prisma.user.updateMany({
-        where: buildAgentSessionRevocationWhere(user, id),
-        data: { sessionVersion: { increment: 1 } },
-      }),
-    ]);
+    const updated = status !== 'suspended'
+      ? await updateAgent
+      : (await this.prisma.$transaction([
+          updateAgent,
+          this.prisma.user.updateMany({
+            where: buildAgentSessionRevocationWhere(user, id),
+            data: { sessionVersion: { increment: 1 } },
+          }),
+        ]))[0];
+    await this.cache?.invalidateTenant(user.tenantId);
+    await this.sessions?.invalidateTenant(user.tenantId);
     return updated;
   }
 

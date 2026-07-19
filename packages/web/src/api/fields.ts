@@ -1,23 +1,12 @@
-import type { CreateFieldDto } from '@nongchang/shared';
+import { fieldViewSchema, type CreateFieldDto, type FieldView } from '@nongchang/shared';
 import { request } from './request';
 
-export interface Field {
-  id: string;
-  tenantId: string;
-  ownerId: string;
-  ownerName: string | null;
-  name: string;
-  area: number;
-  lng: number | null;
-  lat: number | null;
-  iotDeviceId: string | null;
-  createdAt: string;
+export type Field = FieldView;
+
+export async function listFields(): Promise<Field[]> {
+  return fieldViewSchema.array().parse(await request<unknown>('/fields'));
 }
 
-export function listFields(): Promise<Field[]> {
-  return request<Field[]>('/fields');
-}
-
-export function createField(dto: CreateFieldDto): Promise<Field> {
-  return request<Field>('/fields', { method: 'POST', body: JSON.stringify(dto) });
+export async function createField(dto: CreateFieldDto): Promise<Field> {
+  return fieldViewSchema.parse(await request<unknown>('/fields', { method: 'POST', body: JSON.stringify(dto) }));
 }

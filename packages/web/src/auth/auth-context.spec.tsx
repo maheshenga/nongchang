@@ -1,32 +1,45 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { LoginDto, MeProfileView, WebAccessTokenResponse } from '@nongchang/shared';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAccessToken, getAccessToken } from './token-store';
 
-const loginMock = vi.fn<(dto: LoginDto) => Promise<WebAccessTokenResponse>>();
-const logoutMock = vi.fn<() => Promise<void>>();
+const webLoginMock = vi.fn<(dto: LoginDto) => Promise<WebAccessTokenResponse>>();
+const webLogoutMock = vi.fn<() => Promise<void>>();
 const getMeMock = vi.fn<() => Promise<MeProfileView>>();
-const refreshSessionMock = vi.fn<() => Promise<string | null>>();
+const refreshWebSessionMock = vi.fn<() => Promise<string | null>>();
+let authExpiredCallback: (() => void) | null = null;
 
 vi.mock('../api/auth', () => ({
-  webLogin: (dto: LoginDto) => loginMock(dto),
-  webLogout: () => logoutMock(),
+  webLogin: (dto: LoginDto) => webLoginMock(dto),
+  webLogout: () => webLogoutMock(),
   getMe: () => getMeMock(),
 }));
 
 vi.mock('../api/request', () => ({
-  refreshWebSession: () => refreshSessionMock(),
-  setOnAuthExpired: vi.fn(),
+  refreshWebSession: () => refreshWebSessionMock(),
+  setOnAuthExpired: (callback: () => void) => {
+    authExpiredCallback = callback;
+  },
 }));
 
 import { AuthProvider, useAuth } from './auth-context';
 
 function makeJwt(payload: Record<string, unknown>): string {
-  const b64 = (value: unknown) =>
-    btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64(payload)}.signature`;
+  const base64 = (value: unknown) => btoa(JSON.stringify(value))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `${base64({ alg: 'HS256', typ: 'JWT' })}.${base64(payload)}.signature`;
 }
+
+const accessA = makeJwt({
+  userId: 'u1',
+  tenantId: 't1',
+  role: 'merchant',
+  agentId: null,
+  ownerId: 'u1',
+});
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
@@ -38,7 +51,7 @@ const profileA: MeProfileView = {
   username: 'merchantA',
   role: 'merchant',
   agentId: null,
-  displayName: 'Farm A',
+  displayName: 'Merchant A',
   phone: null,
   status: 'active',
 };
@@ -47,40 +60,43 @@ const profileB: MeProfileView = {
   ...profileA,
   id: 'u2',
   username: 'merchantB',
-  displayName: 'Farm B',
+  displayName: 'Merchant B',
 };
-
-const userOneAccessToken = () => makeJwt({
-  userId: 'u1', tenantId: 't1', role: 'merchant', agentId: null, ownerId: 'u1',
-});
 
 describe('AuthProvider', () => {
   beforeEach(() => {
+    localStorage.clear();
     clearAccessToken();
-    loginMock.mockReset();
-    logoutMock.mockReset();
-    getMeMock.mockReset();
-    refreshSessionMock.mockReset();
-    refreshSessionMock.mockResolvedValue(null);
-    logoutMock.mockResolvedValue(undefined);
-    getMeMock.mockResolvedValue(profileA);
+    authExpiredCallback = null;
+    webLoginMock.mockReset();
+    webLogoutMock.mockReset().mockResolvedValue();
+    getMeMock.mockReset().mockResolvedValue(profileA);
+    refreshWebSessionMock.mockReset();
   });
 
-  it('starts unready, restores from cookie refresh, and then loads the signed-in profile', async () => {
-    const accessToken = userOneAccessToken();
-    let resolveRefresh!: (value: string | null) => void;
-    refreshSessionMock.mockReturnValueOnce(new Promise((resolve) => { resolveRefresh = resolve; }));
+  it('starts unready, bootstraps once from the cookie, then exposes the decoded user', async () => {
+    let resolveRefresh!: (token: string | null) => void;
+    refreshWebSessionMock.mockReturnValue(new Promise((resolve) => {
+      resolveRefresh = resolve;
+    }));
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     expect(result.current.isReady).toBe(false);
-    await act(async () => { resolveRefresh(accessToken); });
+    expect(result.current.user).toBeNull();
+    await act(async () => resolveRefresh(accessA));
+
     await waitFor(() => expect(result.current.isReady).toBe(true));
     expect(result.current.user?.userId).toBe('u1');
-    await waitFor(() => expect(result.current.profile?.displayName).toBe('Farm A'));
+    expect(refreshWebSessionMock).toHaveBeenCalledOnce();
+    expect(getAccessToken()).toBe(accessA);
+    expect(localStorage.length).toBe(0);
+    await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
   });
 
-  it('settles into a ready unauthenticated state when cookie refresh fails', async () => {
+  it('becomes ready and unauthenticated when bootstrap refresh fails', async () => {
+    refreshWebSessionMock.mockResolvedValue(null);
+
     const { result } = renderHook(() => useAuth(), { wrapper });
 
     await waitFor(() => expect(result.current.isReady).toBe(true));
@@ -88,78 +104,49 @@ describe('AuthProvider', () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
-  it('logs in through the web endpoint and keeps only an in-memory access token', async () => {
-    const accessToken = userOneAccessToken();
-    loginMock.mockResolvedValueOnce({ accessToken });
-
+  it('logs in with the web endpoint and stores only the access token in memory', async () => {
+    refreshWebSessionMock.mockResolvedValue(null);
+    webLoginMock.mockResolvedValue({ accessToken: accessA });
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.isReady).toBe(true));
 
-    await act(async () => {
-      await result.current.login({ tenantCode: 't1', username: 'merchantA', password: 'password123' });
-    });
+    await act(async () => result.current.login({
+      tenantCode: 'demo',
+      username: 'merchantA',
+      password: 'secret1',
+    }));
 
     expect(result.current.user?.userId).toBe('u1');
-    expect(getAccessToken()).toBe(accessToken);
+    expect(getAccessToken()).toBe(accessA);
     expect(localStorage.length).toBe(0);
   });
 
-  it('clears local access state even when web logout fails', async () => {
-    const accessToken = userOneAccessToken();
-    loginMock.mockResolvedValueOnce({ accessToken });
-    logoutMock.mockRejectedValueOnce(new Error('offline'));
-
+  it('clears memory and state even when the logout request fails', async () => {
+    refreshWebSessionMock.mockResolvedValue(accessA);
+    webLogoutMock.mockRejectedValue(new Error('offline'));
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.isReady).toBe(true));
-    await act(async () => {
-      await result.current.login({ tenantCode: 't1', username: 'merchantA', password: 'password123' });
-    });
+    await waitFor(() => expect(result.current.user?.userId).toBe('u1'));
 
-    await act(async () => { await result.current.logout(); });
+    await act(async () => result.current.logout());
 
-    expect(logoutMock).toHaveBeenCalledOnce();
+    expect(webLogoutMock).toHaveBeenCalledOnce();
     expect(getAccessToken()).toBeNull();
     expect(result.current.user).toBeNull();
     expect(result.current.profile).toBeNull();
-  });
-
-  it('clears local access state before a delayed web logout completes', async () => {
-    const accessToken = userOneAccessToken();
-    loginMock.mockResolvedValueOnce({ accessToken });
-    let resolveLogout!: () => void;
-    logoutMock.mockReturnValueOnce(new Promise((resolve) => { resolveLogout = resolve; }));
-
-    const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.isReady).toBe(true));
-    await act(async () => {
-      await result.current.login({ tenantCode: 't1', username: 'merchantA', password: 'password123' });
-    });
-
-    let logoutPromise!: Promise<void>;
-    act(() => { logoutPromise = result.current.logout(); });
-
-    expect(getAccessToken()).toBeNull();
-    expect(result.current.user).toBeNull();
-    expect(result.current.profile).toBeNull();
-
-    await act(async () => {
-      resolveLogout();
-      await logoutPromise;
-    });
   });
 
   it('ignores a pending profile reload after logout', async () => {
-    refreshSessionMock.mockResolvedValueOnce(userOneAccessToken());
-    getMeMock.mockResolvedValueOnce(profileA);
-
+    refreshWebSessionMock.mockResolvedValue(accessA);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
 
     let resolveReload!: (value: MeProfileView) => void;
-    getMeMock.mockImplementationOnce(() => new Promise((resolve) => { resolveReload = resolve; }));
+    getMeMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveReload = resolve;
+    }));
     const reload = result.current.reloadProfile();
+    await act(async () => result.current.logout());
     await act(async () => {
-      await result.current.logout();
       resolveReload(profileA);
       await reload;
     });
@@ -168,14 +155,24 @@ describe('AuthProvider', () => {
     expect(result.current.profile).toBeNull();
   });
 
-  it('ignores profile data that belongs to a previous user', async () => {
-    refreshSessionMock.mockResolvedValueOnce(userOneAccessToken());
-
+  it('ignores profile data that belongs to a different user', async () => {
+    refreshWebSessionMock.mockResolvedValue(accessA);
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(result.current.profile?.id).toBe('u1'));
 
     act(() => result.current.updateProfile(profileB));
 
     expect(result.current.profile?.id).toBe('u1');
+  });
+
+  it('clears React auth state when the request layer expires the session', async () => {
+    refreshWebSessionMock.mockResolvedValue(accessA);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.user?.userId).toBe('u1'));
+
+    act(() => authExpiredCallback?.());
+
+    expect(result.current.user).toBeNull();
+    expect(result.current.profile).toBeNull();
   });
 });

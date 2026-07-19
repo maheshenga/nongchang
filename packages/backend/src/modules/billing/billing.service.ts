@@ -35,6 +35,12 @@ const DEFAULT_LIST_CAP = 500;
 
 interface ConsumeRef { refType?: string; refId?: string; operatorId?: string; note?: string; idempotencyKey?: string }
 interface ReservationResult { reservationId: string; balanceAfter: number }
+interface ReserveAiOperationInput {
+  user: AuthUser;
+  amount: number;
+  ref: ConsumeRef & { idempotencyKey: string };
+  operation: { providerId?: string | null; kind: string; operationKey: string };
+}
 interface StaleReservationQuery {
   olderThanMinutes?: number;
   now?: Date;
@@ -214,6 +220,86 @@ export class BillingService {
         }
       }
       throw err;
+    }
+  }
+
+  async reserveAiOperation(input: ReserveAiOperationInput) {
+    const idempotencyKey = input.ref.idempotencyKey;
+    if (!idempotencyKey) throw new BadRequestException('缺少幂等键,无法创建 AI 操作');
+    const { ownerType, ownerId } = this.resolveConsumer(input.user);
+    const acct = await this.ensureAccount(ownerType, ownerId, input.user.tenantId);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.aiOperation.findUnique({
+          where: {
+            tenantId_operationKey: {
+              tenantId: input.user.tenantId,
+              operationKey: input.operation.operationKey,
+            },
+          },
+        });
+        if (existing) return { existing: true as const, operation: existing };
+
+        const updated = await tx.creditAccount.updateMany({
+          where: { id: acct.id, aiBalance: { gte: input.amount } },
+          data: { aiBalance: { decrement: input.amount } },
+        });
+        if (updated.count === 0) throw new ForbiddenException('AI 算力额度不足,请联系上级充值');
+        const after = await tx.creditAccount.findUniqueOrThrow({ where: { id: acct.id } });
+        const reservation = await tx.creditReservation.create({
+          data: {
+            tenantId: input.user.tenantId,
+            accountId: acct.id,
+            resource: 'AI',
+            amount: input.amount,
+            balanceAfter: after.aiBalance,
+            status: 'RESERVED',
+            refType: input.ref.refType ?? null,
+            refId: input.ref.refId ?? null,
+            operatorId: input.ref.operatorId ?? input.user.userId,
+            note: input.ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        await tx.creditLedger.create({
+          data: {
+            accountId: acct.id,
+            resource: 'AI',
+            delta: -input.amount,
+            balanceAfter: after.aiBalance,
+            reason: 'RESERVED',
+            refType: input.ref.refType ?? null,
+            refId: input.ref.refId ?? null,
+            operatorId: input.ref.operatorId ?? input.user.userId,
+            note: input.ref.note ?? null,
+            idempotencyKey,
+          },
+        });
+        const operation = await tx.aiOperation.create({
+          data: {
+            tenantId: input.user.tenantId,
+            userId: input.user.userId,
+            providerId: input.operation.providerId ?? null,
+            kind: input.operation.kind,
+            operationKey: input.operation.operationKey,
+            reservationId: reservation.id,
+            status: 'RESERVED',
+          },
+        });
+        return { existing: false as const, operation };
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'P2002') throw error;
+      const operation = await this.prisma.aiOperation.findUnique({
+        where: {
+          tenantId_operationKey: {
+            tenantId: input.user.tenantId,
+            operationKey: input.operation.operationKey,
+          },
+        },
+      });
+      if (!operation) throw error;
+      return { existing: true as const, operation };
     }
   }
 
@@ -434,6 +520,9 @@ export class BillingService {
         },
       });
       if (!reservation || reservation.status !== 'RESERVED') return false;
+      if (reservation.resource === 'AI' || reservation.refType?.startsWith('ai.')) {
+        return false;
+      }
       const existingTerminalLedger = await tx.creditLedger.findFirst({
         where: {
           accountId: reservation.accountId,

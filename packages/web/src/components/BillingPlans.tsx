@@ -39,7 +39,7 @@ function yuan(cents: number): string {
 export default function BillingPlans() {
   const [page, setPage] = useState(1);
   const fetchPlans = useCallback(() => listCreditPlans({ page, pageSize: MANAGEMENT_PAGE_SIZE }), [page]);
-  const plansApi = useApi(fetchPlans);
+  const plansApi = useApi(fetchPlans, { cacheKey: `billing-plans-admin-page-${page}` });
   const planPage = normalizePage<CreditPlanView>(plansApi.data, page);
   const plans = planPage.items;
 

@@ -11,7 +11,7 @@ function errMsg(error: unknown): string {
 }
 
 export default function BillingAlipayConfig() {
-  const cfgApi = useApi(getAlipayConfig);
+  const cfgApi = useApi(getAlipayConfig, { cacheKey: 'billing-alipay-config' });
   const cfg = cfgApi.data;
   const configured = !!cfg;
 

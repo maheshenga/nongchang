@@ -25,15 +25,16 @@ export class UserGroupService {
   }
 
   async create(user: AuthUser, dto: UserGroupInput): Promise<UserGroupView> {
-    if (dto.isDefault) {
-      await this.prisma.userGroup.updateMany({
-        where: { tenantId: user.tenantId },
-        data: { isDefault: false },
-      });
-    }
-    const row = (await this.prisma.userGroup.create({
-      data: buildUserGroupCreateData({ tenantId: user.tenantId, dto }),
-    })) as UserGroupRow;
+    const data = buildUserGroupCreateData({ tenantId: user.tenantId, dto });
+    const row = dto.isDefault
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.userGroup.updateMany({
+            where: { tenantId: user.tenantId },
+            data: { isDefault: false },
+          });
+          return tx.userGroup.create({ data });
+        })
+      : await this.prisma.userGroup.create({ data });
     return buildUserGroupView(row);
   }
 
@@ -43,16 +44,16 @@ export class UserGroupService {
     })) as UserGroupRow | null;
     if (!existing) throw new NotFoundException('用户组不存在');
 
-    if (dto.isDefault) {
-      await this.prisma.userGroup.updateMany({
-        where: { tenantId: user.tenantId },
-        data: { isDefault: false },
-      });
-    }
-    const row = (await this.prisma.userGroup.update({
-      where: { id },
-      data: buildUserGroupUpdateData(dto),
-    })) as UserGroupRow;
+    const data = buildUserGroupUpdateData(dto);
+    const row = dto.isDefault
+      ? await this.prisma.$transaction(async (tx) => {
+          await tx.userGroup.updateMany({
+            where: { tenantId: user.tenantId },
+            data: { isDefault: false },
+          });
+          return tx.userGroup.update({ where: { id }, data });
+        })
+      : await this.prisma.userGroup.update({ where: { id }, data });
     return buildUserGroupView(row);
   }
 
@@ -70,10 +71,19 @@ export class UserGroupService {
       where: buildUserGroupTenantWhere({ tenantId, isDefault: true }),
     })) as UserGroupRow | null;
     if (existing) return buildUserGroupView(existing);
-    const row = (await this.prisma.userGroup.create({
-      data: buildDefaultUserGroupCreateData({ tenantId, permissions: DEFAULT_USER_GROUP_PERMISSIONS }),
-    })) as UserGroupRow;
-    return buildUserGroupView(row);
+    try {
+      const row = (await this.prisma.userGroup.create({
+        data: buildDefaultUserGroupCreateData({ tenantId, permissions: DEFAULT_USER_GROUP_PERMISSIONS }),
+      })) as UserGroupRow;
+      return buildUserGroupView(row);
+    } catch (error) {
+      if (!isUniqueConflict(error)) throw error;
+      const winner = (await this.prisma.userGroup.findFirst({
+        where: buildUserGroupTenantWhere({ tenantId, isDefault: true }),
+      })) as UserGroupRow | null;
+      if (!winner) throw error;
+      return buildUserGroupView(winner);
+    }
   }
 
   async assignUserGroup(user: AuthUser, dto: AssignUserGroupInput): Promise<void> {
@@ -95,4 +105,11 @@ export class UserGroupService {
       data: { groupId: dto.groupId },
     });
   }
+}
+
+function isUniqueConflict(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: string }).code === 'P2002';
 }

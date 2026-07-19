@@ -30,7 +30,7 @@ function tabClass(active: boolean): string {
 }
 
 export default function ProfileSettings({ onClose }: { onClose: () => void }) {
-  const meApi = useApi(getMe);
+  const meApi = useApi(getMe, { cacheKey: 'current-profile' });
   const { updateProfile, logout } = useAuth();
   const [localMe, setLocalMe] = useState<MeProfileView | null>(null);
   const me: MeProfileView | null = localMe ?? meApi.data;

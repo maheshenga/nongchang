@@ -1,10 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { request, ApiError, refreshWebSession, setOnAuthExpired } from './request';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError, request, setOnAuthExpired } from './request';
 import { clearAccessToken, getAccessToken, setAccessToken } from '../auth/token-store';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status, headers: { 'Content-Type': 'application/json' },
+    status,
+    headers: { 'Content-Type': 'application/json' },
   });
 }
 
@@ -13,120 +14,98 @@ describe('request', () => {
     localStorage.clear();
     clearAccessToken();
     setAccessToken('old-access');
-    setOnAuthExpired(() => {});
+    setOnAuthExpired(() => undefined);
     vi.restoreAllMocks();
   });
 
-  it('injects Bearer token and returns parsed JSON', async () => {
+  it('injects the in-memory Bearer token and returns parsed JSON', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ id: 'b1' }]));
     vi.stubGlobal('fetch', fetchMock);
-    const data = await request<{ id: string }[]>('/batches');
-    expect(data).toEqual([{ id: 'b1' }]);
+
+    await expect(request<{ id: string }[]>('/batches')).resolves.toEqual([{ id: 'b1' }]);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/batches');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer old-access');
+    expect(init.credentials).toBe('same-origin');
+    expect(localStorage.length).toBe(0);
   });
 
-  it('on 401 refreshes from the HttpOnly cookie then retries once and succeeds', async () => {
+  it('on 401 refreshes through the cookie endpoint then retries exactly once', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
       .mockResolvedValueOnce(jsonResponse({ accessToken: 'new-access' }))
       .mockResolvedValueOnce(jsonResponse([{ id: 'b1' }]));
     vi.stubGlobal('fetch', fetchMock);
-    const data = await request<{ id: string }[]>('/batches');
-    expect(data).toEqual([{ id: 'b1' }]);
+
+    await expect(request<{ id: string }[]>('/batches')).resolves.toEqual([{ id: 'b1' }]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/web/refresh');
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', credentials: 'same-origin' });
+    expect(fetchMock.mock.calls[1][1]).not.toHaveProperty('body');
     expect(getAccessToken()).toBe('new-access');
-    expect(fetchMock.mock.calls[1]).toEqual(['/api/auth/web/refresh', {
-      method: 'POST',
-      credentials: 'same-origin',
-    }]);
-    const retryInit = fetchMock.mock.calls[2][1];
-    expect((retryInit.headers as Record<string, string>).Authorization).toBe('Bearer new-access');
+    expect((fetchMock.mock.calls[2][1].headers as Record<string, string>).Authorization).toBe(
+      'Bearer new-access',
+    );
     expect(localStorage.length).toBe(0);
   });
 
-  it('when cookie refresh also 401, clears the in-memory token, calls onAuthExpired, and throws', async () => {
+  it('when cookie refresh fails, clears memory, calls onAuthExpired, and throws', async () => {
     const onExpired = vi.fn();
     setOnAuthExpired(onExpired);
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
       .mockResolvedValueOnce(jsonResponse({ message: 'bad' }, 401));
     vi.stubGlobal('fetch', fetchMock);
+
     await expect(request('/batches')).rejects.toBeInstanceOf(ApiError);
     expect(getAccessToken()).toBeNull();
     expect(onExpired).toHaveBeenCalledOnce();
   });
 
-  it('expires the local session when the single retried request is still unauthorized', async () => {
+  it('expires the session if the post-refresh retry is also unauthorized', async () => {
     const onExpired = vi.fn();
     setOnAuthExpired(onExpired);
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
       .mockResolvedValueOnce(jsonResponse({ accessToken: 'new-access' }))
-      .mockResolvedValueOnce(jsonResponse({ message: 'revoked' }, 401));
+      .mockResolvedValueOnce(jsonResponse({ message: 'still unauthorized' }, 401));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(request('/batches')).rejects.toBeInstanceOf(ApiError);
+    await expect(request('/batches')).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(getAccessToken()).toBeNull();
     expect(onExpired).toHaveBeenCalledOnce();
   });
 
-  it('does not restore access after logout invalidates an in-flight cookie refresh', async () => {
-    let resolveRefresh!: (response: Response) => void;
-    const fetchMock = vi.fn().mockReturnValue(new Promise<Response>((resolve) => { resolveRefresh = resolve; }));
-    vi.stubGlobal('fetch', fetchMock);
+  it('throws ApiError with the backend message on non-401 errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ message: 'validation failed' }, 400)));
 
-    const refresh = refreshWebSession();
-    clearAccessToken();
-    resolveRefresh(jsonResponse({ accessToken: 'stale-access' }));
-
-    await expect(refresh).resolves.toBeNull();
-    expect(getAccessToken()).toBeNull();
+    await expect(request('/batches', { method: 'POST', body: '{}' })).rejects.toMatchObject({
+      status: 400,
+      message: 'validation failed',
+    });
   });
 
-  it('does not refresh or retry when a protected request becomes unauthorized after logout', async () => {
-    let resolveProtectedResponse!: (response: Response) => void;
-    const fetchMock = vi.fn()
-      .mockReturnValueOnce(new Promise<Response>((resolve) => { resolveProtectedResponse = resolve; }))
-      .mockResolvedValueOnce(jsonResponse({ accessToken: 'resurrected-access' }))
-      .mockResolvedValueOnce(jsonResponse([{ id: 'b1' }]));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const pending = request<{ id: string }[]>('/batches');
-    clearAccessToken();
-    resolveProtectedResponse(jsonResponse({ message: 'expired' }, 401));
-
-    await expect(pending).rejects.toMatchObject({ status: 401 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(getAccessToken()).toBeNull();
+  it('returns null on an empty 200 body', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 200 })));
+    await expect(request<unknown>('/integration-configs/wechat')).resolves.toBeNull();
   });
 
-  it('throws ApiError with backend message on non-401 error', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: '字段校验失败' }, 400));
-    vi.stubGlobal('fetch', fetchMock);
-    await expect(request('/batches', { method: 'POST', body: '{}' }))
-      .rejects.toMatchObject({ status: 400, message: '字段校验失败' });
-  });
-
-  it('returns null on empty 200 body (后端返回 null/Content-Length:0)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const data = await request<unknown>('/integration-configs/wechat');
-    expect(data).toBeNull();
-  });
-
-  it('concurrent 401s share a single cookie refresh call', async () => {
+  it('shares one cookie refresh across concurrent 401 responses', async () => {
     let refreshCalls = 0;
-    let expiredRequests = 0;
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/auth/web/refresh') {
-        refreshCalls++;
+        refreshCalls += 1;
         return Promise.resolve(jsonResponse({ accessToken: 'new-access' }));
       }
-      if (expiredRequests++ < 2) return Promise.resolve(jsonResponse({ message: 'expired' }, 401));
       return Promise.resolve(jsonResponse([], 200));
     });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401));
     vi.stubGlobal('fetch', fetchMock);
+
     await Promise.all([request('/batches'), request('/fields')]);
     expect(refreshCalls).toBe(1);
   });

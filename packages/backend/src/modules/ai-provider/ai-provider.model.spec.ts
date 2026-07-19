@@ -102,6 +102,7 @@ describe('ai provider model helpers', () => {
     expect(findEnabledAiProviderRow([{ ...baseRow, id: 'disabled', enabled: false }, baseRow])).toBe(baseRow);
 
     expect(buildEnabledAiProvider({ row: baseRow, apiKey: 'plain-key' })).toEqual({
+      id: 'p1',
       baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       apiKey: 'plain-key',
       textModel: 'qwen-plus',

@@ -11,6 +11,6 @@ describe('UploadController', () => {
 
     await (controller.upload as any)(file, user, 'credential');
 
-    expect(service.upload).toHaveBeenCalledWith(file, 'tenant-1', { purpose: 'credential' });
+    expect(service.upload).toHaveBeenCalledWith(file, user, { purpose: 'credential' });
   });
 });

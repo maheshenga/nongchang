@@ -1,9 +1,14 @@
-import type { UploadResponse } from '@nongchang/shared';
+import { uploadResponseSchema, type UploadResponse } from '@nongchang/shared';
+import { parseResponse } from './parse-response';
 import { request } from './request';
 
-// 上传单张图片到 OSS,返回可访问 URL。后端端点 POST /uploads(multipart,字段名 file)。
-export function uploadImage(file: File): Promise<UploadResponse> {
+export type UploadPurpose = 'farm-record' | 'ai-diagnose';
+
+export async function uploadImage(file: File, purpose: UploadPurpose): Promise<UploadResponse> {
   const form = new FormData();
   form.append('file', file);
-  return request<UploadResponse>('/uploads', { method: 'POST', body: form });
+  return parseResponse(uploadResponseSchema, await request<unknown>(
+    `/uploads?purpose=${encodeURIComponent(purpose)}`,
+    { method: 'POST', body: form },
+  ), 'uploads.create');
 }

@@ -1,5 +1,6 @@
 import { PrismaService } from '../src/prisma/prisma.service';
 import { BillingService } from '../src/modules/billing/billing.service';
+import { AiBillingCoordinator } from '../src/modules/billing/ai-billing-coordinator';
 import type { CreditResource } from '@nongchang/shared';
 
 function readArg(name: string): string | undefined {
@@ -44,8 +45,17 @@ async function main() {
   await prisma.$connect();
   try {
     const billing = new BillingService(prisma);
+    const coordinator = new AiBillingCoordinator(prisma, billing);
     const candidates = query.dryRun ? await billing.listStaleReservations(query) : [];
-    const result = query.dryRun
+    const ai = await coordinator.reconcileStale({
+      cutoff: new Date(Date.now() - query.olderThanMinutes * 60_000),
+      take: query.take,
+      dryRun: query.dryRun,
+    });
+    const aiOwnedRecovery = query.resource === 'AI' || query.refType?.startsWith('ai.');
+    const generic = aiOwnedRecovery
+      ? { scanned: 0, released: 0, skipped: 0, errors: [] }
+      : query.dryRun
       ? { scanned: candidates.length, released: 0, skipped: candidates.length, errors: [] }
       : await billing.releaseStaleReservations(query);
     console.log(JSON.stringify({
@@ -56,11 +66,11 @@ async function main() {
         resource: query.resource ?? null,
         refType: query.refType ?? null,
       },
-      candidateCount: query.dryRun ? candidates.length : result.scanned,
+      candidateCount: query.dryRun ? candidates.length : generic.scanned,
       candidates: query.dryRun ? candidates : undefined,
-      result,
+      result: { ai, generic },
     }, null, 2));
-    if (result.errors.length > 0) process.exitCode = 1;
+    if (ai.errors.length > 0 || generic.errors.length > 0) process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }

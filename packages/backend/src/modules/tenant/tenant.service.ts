@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import {
@@ -14,6 +14,7 @@ import {
 } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DEFAULT_USER_GROUP_PERMISSIONS } from '../user-group/default-permissions';
+import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
 import {
   assertCanSetTenantStatus,
   buildDefaultTenantGroupCreateData,
@@ -30,7 +31,10 @@ import {
 
 @Injectable()
 export class TenantService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private sessions?: SessionValidationCacheService,
+  ) {}
 
   async list(query?: ListQuery): Promise<TenantListItem[] | Paginated<TenantListItem>> {
     if (isPaginated(query)) {
@@ -84,6 +88,7 @@ export class TenantService {
       data: { status },
       select: { id: true, status: true },
     });
+    await this.sessions?.invalidateTenant(tenantId);
     return toTenantStatusResult(updated);
   }
 }

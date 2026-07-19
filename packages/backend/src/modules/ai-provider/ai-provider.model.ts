@@ -14,6 +14,7 @@ export interface AiProviderRow {
 }
 
 export interface EnabledAiProvider {
+  id: string;
   baseUrl: string;
   apiKey: string;
   textModel: string;
@@ -77,6 +78,7 @@ export function findEnabledAiProviderRow(rows: AiProviderRow[]): AiProviderRow |
 
 export function buildEnabledAiProvider(input: { row: AiProviderRow; apiKey: string }): EnabledAiProvider {
   return {
+    id: input.row.id,
     baseUrl: input.row.baseUrl,
     apiKey: input.apiKey,
     textModel: input.row.textModel,

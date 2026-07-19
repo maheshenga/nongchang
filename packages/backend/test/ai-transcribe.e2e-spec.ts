@@ -36,6 +36,7 @@ describe('POST /api/ai/transcribe(讯飞语音转写)', () => {
   it('未带 token → 401', async () => {
     await request(app.getHttpServer())
       .post('/api/ai/transcribe')
+      .set('Idempotency-Key', 'e2e-transcribe-no-auth-0001')
       .attach('file', Buffer.from('1234'), { filename: 'a.pcm', contentType: 'application/octet-stream' })
       .expect(401);
   });
@@ -43,7 +44,8 @@ describe('POST /api/ai/transcribe(讯飞语音转写)', () => {
   it('带 token 但缺少音频文件 → 400', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/ai/transcribe')
-      .set('Authorization', `Bearer ${merchantToken}`);
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', 'e2e-transcribe-missing-file-0001');
     expect(res.status).toBe(400);
   });
 
@@ -51,6 +53,7 @@ describe('POST /api/ai/transcribe(讯飞语音转写)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/ai/transcribe')
       .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', 'e2e-transcribe-no-config-0001')
       .attach('file', Buffer.from('1234'), { filename: 'a.pcm', contentType: 'application/octet-stream' });
     expect(res.status).toBe(400);
   });

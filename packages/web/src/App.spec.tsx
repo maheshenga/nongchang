@@ -1,8 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMock = vi.hoisted(() => ({ role: 'platform_admin', isAuthenticated: true, isReady: true }));
-const traceMock = vi.hoisted(() => ({ suspend: false }));
 
 vi.mock('./auth/auth-context', () => ({
   useAuth: () => ({
@@ -23,12 +22,6 @@ vi.mock('./components/AppLogin', () => ({ default: () => <div>Login Form View</d
 vi.mock('./components/TenantManagement', () => ({ default: () => <div>Tenant Management View</div> }));
 vi.mock('./components/BillingAdmin', () => ({ default: () => <div>Billing Admin View</div> }));
 vi.mock('./components/Dashboard', () => ({ default: () => <div>Production Overview View</div> }));
-vi.mock('./components/TraceabilityPage', () => ({
-  default: ({ code }: { code: string }) => {
-    if (traceMock.suspend) throw new Promise(() => {});
-    return <div>Public Trace {code}</div>;
-  },
-}));
 
 import App from './App';
 
@@ -37,39 +30,17 @@ beforeEach(() => {
   authMock.role = 'platform_admin';
   authMock.isAuthenticated = true;
   authMock.isReady = true;
-  traceMock.suspend = false;
 });
 
 describe('App role wiring', () => {
-  it('shows the existing shell skeleton while cookie-session bootstrap is pending', async () => {
+  it('shows a session bootstrap skeleton before choosing an authenticated or public surface', () => {
     authMock.isReady = false;
-
-    const { container } = render(<App />);
-
-    await act(async () => { await vi.dynamicImportSettled(); });
-    expect(container.querySelector('.animate-pulse')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Landing CTA' })).toBeNull();
-    expect(screen.queryByText('Tenant Management View')).toBeNull();
-  });
-
-  it('keeps a public trace route available while cookie-session bootstrap is pending', async () => {
-    authMock.isReady = false;
-    window.location.hash = '#/trace/public-code';
+    authMock.isAuthenticated = false;
 
     render(<App />);
 
-    await act(async () => { await vi.dynamicImportSettled(); });
-    expect(await screen.findByText('Public Trace public-code')).toBeTruthy();
-  });
-
-  it('keeps a suspense boundary around the public trace page on its first lazy render', async () => {
-    traceMock.suspend = true;
-    window.location.hash = '#/trace/public-code';
-
-    const { container } = render(<App />);
-
-    await act(async () => { await vi.dynamicImportSettled(); });
-    expect(container.querySelector('.animate-pulse')).toBeTruthy();
+    expect(screen.getByRole('status', { name: '正在恢复会话' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Landing CTA' })).toBeNull();
   });
 
   it('shows public landing before the login form for unauthenticated visitors', async () => {

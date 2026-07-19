@@ -1,13 +1,9 @@
-import { webAccessTokenResponseSchema } from '@nongchang/shared';
-import {
-  clearAccessToken,
-  getAccessToken,
-  getAccessTokenGeneration,
-  setAccessTokenIfCurrent,
-} from '../auth/token-store';
+import type { WebAccessTokenResponse } from '@nongchang/shared';
+import { clearAccessToken, getAccessToken, setAccessToken } from '../auth/token-store';
 
 export class ApiError extends Error {
   status: number;
+
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
@@ -16,38 +12,49 @@ export class ApiError extends Error {
 
 let onAuthExpired: (() => void) | null = null;
 
-export function setOnAuthExpired(callback: () => void): void {
-  onAuthExpired = callback;
+export function setOnAuthExpired(cb: () => void): void {
+  onAuthExpired = cb;
+}
+
+function expireWebSession(): void {
+  clearAccessToken();
+  onAuthExpired?.();
 }
 
 let refreshing: Promise<string | null> | null = null;
 
-function expireWebAccess(): null {
-  clearAccessToken();
-  onAuthExpired?.();
-  return null;
-}
-
-export async function refreshWebSession(): Promise<string | null> {
-  const expectedGeneration = getAccessTokenGeneration();
+async function doRefresh(): Promise<string | null> {
+  let response: Response;
   try {
-    const response = await fetch('/api/auth/web/refresh', {
+    response = await fetch('/api/auth/web/refresh', {
       method: 'POST',
       credentials: 'same-origin',
     });
-    if (!response.ok) return expireWebAccess();
-
-    const { accessToken } = webAccessTokenResponseSchema.parse(await response.json());
-    return setAccessTokenIfCurrent(accessToken, expectedGeneration) ? accessToken : null;
   } catch {
-    return expireWebAccess();
+    expireWebSession();
+    return null;
+  }
+
+  if (!response.ok) {
+    expireWebSession();
+    return null;
+  }
+
+  try {
+    const body = (await response.json()) as WebAccessTokenResponse;
+    if (!body.accessToken) throw new Error('Missing access token');
+    setAccessToken(body.accessToken);
+    return body.accessToken;
+  } catch {
+    expireWebSession();
+    return null;
   }
 }
 
-function refreshAccess(): Promise<string | null> {
-  if (!refreshing) {
-    refreshing = refreshWebSession().finally(() => { refreshing = null; });
-  }
+export function refreshWebSession(): Promise<string | null> {
+  refreshing ??= doRefresh().finally(() => {
+    refreshing = null;
+  });
   return refreshing;
 }
 
@@ -58,35 +65,40 @@ async function parseError(response: Response): Promise<ApiError> {
     if (Array.isArray(body.message)) message = body.message.join('; ');
     else if (body.message) message = body.message;
   } catch {
-    // Keep the status-derived default.
+    // Keep the status-based fallback when the response is not JSON.
   }
   return new ApiError(response.status, message);
 }
 
 async function send(path: string, init: RequestInit, accessToken: string | null): Promise<Response> {
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string> | undefined) };
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+  };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  if (init.body && !(init.body instanceof FormData) && !Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) {
+  if (
+    init.body
+    && !(init.body instanceof FormData)
+    && !Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')
+  ) {
     headers['Content-Type'] = 'application/json';
   }
-  return fetch(`/api${path}`, { ...init, headers });
+
+  return fetch(`/api${path}`, {
+    ...init,
+    credentials: 'same-origin',
+    headers,
+  });
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const accessToken = getAccessToken();
-  const accessTokenGeneration = getAccessTokenGeneration();
-  let response = await send(path, init, accessToken);
+  let response = await send(path, init, getAccessToken());
 
   if (response.status === 401) {
-    // Do not revive or retry a request after logout, login, or a concurrent
-    // refresh changed the session that originally sent it.
-    if (!accessToken || getAccessTokenGeneration() !== accessTokenGeneration) {
-      throw await parseError(response);
-    }
-    const newAccess = await refreshAccess();
-    if (!newAccess) throw await parseError(response);
-    response = await send(path, init, newAccess);
-    if (response.status === 401) expireWebAccess();
+    const newAccessToken = await refreshWebSession();
+    if (!newAccessToken) throw await parseError(response);
+
+    response = await send(path, init, newAccessToken);
+    if (response.status === 401) expireWebSession();
   }
 
   if (!response.ok) throw await parseError(response);

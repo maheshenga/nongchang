@@ -8,11 +8,29 @@ const user = { userId: 'u1', tenantId: 't1', role: 'merchant' } as AuthUser;
 function providerSvc(enabled: any) { return { getEnabled: async () => enabled } as any; }
 function integrationSvc(xfyun: any = null) { return { getEnabledXfyun: async () => xfyun } as any; }
 function billingSvc() {
-  return {
+  const billing = {
     reserve: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
     confirmReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
     releaseReservation: vi.fn().mockResolvedValue({ reservationId: 'res1', balanceAfter: 0 }),
+    execute: vi.fn(),
   } as any;
+  billing.execute.mockImplementation(async (input: any, providerCall: () => Promise<unknown>) => {
+    await billing.reserve(input.user, 'AI', input.amount, input.ref);
+    let value: unknown;
+    try {
+      value = await providerCall();
+    } catch (error) {
+      try {
+        await billing.releaseReservation(input.user, 'AI', input.amount, input.ref);
+      } catch {
+        // Preserve the provider error in this test double, matching the coordinator contract.
+      }
+      throw error;
+    }
+    await billing.confirmReservation(input.user, 'AI', input.ref);
+    return value;
+  });
+  return billing;
 }
 const noProv = providerSvc(null);
 const keyPattern = (kind: string) => new RegExp(`^${kind.replace('.', '\\.')}:t1:u1:[a-f0-9]{16}$`);
@@ -93,14 +111,34 @@ describe('AiService', () => {
 });
 
 describe('AiService billing reservation', () => {
+  it('scopes a supplied client key by operation, tenant, and user', async () => {
+    const billing = billingSvc();
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
+    const svc = new AiService(providerSvc({ id: 'provider-1', baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+
+    await svc.chat(user, 'hello', 'client-action-key-0001');
+
+    expect(billing.execute).toHaveBeenCalledWith(expect.objectContaining({
+      operationKey: 'ai.chat:t1:u1:client-action-key-0001',
+      ref: expect.objectContaining({ idempotencyKey: 'ai.chat:t1:u1:client-action-key-0001' }),
+    }), expect.any(Function));
+  });
+
   it('chat success reserves and confirms AI 1', async () => {
     const billing = billingSvc();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'answer' } }] }) })));
-    const svc = new AiService(providerSvc({ baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
+    const svc = new AiService(providerSvc({ id: 'provider-1', baseUrl: 'https://x.com/v1', apiKey: 'k', textModel: 'm', visionModel: null }), integrationSvc(), billing, {} as any, {} as any);
 
     const res = await svc.chat(user, 'hello');
 
     expect(res.answer).toBe('answer');
+    expect(billing.execute).toHaveBeenCalledWith(expect.objectContaining({
+      user,
+      providerId: 'provider-1',
+      kind: 'ai.chat',
+      amount: AI_WEIGHT.chat,
+      operationKey: expect.stringMatching(keyPattern('ai.chat')),
+    }), expect.any(Function));
     expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, expect.objectContaining({
       refType: 'ai.chat',
       idempotencyKey: expect.stringMatching(keyPattern('ai.chat')),
@@ -267,7 +305,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url, init) => {
       requestBody = JSON.parse(init.body);
@@ -291,7 +329,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
 
@@ -301,12 +339,12 @@ describe('AiService.advice', () => {
     expect(billing.reserve).toHaveBeenCalledWith(user, 'AI', AI_WEIGHT.chat, {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
+      idempotencyKey: expect.stringMatching(/^ai\.advice:t1:u1:b1:[a-f0-9]{16}$/),
     });
     expect(billing.confirmReservation).toHaveBeenCalledWith(user, 'AI', {
       refType: 'ai.advice',
       refId: 'b1',
-      idempotencyKey: expect.stringMatching(keyPattern('ai.advice')),
+      idempotencyKey: expect.stringMatching(/^ai\.advice:t1:u1:b1:[a-f0-9]{16}$/),
     });
   });
 
@@ -318,7 +356,7 @@ describe('AiService.advice', () => {
       cropPhenology: { findMany: async () => [{ expectedDays: 30 }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { assertInScope: async () => {}, ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { assertInScope: async () => {}, ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'advice' } }] }) }));
 
@@ -338,7 +376,7 @@ describe('AiService.ask', () => {
       batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
 
@@ -361,7 +399,7 @@ describe('AiService.ask', () => {
       batch: { findMany: async () => [{ batchNo: 'B1', cropName: 'crop', status: 'Growing', plantDate: new Date('2026-01-01') }] },
     };
     const providers: any = { getEnabled: async () => ({ baseUrl: 'http://x', apiKey: 'k', textModel: 'm' }) };
-    const scope: any = { ownedScopeWhere: async () => ({ tenantId: 't1' }) };
+    const scope: any = { ownedEntityWhere: () => ({ tenantId: 't1' }) };
     const svc = new AiService(providers, {} as any, billing, prisma, scope);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: 'summary' } }] }) }));
 

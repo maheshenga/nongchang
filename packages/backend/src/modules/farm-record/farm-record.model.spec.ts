@@ -205,9 +205,9 @@ describe('farm record list model helpers', () => {
     expect(buildFarmRecordListWhere(actor(), {
       page: 1,
       pageSize: 20,
-    }, ['b1', 'b2'])).toEqual({
+    }, { owner: { is: { tenantId: 't1', agentId: 'a1' } } })).toEqual({
       tenantId: 't1',
-      batchId: { in: ['b1', 'b2'] },
+      batch: { is: { owner: { is: { tenantId: 't1', agentId: 'a1' } } } },
     });
   });
 
@@ -215,7 +215,7 @@ describe('farm record list model helpers', () => {
     const where = buildFarmRecordListWhere(actor(), {
       page: 3,
       pageSize: 15,
-    }, ['b1']);
+    }, { ownerId: 'm1' });
 
     expect(buildFarmRecordListFindManyArgs(where, { page: 3, pageSize: 15 })).toEqual({
       where,

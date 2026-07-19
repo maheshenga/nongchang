@@ -8,56 +8,79 @@ datasource db {
 }
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
+  id                 String              @id @default(uuid())
+  name               String
   // 机构编码:登录时定位租户的稳定锚点(全局唯一)。username 仅在租户内唯一,
   // 故密码登录需 (tenantCode + username) 共同定位用户。
-  code      String   @unique
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @map("created_at")
-  users     User[]
-  agents    Agent[]
+  code               String              @unique
+  status             String              @default("active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  users              User[]
+  agents             Agent[]
+  fields             Field[]
+  batches            Batch[]
+  farmRecords        FarmRecord[]
+  cropPhenologies    CropPhenology[]
+  traceCodes         TraceCode[]
+  traceEvents        TraceEvent[]
+  traceScans         TraceScan[]
+  traceCredentials   TraceCredential[]
+  supplies           Supply[]
+  supplyIssues       SupplyIssue[]
+  aiProviders        AiProvider[]
+  ossConfig          OssConfig?
+  integrationConfigs IntegrationConfig[]
+  userGroups         UserGroup[]
+  quickTemplates     QuickTemplate[]
+  creditAccounts     CreditAccount[]
+  creditReservations CreditReservation[]
+  creditPlans        CreditPlan[]
+  creditOrders       CreditOrder[]
+  aiOperations       AiOperation[]
+  uploadAssets       UploadAsset[]
+  uploadQuotaUsage   UploadQuotaUsage?
 
   @@map("tenants")
 }
 
 model Agent {
-  id       String @id @default(uuid())
-  tenantId String @map("tenant_id")
-  name     String
-  region   String
-  status   String @default("active")
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  region    String
+  status    String   @default("active")
   createdAt DateTime @default(now())
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
-  users    User[]
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  users     User[]
 
   @@index([tenantId])
   @@map("agents")
 }
 
 model User {
-  id           String   @id @default(uuid())
-  tenantId     String   @map("tenant_id")
-  role         Role
-  agentId      String?  @map("agent_id")
-  username     String
-  passwordHash String   @map("password_hash")
-  phone        String?
-  wxOpenid     String?  @map("wx_openid")
-  displayName  String   @map("display_name")
-  status       String   @default("active")
-  sessionVersion Int    @default(0) @map("session_version")
-  groupId      String?  @map("group_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  tenant       Tenant   @relation(fields: [tenantId], references: [id])
-  agent        Agent?   @relation(fields: [agentId], references: [id])
-  group        UserGroup? @relation(fields: [groupId], references: [id])
+  id             String        @id @default(uuid())
+  tenantId       String        @map("tenant_id")
+  role           Role
+  agentId        String?       @map("agent_id")
+  username       String
+  passwordHash   String        @map("password_hash")
+  phone          String?
+  wxOpenid       String?       @map("wx_openid")
+  displayName    String        @map("display_name")
+  status         String        @default("active")
+  sessionVersion Int           @default(0) @map("session_version")
+  groupId        String?       @map("group_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  agent          Agent?        @relation(fields: [agentId], references: [id])
+  group          UserGroup?    @relation(fields: [groupId], references: [id])
   // 反向引用:支撑 owner/operator 外键(onDelete 默认 Restrict,挡住删除仍被引用的用户)。
-  ownedFields  Field[]
-  ownedBatches Batch[]
-  farmRecords  FarmRecord[]
-  ownedSupplies Supply[]
-  supplyIssues SupplyIssue[]
+  ownedFields    Field[]
+  ownedBatches   Batch[]
+  farmRecords    FarmRecord[]
+  ownedSupplies  Supply[]
+  supplyIssues   SupplyIssue[]
+  uploadAssets   UploadAsset[]
 
   @@unique([tenantId, username])
   @@unique([tenantId, wxOpenid])
@@ -81,7 +104,8 @@ model Field {
   // 若将来新增 ST_DWithin/KNN 类查询,需用原生 SQL 迁移重建 GIST 索引。
   location    Unsupported("geography(Point, 4326)")?
   createdAt   DateTime                               @default(now()) @map("created_at")
-  owner       User     @relation(fields: [ownerId], references: [id])
+  tenant      Tenant                                 @relation(fields: [tenantId], references: [id])
+  owner       User                                   @relation(fields: [ownerId], references: [id])
   batches     Batch[]
   farmRecords FarmRecord[]
 
@@ -91,25 +115,27 @@ model Field {
 }
 
 model Batch {
-  id              String   @id @default(uuid())
-  tenantId        String   @map("tenant_id")
-  ownerId         String   @map("owner_id")
-  fieldId         String   @map("field_id")
-  batchNo         String   @map("batch_no")
-  cropName        String   @map("crop_name")
-  plantDate       DateTime @map("plant_date")
-  expectedHarvest DateTime @map("expected_harvest")
-  status          String
-  laborCost       Decimal  @default(0) @map("labor_cost") @db.Decimal(14, 2)
-  sellPrice       Decimal  @default(0) @map("sell_price") @db.Decimal(14, 2)
-  createdAt       DateTime @default(now()) @map("created_at")
-  owner            User     @relation(fields: [ownerId], references: [id])
-  field            Field    @relation(fields: [fieldId], references: [id])
+  id               String            @id @default(uuid())
+  tenantId         String            @map("tenant_id")
+  ownerId          String            @map("owner_id")
+  fieldId          String            @map("field_id")
+  batchNo          String            @map("batch_no")
+  cropName         String            @map("crop_name")
+  plantDate        DateTime          @map("plant_date")
+  expectedHarvest  DateTime          @map("expected_harvest")
+  status           String
+  laborCost        Decimal           @default(0) @map("labor_cost") @db.Decimal(14, 2)
+  sellPrice        Decimal           @default(0) @map("sell_price") @db.Decimal(14, 2)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  owner            User              @relation(fields: [ownerId], references: [id])
+  field            Field             @relation(fields: [fieldId], references: [id])
   farmRecords      FarmRecord[]
   traceCodes       TraceCode[]
   traceEvents      TraceEvent[]
   traceCredentials TraceCredential[]
   supplyIssues     SupplyIssue[]
+  traceScans       TraceScan[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -117,25 +143,27 @@ model Batch {
 }
 
 model FarmRecord {
-  id         String   @id @default(uuid())
-  tenantId   String   @map("tenant_id")
-  batchId    String   @map("batch_id")
-  fieldId    String   @map("field_id")
-  operatorId String   @map("operator_id")
-  action     String
-  detail     Json?
-  images     Json?
-  location   String?
-  recordedAt DateTime @map("recorded_at")
-  source     String
-  status     String   @default("completed")
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  batchId      String   @map("batch_id")
+  fieldId      String   @map("field_id")
+  operatorId   String   @map("operator_id")
+  action       String
+  detail       Json?
+  images       Json?
+  location     String?
+  recordedAt   DateTime @map("recorded_at")
+  source       String
+  status       String   @default("completed")
   supplyId     String?  @map("supply_id")
   supplyAmount Decimal? @map("supply_amount") @db.Decimal(14, 2)
-  createdAt  DateTime @default(now()) @map("created_at")
-  batch      Batch    @relation(fields: [batchId], references: [id])
-  field      Field    @relation(fields: [fieldId], references: [id])
-  operator   User     @relation(fields: [operatorId], references: [id])
-  traceEvent TraceEvent?
+  createdAt    DateTime @default(now()) @map("created_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  batch        Batch    @relation(fields: [batchId], references: [id])
+  field        Field    @relation(fields: [fieldId], references: [id])
+  operator     User     @relation(fields: [operatorId], references: [id])
+  supply       Supply?  @relation(fields: [supplyId], references: [id])
+  traceEvent   TraceEvent?
 
   @@index([tenantId])
   @@index([batchId])
@@ -144,13 +172,14 @@ model FarmRecord {
 
 // 作物标准物候模型:每作物各生长阶段的预设累计天数,用于偏离预警对比基准。
 model CropPhenology {
-  id          String   @id @default(uuid())
-  tenantId    String   @map("tenant_id")
-  cropName    String   @map("crop_name")
-  stage       String
-  expectedDays Int     @map("expected_days")
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  cropName     String   @map("crop_name")
+  stage        String
+  expectedDays Int      @map("expected_days")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, cropName])
@@ -167,6 +196,7 @@ model TraceCode {
   reservationId String?            @map("reservation_id")
   generationKey String?            @map("generation_key")
   createdAt     DateTime           @default(now()) @map("created_at")
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
   batch         Batch              @relation(fields: [batchId], references: [id])
   reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
 
@@ -187,8 +217,9 @@ model TraceEvent {
   occurredAt DateTime @map("occurred_at")
   payload    Json?
   sourceFarmRecordId String?     @unique @map("source_farm_record_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  batch      Batch    @relation(fields: [batchId], references: [id])
+  createdAt          DateTime    @default(now()) @map("created_at")
+  tenant             Tenant      @relation(fields: [tenantId], references: [id])
+  batch              Batch       @relation(fields: [batchId], references: [id])
   sourceFarmRecord   FarmRecord? @relation(fields: [sourceFarmRecordId], references: [id], onDelete: Restrict)
 
   @@index([tenantId])
@@ -204,10 +235,13 @@ model TraceScan {
   ip        String
   userAgent String?  @map("user_agent")
   scannedAt DateTime @default(now()) @map("scanned_at")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  batch     Batch    @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
   @@index([code, scannedAt])
   @@index([batchId])
+  @@index([tenantId, scannedAt(sort: Desc), code, ip], map: "trace_scans_tenant_scanned_code_ip_idx")
   @@map("trace_scans")
 }
 
@@ -222,6 +256,7 @@ model TraceCredential {
   issuedAt  DateTime? @map("issued_at")
   fileUrl   String    @map("file_url")
   createdAt DateTime  @default(now()) @map("created_at")
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
   batch     Batch     @relation(fields: [batchId], references: [id])
 
   @@index([tenantId])
@@ -230,16 +265,18 @@ model TraceCredential {
 }
 
 model Supply {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  ownerId   String   @map("owner_id")
-  name      String
-  unit      String
-  total     Decimal  @default(0) @db.Decimal(14, 2)
-  used      Decimal  @default(0) @db.Decimal(14, 2)
-  createdAt DateTime @default(now()) @map("created_at")
-  owner     User     @relation(fields: [ownerId], references: [id])
-  issues    SupplyIssue[]
+  id          String        @id @default(uuid())
+  tenantId    String        @map("tenant_id")
+  ownerId     String        @map("owner_id")
+  name        String
+  unit        String
+  total       Decimal       @default(0) @db.Decimal(14, 2)
+  used        Decimal       @default(0) @db.Decimal(14, 2)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  owner       User          @relation(fields: [ownerId], references: [id])
+  issues      SupplyIssue[]
+  farmRecords FarmRecord[]
 
   @@index([tenantId])
   @@index([ownerId])
@@ -255,6 +292,7 @@ model SupplyIssue {
   amount    Decimal  @db.Decimal(14, 2)
   unitPrice Decimal  @default(0) @map("unit_price") @db.Decimal(14, 2)
   createdAt DateTime @default(now()) @map("created_at")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
   owner     User     @relation(fields: [ownerId], references: [id])
   supply    Supply   @relation(fields: [supplyId], references: [id])
   batch     Batch    @relation(fields: [batchId], references: [id])
@@ -277,6 +315,7 @@ model AiProvider {
   enabled     Boolean  @default(false)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   // 每租户至多一条 enabled=true:由偏唯一索引在 DB 层根治并发双启
@@ -295,6 +334,7 @@ model OssConfig {
   enabled         Boolean  @default(false)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
 
   @@map("oss_configs")
 }
@@ -302,14 +342,15 @@ model OssConfig {
 model IntegrationConfig {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
-  provider     String   // "wechat" | "xfyun"
+  provider     String // "wechat" | "xfyun"
   appId        String?  @map("app_id")
-  secretEnc    String?  @map("secret_enc")      // 微信 Secret 密文
-  apiKeyEnc    String?  @map("api_key_enc")      // 讯飞 APIKey 密文
-  apiSecretEnc String?  @map("api_secret_enc")   // 讯飞 APISecret 密文
+  secretEnc    String?  @map("secret_enc") // 微信 Secret 密文
+  apiKeyEnc    String?  @map("api_key_enc") // 讯飞 APIKey 密文
+  apiSecretEnc String?  @map("api_secret_enc") // 讯飞 APISecret 密文
   enabled      Boolean  @default(false)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
 
   // 每租户每类型一条 → upsert
   @@unique([tenantId, provider])
@@ -329,6 +370,7 @@ model UserGroup {
   // 叠加式权限点字符串数组,叠加在 role 底座之上
   permissions Json     @default("[]")
   createdAt   DateTime @default(now()) @map("created_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
   users       User[]
 
   @@unique([tenantId, name])
@@ -346,6 +388,7 @@ model QuickTemplate {
   labor     Float?
   sort      Int      @default(0)
   createdAt DateTime @default(now()) @map("created_at")
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@map("quick_templates")
@@ -390,6 +433,23 @@ enum CreditReservationStatus {
   RELEASED
 }
 
+enum AiOperationStatus {
+  RESERVED
+  IN_FLIGHT
+  SUCCEEDED
+  FAILED
+  CONFIRMED
+  RELEASED
+  REVIEW_REQUIRED
+}
+
+enum UploadAssetStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  DELETED
+}
+
 enum OrderStatus {
   PENDING
   PAID
@@ -397,15 +457,16 @@ enum OrderStatus {
 }
 
 model CreditAccount {
-  id          String          @id @default(uuid())
-  ownerType   CreditOwnerType @map("owner_type")
-  ownerId     String          @map("owner_id")
-  tenantId    String          @map("tenant_id")
-  aiBalance   Int             @default(0) @map("ai_balance")
-  codeBalance Int             @default(0) @map("code_balance")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  ledgers     CreditLedger[]
+  id           String              @id @default(uuid())
+  ownerType    CreditOwnerType     @map("owner_type")
+  ownerId      String              @map("owner_id")
+  tenantId     String              @map("tenant_id")
+  aiBalance    Int                 @default(0) @map("ai_balance")
+  codeBalance  Int                 @default(0) @map("code_balance")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  tenant       Tenant              @relation(fields: [tenantId], references: [id])
+  ledgers      CreditLedger[]
   reservations CreditReservation[]
 
   @@unique([tenantId, ownerType, ownerId])
@@ -431,7 +492,9 @@ model CreditReservation {
   releasedAt     DateTime?               @map("released_at")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id])
   traceCodes     TraceCode[]
+  aiOperation    AiOperation?
 
   @@unique([accountId, resource, idempotencyKey])
   @@index([tenantId, status, createdAt])
@@ -439,40 +502,93 @@ model CreditReservation {
   @@map("credit_reservations")
 }
 
-model CreditLedger {
-  id           String         @id @default(uuid())
-  accountId    String         @map("account_id")
-  account      CreditAccount  @relation(fields: [accountId], references: [id])
-  resource     CreditResource
-  delta        Int
-  balanceAfter Int            @map("balance_after")
-  reason       LedgerReason
-  refType      String?        @map("ref_type")
-  refId        String?        @map("ref_id")
-  idempotencyKey String?      @map("idempotency_key")
-  operatorId   String?        @map("operator_id")
-  note         String?
-  createdAt    DateTime       @default(now()) @map("created_at")
+model AiOperation {
+  id            String             @id @default(uuid())
+  tenantId      String             @map("tenant_id")
+  userId        String             @map("user_id")
+  providerId    String?            @map("provider_id")
+  kind          String
+  operationKey  String             @map("operation_key")
+  reservationId String?            @unique @map("reservation_id")
+  reservation   CreditReservation? @relation(fields: [reservationId], references: [id])
+  status        AiOperationStatus  @default(RESERVED)
+  errorCategory String?            @map("error_category")
+  resultEnvelope Json?             @map("result_envelope")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
 
-  @@index([accountId, createdAt])
+  @@unique([tenantId, operationKey])
+  @@index([tenantId, status, createdAt])
+  @@map("ai_operations")
+}
+
+model UploadAsset {
+  id        String            @id @default(uuid())
+  tenantId  String            @map("tenant_id")
+  userId    String            @map("user_id")
+  purpose   String
+  objectKey String            @unique @map("object_key")
+  url       String?
+  sizeBytes BigInt            @map("size_bytes")
+  checksum  String
+  status    UploadAssetStatus @default(PENDING)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, status, createdAt])
+  @@index([userId, createdAt])
+  @@map("upload_assets")
+}
+
+model UploadQuotaUsage {
+  tenantId    String   @id @map("tenant_id")
+  dayKey      String   @map("day_key")
+  dailyBytes  BigInt   @default(0) @map("daily_bytes")
+  activeBytes BigInt   @default(0) @map("active_bytes")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("upload_quota_usage")
+}
+
+model CreditLedger {
+  id             String         @id @default(uuid())
+  accountId      String         @map("account_id")
+  account        CreditAccount  @relation(fields: [accountId], references: [id])
+  resource       CreditResource
+  delta          Int
+  balanceAfter   Int            @map("balance_after")
+  reason         LedgerReason
+  refType        String?        @map("ref_type")
+  refId          String?        @map("ref_id")
+  idempotencyKey String?        @map("idempotency_key")
+  operatorId     String?        @map("operator_id")
+  note           String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
   @@unique([accountId, reason, idempotencyKey])
+  @@index([accountId, createdAt])
   @@map("credit_ledgers")
 }
 
 // 售卖套餐:固定套餐(quantity 固定)或单价基准(供自定义数量计价)。
 // 单价基准:isUnit=true 的套餐,其 priceCents/quantity 即每单位价格,自定义购买按此计价。
 model CreditPlan {
-  id          String         @id @default(uuid())
-  tenantId    String         @map("tenant_id")
-  name        String
-  resource    CreditResource
-  quantity    Int            // 套餐含额度数量(单价基准套餐此处为基准单位量,通常 1)
-  priceCents  Int            @map("price_cents") // 售价(分)
-  isUnit      Boolean        @default(false) @map("is_unit") // 是否为自定义数量的单价基准
-  active      Boolean        @default(true)
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  orders      CreditOrder[]
+  id         String         @id @default(uuid())
+  tenantId   String         @map("tenant_id")
+  name       String
+  resource   CreditResource
+  quantity   Int // 套餐含额度数量(单价基准套餐此处为基准单位量,通常 1)
+  priceCents Int            @map("price_cents") // 售价(分)
+  isUnit     Boolean        @default(false) @map("is_unit") // 是否为自定义数量的单价基准
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  orders     CreditOrder[]
 
   @@index([tenantId])
   @@map("credit_plans")
@@ -481,22 +597,23 @@ model CreditPlan {
 // 购买订单:PENDING(待支付)→ PAID(已支付入账)。
 // 支付:发起支付宝下单后用户跳转付款,支付宝异步 notify 回调验签通过后入账(payChannel/tradeNo 记录渠道与交易号)。
 model CreditOrder {
-  id          String         @id @default(uuid())
-  tenantId    String         @map("tenant_id")
+  id          String          @id @default(uuid())
+  tenantId    String          @map("tenant_id")
   ownerType   CreditOwnerType @map("owner_type") // 购买方账户类型(AGENT/MERCHANT)
-  ownerId     String         @map("owner_id")
-  planId      String?        @map("plan_id")
-  plan        CreditPlan?    @relation(fields: [planId], references: [id])
+  ownerId     String          @map("owner_id")
+  planId      String?         @map("plan_id")
+  plan        CreditPlan?     @relation(fields: [planId], references: [id])
   resource    CreditResource
-  quantity    Int            // 购买额度数量
-  amountCents Int            @map("amount_cents") // 应付金额(分)
-  status      OrderStatus    @default(PENDING)
-  buyerId     String         @map("buyer_id") // 下单用户 userId
-  payChannel  String?        @map("pay_channel") // 支付渠道:alipay_page(PC) | alipay_wap(H5) | manual(管理员兜底)
-  tradeNo     String?        @map("trade_no")     // 支付宝交易号(回调入账时记录)
-  paidAt      DateTime?      @map("paid_at")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  quantity    Int // 购买额度数量
+  amountCents Int             @map("amount_cents") // 应付金额(分)
+  status      OrderStatus     @default(PENDING)
+  buyerId     String          @map("buyer_id") // 下单用户 userId
+  payChannel  String?         @map("pay_channel") // 支付渠道:alipay_page(PC) | alipay_wap(H5) | manual(管理员兜底)
+  tradeNo     String?         @map("trade_no") // 支付宝交易号(回调入账时记录)
+  paidAt      DateTime?       @map("paid_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  tenant      Tenant          @relation(fields: [tenantId], references: [id])
 
   @@unique([tradeNo])
   @@index([tenantId, ownerType, ownerId])

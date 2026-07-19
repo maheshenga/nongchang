@@ -19,7 +19,6 @@ describe('AiProvider e2e', () => {
   let sysToken: string;
   let merchantToken: string;
   let uniqueTenantId: string;
-  const uniqueTenantCode = `AIP${Date.now()}`;
   const createdIds: string[] = [];
 
   beforeAll(async () => {
@@ -31,7 +30,7 @@ describe('AiProvider e2e', () => {
     sysToken = await login(app, 'sysadmin');
     merchantToken = await login(app, 'merchantA');
     const uniqueTenant = await prisma.tenant.create({
-      data: { name: 'AI Provider e2e tenant', code: uniqueTenantCode },
+      data: { name: 'AI provider unique-index E2E', code: `AIP-${Date.now()}` },
     });
     uniqueTenantId = uniqueTenant.id;
   });
@@ -40,9 +39,7 @@ describe('AiProvider e2e', () => {
     if (createdIds.length) {
       await prisma.aiProvider.deleteMany({ where: { id: { in: createdIds } } });
     }
-    if (uniqueTenantId) {
-      await prisma.tenant.deleteMany({ where: { id: uniqueTenantId } });
-    }
+    await prisma.tenant.deleteMany({ where: { id: uniqueTenantId } });
     await app.close();
   });
 
@@ -84,12 +81,22 @@ describe('AiProvider e2e', () => {
     const res = await request(app.getHttpServer())
       .post('/api/ai/chat')
       .set('Authorization', `Bearer ${merchantToken}`)
+      .set('Idempotency-Key', 'e2e-ai-provider-chat-0001')
       .send({ message: '你好' });
     expect(res.status).toBe(400);
   });
 
+  it('billable AI endpoints require Idempotency-Key', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/ai/chat')
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .send({ message: 'hello' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Idempotency-Key/);
+  });
+
   it('偏唯一索引:同租户第二条 enabled=true 被 DB 拒绝(根治并发双启)', async () => {
-    // 使用独立租户隔离测试数据，避免触碰 DEMO 租户现有服务商记录。
+    // ai_providers.tenant_id 无 FK(#20 未纳入),用合成租户隔离真实数据。
     const base = {
       tenantId: uniqueTenantId,
       baseUrl: 'https://x.com/v1',

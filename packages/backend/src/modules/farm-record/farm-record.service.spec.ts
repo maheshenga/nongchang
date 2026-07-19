@@ -12,6 +12,7 @@ const base = { batchId: BATCH, fieldId: FIELD, action: '施肥', recordedAt: '20
 function makeService(overrides: any = {}) {
   let created: any;
   let published: any;
+  const invalidateBatch = vi.fn(async () => undefined);
   const farmRecord = {
     create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
     aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
@@ -35,7 +36,7 @@ function makeService(overrides: any = {}) {
     farmRecord,
     traceEvent,
     supplyIssue,
-    supply: { findFirst: async ({ where }: any = {}) => {
+    supply: { findFirst: async () => {
       if (overrides.supplyScoped === false) return null;
       return { id: 'sup1', ownerId: overrides.supplyOwnerMatches === false ? 'm2' : 'm1' };
     } },
@@ -44,9 +45,10 @@ function makeService(overrides: any = {}) {
     $transaction: async (fn: any) => fn(tx),
   };
   return {
-    svc: new FarmRecordService(prisma as any, new ScopeService()),
+    svc: new FarmRecordService(prisma as any, new ScopeService(), { invalidateBatch } as any),
     get created() { return created; },
     get published() { return published; },
+    invalidateBatch,
   };
 }
 
@@ -137,6 +139,8 @@ describe('FarmRecordService.create 核销', () => {
     expect(result.status).toBe('completed');
     expect(h.published.data.sourceFarmRecordId).toBe('fr1');
     expect(h.published.data.payload).toEqual({ desc: 'leaf feeding completed', image: 'https://cdn.example/1.jpg' });
+    expect(h.invalidateBatch).toHaveBeenCalledOnce();
+    expect(h.invalidateBatch).toHaveBeenCalledWith(BATCH);
   });
 
   it('pending create remains private', async () => {
@@ -144,6 +148,7 @@ describe('FarmRecordService.create 核销', () => {
     await h.svc.create(merchant, { ...base, action: 'weeding', status: 'pending' });
 
     expect(h.published).toBeUndefined();
+    expect(h.invalidateBatch).not.toHaveBeenCalled();
   });
 
   it('completed supply-quota create publishes inside the quota transaction', async () => {
@@ -188,6 +193,7 @@ function makeStatusService(overrides: { status?: 'pending' | 'completed'; publis
     return { id: 'te-status' };
   });
   const farmRecordUpdate = vi.fn(async () => ({ ...recordScalars, status: 'completed' }));
+  const invalidateBatch = vi.fn(async () => undefined);
   const tx = {
     $queryRaw: vi.fn(async () => [{ id: current.id }]),
     farmRecord: { findFirst: vi.fn(async () => current), update: farmRecordUpdate },
@@ -198,7 +204,13 @@ function makeStatusService(overrides: { status?: 'pending' | 'completed'; publis
     batch: { findFirst: vi.fn(async () => ({ id: BATCH })) },
     $transaction: vi.fn(async (fn: any) => fn(tx)),
   };
-  return { svc: new FarmRecordService(prisma as any, new ScopeService()), tx, traceEventCreate, farmRecordUpdate };
+  return {
+    svc: new FarmRecordService(prisma as any, new ScopeService(), { invalidateBatch } as any),
+    tx,
+    traceEventCreate,
+    farmRecordUpdate,
+    invalidateBatch,
+  };
 }
 
 describe('FarmRecordService.updateStatus automatic publication', () => {
@@ -209,6 +221,8 @@ describe('FarmRecordService.updateStatus automatic publication', () => {
     expect(result.status).toBe('completed');
     expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
     expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
+    expect(h.invalidateBatch).toHaveBeenCalledOnce();
+    expect(h.invalidateBatch).toHaveBeenCalledWith(BATCH);
     expect(result).not.toHaveProperty('batch');
     expect(result).not.toHaveProperty('field');
   });
@@ -220,6 +234,7 @@ describe('FarmRecordService.updateStatus automatic publication', () => {
     expect(result.status).toBe('completed');
     expect(h.farmRecordUpdate).not.toHaveBeenCalled();
     expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.invalidateBatch).not.toHaveBeenCalled();
   });
 
   it('completed to pending is rejected', async () => {
@@ -242,14 +257,15 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
   function makeListService(overrides: any = {}) {
     let findManyArgs: any;
     let countArgs: any;
+    const batchFindMany = vi.fn(async () => []);
     const prisma = {
       batch: {
         findFirst: async () => (overrides.batchScoped === false ? null : { id: 'b1' }),
-        findMany: async () => overrides.ownedBatches ?? [{ id: 'b1' }, { id: 'b2' }],
+        findMany: batchFindMany,
       },
       user: { findMany: async () => [] },
       farmRecord: {
-        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1' }]; },
+        findMany: async (a: any) => { findManyArgs = a; return overrides.rows ?? [{ id: 'fr1', batchId: 'b1' }]; },
         count: async (a: any) => { countArgs = a; return overrides.total ?? 1; },
       },
       $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
@@ -258,6 +274,7 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
       svc: new FarmRecordService(prisma as any, new ScopeService()),
       get findManyArgs() { return findManyArgs; },
       get countArgs() { return countArgs; },
+      batchFindMany,
     };
   }
 
@@ -266,7 +283,10 @@ describe('FarmRecordService.list 分页/过滤/排序', () => {
     const r = await h.svc.list(merchant, { page: 1, pageSize: 20 });
     expect(r).toMatchObject({ total: 1, page: 1, pageSize: 20 });
     expect(r.items).toHaveLength(1);
-    expect(h.findManyArgs.where.batchId).toEqual({ in: ['b1', 'b2'] });
+    expect(h.findManyArgs.where.batch).toEqual({
+      is: { tenantId: 't1', ownerId: 'm1' },
+    });
+    expect(h.batchFindMany).toHaveBeenCalledTimes(1);
     expect(h.findManyArgs.orderBy).toEqual({ recordedAt: 'desc' });
     expect(h.findManyArgs.skip).toBe(0);
     expect(h.findManyArgs.take).toBe(20);

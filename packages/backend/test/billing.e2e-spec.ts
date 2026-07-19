@@ -34,8 +34,11 @@ describe('Billing e2e', () => {
   let createdFieldId: string | null = null;
   const createdPlanIds: string[] = [];
   const createdOrderIds: string[] = [];
+  let previousManualPay: string | undefined;
 
   beforeAll(async () => {
+    previousManualPay = process.env.ALLOW_MANUAL_PAY;
+    process.env.ALLOW_MANUAL_PAY = 'true';
     const mod = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = mod.createNestApplication();
     app.setGlobalPrefix('api');
@@ -87,6 +90,8 @@ describe('Billing e2e', () => {
       where: { ownerType: 'MERCHANT', ownerId: merchantUserId },
       data: { codeBalance: 10000 },
     });
+    if (previousManualPay === undefined) delete process.env.ALLOW_MANUAL_PAY;
+    else process.env.ALLOW_MANUAL_PAY = previousManualPay;
     await app.close();
   });
 
