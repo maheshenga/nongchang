@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, Canvas } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
+import { getTenantBranding, loadTenantBranding } from '../../store/branding';
 import { listBatches, type Batch } from '../../api/farm';
 import { listTraceEvents, type TraceEvent } from '../../api/trace';
 import TraceTimeline from '../../components/TraceTimeline';
@@ -14,6 +15,7 @@ export default function Trace() {
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [branding, setBranding] = useState(getTenantBranding());
   const requestGateRef = useRef(createLatestRequestGate());
 
   useEffect(() => () => {
@@ -25,6 +27,10 @@ export default function Trace() {
       Taro.redirectTo({ url: '/pages/login/index' });
       return;
     }
+    void loadTenantBranding().then((next) => {
+      setBranding(next);
+      Taro.setNavigationBarTitle({ title: `${next.defaultCropName}溯源记录` });
+    });
     void initBatches();
   });
 
@@ -69,7 +75,7 @@ export default function Trace() {
     ctx.fillRect(0, 0, 300, 200);
     ctx.setFillStyle('#ffffff');
     ctx.setFontSize(18);
-    ctx.fillText('芍药溯源记录', 20, 40);
+    ctx.fillText(`${branding.defaultCropName}溯源记录`, 20, 40);
     ctx.setFontSize(14);
     ctx.fillText(`批次：${selected.batchNo}`, 20, 80);
     ctx.fillText(`品种：${selected.cropName}`, 20, 110);

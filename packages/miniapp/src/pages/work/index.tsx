@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
+import { getTenantBranding, loadTenantBranding } from '../../store/branding';
 import { listBatches, type Batch, type FarmRecord } from '../../api/farm';
 import { listQuickTemplates } from '../../api/quickTemplate';
 import { getBillingSummary } from '../../api/billing';
@@ -30,6 +31,7 @@ export default function Work() {
   const [isOffline, setIsOffline] = useState(false);
   const [aiMode, setAiMode] = useState<AiMode>(null);
   const [summary, setSummary] = useState<{ aiBalance: number; codeBalance: number } | null>(null);
+  const [branding, setBranding] = useState(getTenantBranding());
   const formRef = useRef<RecordFormHandle>(null);
   // 上次成功加载时间戳:切 tab 回来若在节流窗口内则跳过全量重载。
   const lastLoadRef = useRef(0);
@@ -40,6 +42,10 @@ export default function Work() {
       Taro.redirectTo({ url: '/pages/login/index' });
       return;
     }
+    void loadTenantBranding().then((next) => {
+      setBranding(next);
+      Taro.setNavigationBarTitle({ title: next.workbenchTitle });
+    });
     if (Date.now() - lastLoadRef.current < LOAD_TTL) return;
     void load();
   });
@@ -80,8 +86,8 @@ export default function Work() {
   }
 
   const subtitle = batches[0]?.cropName
-    ? `基地 · ${batches[0].cropName}种植组`
-    : '基地 A区 · 白芍种植组';
+    ? `${branding.defaultBaseLabel} · ${batches[0].cropName}种植链路`
+    : `${branding.defaultBaseLabel} · ${branding.defaultCropName}种植链路`;
   const balanceLow = !!summary && (summary.aiBalance < LOW_BALANCE || summary.codeBalance < LOW_BALANCE);
 
   const handleOpenForm = useCallback((tpl: QuickTemplateView | null) => {
@@ -95,7 +101,7 @@ export default function Work() {
         <View className="work__header-row">
           <View>
             <Text className="work__eyebrow">FIELD OPS</Text>
-            <Text className="work__title">芍药工作台</Text>
+            <Text className="work__title">{branding.workbenchTitle}</Text>
             <Text className="work__subtitle">{subtitle}</Text>
           </View>
           <View className={`work__net ${isOffline ? 'work__net--off' : ''}`}>
