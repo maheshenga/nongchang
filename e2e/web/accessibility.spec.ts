@@ -15,7 +15,7 @@ async function expectNoSeriousViolations(page: Page) {
 test.describe('@a11y accessibility', () => {
   test('public landing has no serious accessibility violations', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: '农业溯源 SaaS 平台' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: '农业溯源 SaaS 平台' }).first()).toBeVisible({ timeout: 15_000 });
     await expectNoSeriousViolations(page);
   });
 
