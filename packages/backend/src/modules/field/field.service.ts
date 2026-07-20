@@ -42,7 +42,7 @@ export class FieldService {
           select: { id: true, displayName: true },
         }),
         tx.$queryRawUnsafe<FieldCoordinateRow[]>(
-          `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id = $1::uuid`,
+          `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id::text = $1`,
           field.id,
         ),
       ]);

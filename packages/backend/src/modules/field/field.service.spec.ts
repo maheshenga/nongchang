@@ -90,6 +90,17 @@ describe('FieldService.create #23', () => {
       lat: 25,
     });
   });
+
+  it('looks up created field coordinates with a text-compatible id predicate', async () => {
+    const h = make();
+
+    await h.svc.create(merchant, dto);
+
+    expect(h.tx.$queryRawUnsafe).toHaveBeenCalledWith(
+      'SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id::text = $1',
+      'f1',
+    );
+  });
 });
 
 describe('FieldService.list', () => {
