@@ -1,21 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
-import { resolveBrowserServerConfig } from './packages/web/test/browser-server-config';
+import {
+  resolveBrowserBackendEnv,
+  resolveBrowserServerConfig,
+} from './packages/web/test/browser-server-config';
 
 const servers = resolveBrowserServerConfig(process.env);
-
-const databaseUrl = process.env.DATABASE_URL
-  ?? 'postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public';
-
-const backendEnv = {
-  ...process.env,
-  NODE_ENV: 'test',
-  DATABASE_URL: databaseUrl,
-  JWT_SECRET: process.env.JWT_SECRET ?? 'browser-test-access-secret',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ?? 'browser-test-refresh-secret',
-  APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY ?? '1'.repeat(64),
-  TRUST_PROXY_HOPS: '0',
-  PORT: String(servers.backendPort),
-};
+const backendEnv = resolveBrowserBackendEnv(process.env, servers.backendPort);
 
 export default defineConfig({
   testDir: './e2e/web',
