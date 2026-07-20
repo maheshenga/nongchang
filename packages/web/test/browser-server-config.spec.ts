@@ -15,6 +15,10 @@ type ResolveBrowserBackendEnv = (
   backendPort: number,
 ) => NodeJS.ProcessEnv;
 
+type AssertBrowserRunnerMode = (config: {
+  reuseExistingServer: boolean;
+}) => void;
+
 describe('browser server isolation', () => {
   it('uses isolated defaults and does not reuse unknown servers', () => {
     expect(resolveBrowserServerConfig({})).toEqual({
@@ -93,5 +97,19 @@ describe('browser server isolation', () => {
         TRUST_PROXY_HOPS: '0',
         PORT: '3201',
       });
+  });
+
+  it('requires direct Playwright invocations to use the verified runner mode', () => {
+    const assertBrowserRunnerMode = (
+      browserServerConfig as typeof browserServerConfig & {
+        assertBrowserRunnerMode?: AssertBrowserRunnerMode;
+      }
+    ).assertBrowserRunnerMode;
+
+    expect(assertBrowserRunnerMode).toBeTypeOf('function');
+    expect(() => assertBrowserRunnerMode?.({ reuseExistingServer: false })).toThrow(
+      /pnpm test:browser:run/,
+    );
+    expect(() => assertBrowserRunnerMode?.({ reuseExistingServer: true })).not.toThrow();
   });
 });

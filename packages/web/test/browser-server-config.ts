@@ -37,6 +37,16 @@ export function resolveBrowserServerConfig(env: NodeJS.ProcessEnv): BrowserServe
   };
 }
 
+export function assertBrowserRunnerMode(
+  config: Pick<BrowserServerConfig, 'reuseExistingServer'>,
+): void {
+  if (!config.reuseExistingServer) {
+    throw new Error(
+      'Browser tests must be launched through `pnpm test:browser:run` so server lifecycle is isolated.',
+    );
+  }
+}
+
 export function resolveBrowserBackendEnv(
   env: NodeJS.ProcessEnv,
   backendPort: number,

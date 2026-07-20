@@ -1,11 +1,75 @@
 import { EventEmitter } from 'node:events';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import * as browserTestRunner from '../../../scripts/run-browser-tests';
 
 describe('browser test runner', () => {
+  it('cleans a real tracked child when the runner receives SIGTERM', async () => {
+    const signalSource = new EventEmitter();
+    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    const controller = browserTestRunner.createTerminationController(signalSource as never);
+    controller.track(child);
+
+    try {
+      signalSource.emit('SIGTERM');
+      await controller.waitForShutdown();
+
+      expect(controller.exitCode).toBe(143);
+      expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+    } finally {
+      controller.dispose();
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
+  });
+
+  it('does not spawn when a managed port preflight fails', async () => {
+    const plan = browserTestRunner.buildBrowserRunPlan({
+      env: {},
+      nodeExecutable: 'node-test',
+      repoRoot: 'repo-root',
+      testArgs: [],
+    });
+    const startProcess = vi.fn();
+
+    await expect(browserTestRunner.executeBrowserRunPlan(plan, {
+      signalSource: new EventEmitter() as never,
+      assertPortUnused: vi.fn().mockRejectedValue(new Error('occupied port')),
+      startProcess,
+    })).rejects.toThrow('occupied port');
+    expect(startProcess).not.toHaveBeenCalled();
+  });
+
+  it('does not spawn when an external reuse target is unavailable', async () => {
+    const plan = browserTestRunner.buildBrowserRunPlan({
+      env: { E2E_REUSE_SERVERS: 'true' },
+      nodeExecutable: 'node-test',
+      repoRoot: 'repo-root',
+      testArgs: [],
+    });
+    const startProcess = vi.fn();
+
+    await expect(browserTestRunner.executeBrowserRunPlan(plan, {
+      signalSource: new EventEmitter() as never,
+      assertUrlAvailable: vi.fn().mockRejectedValue(new Error('external unavailable')),
+      startProcess,
+    })).rejects.toThrow('external unavailable');
+    expect(startProcess).not.toHaveBeenCalled();
+  });
+
+  it('reports a managed child exit as a possible port race', async () => {
+    await expect(browserTestRunner.waitForManagedUrl(
+      'http://127.0.0.1:3201/api/health/ready',
+      { exitCode: 1, signalCode: null } as never,
+      25,
+    )).rejects.toThrow(/port may have been claimed after preflight/);
+  });
+
   it('requires an external reuse target to be available', async () => {
     const server = createHttpServer((_request, response) => response.end('ok'));
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

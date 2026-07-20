@@ -1,5 +1,4 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { once } from 'node:events';
 import { connect } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +13,26 @@ interface ProcessPlan {
   args: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+}
+
+interface SignalSource {
+  on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  off(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+}
+
+interface BrowserRunDependencies {
+  signalSource?: SignalSource;
+  assertPortUnused?: typeof assertPortUnused;
+  assertUrlAvailable?: typeof assertUrlAvailable;
+  startProcess?: (plan: ProcessPlan) => ChildProcess;
+  waitForManagedUrl?: typeof waitForManagedUrl;
+}
+
+export interface TerminationController {
+  track(child: ChildProcess): void;
+  waitForShutdown(): Promise<void>;
+  readonly exitCode: number | undefined;
+  dispose(): void;
 }
 
 export interface BrowserRunPlan {
@@ -108,52 +127,157 @@ export async function assertUrlAvailable(url: string): Promise<void> {
   }
 }
 
-async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await Promise.race([
-    once(child, 'exit'),
-    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
-  ]);
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
+function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (hasExited(child)) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let timer: NodeJS.Timeout | undefined;
+    const cleanup = () => {
+      child.off('exit', onExit);
+      if (timer) clearTimeout(timer);
+    };
+    const onExit = () => {
+      cleanup();
+      resolve();
+    };
+
+    child.once('exit', onExit);
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+
+    if (hasExited(child)) onExit();
+  });
 }
 
 export async function stopManagedProcess(child: ChildProcess, timeoutMs = 5_000): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (hasExited(child)) return;
+  const gracefulExit = waitForExit(child, timeoutMs);
+  if (hasExited(child)) return;
   child.kill('SIGTERM');
-  await waitForExit(child, timeoutMs);
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  await gracefulExit;
+  if (hasExited(child)) return;
+  const forcedExit = waitForExit(child, timeoutMs);
+  if (hasExited(child)) return;
   child.kill('SIGKILL');
-  await waitForExit(child, timeoutMs);
-  if (child.exitCode === null && child.signalCode === null) {
+  await forcedExit;
+  if (!hasExited(child)) {
     throw new Error(`Managed process ${child.pid ?? 'unknown'} did not exit`);
   }
 }
 
-async function waitForUrl(url: string, child: ChildProcess, timeoutMs = 120_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let spawnError: Error | undefined;
-  child.once('error', (error) => {
-    spawnError = error;
-  });
-  while (Date.now() < deadline) {
-    if (spawnError) throw spawnError;
-    if (child.exitCode !== null || child.signalCode !== null) {
-      throw new Error(`Managed process exited before ${url} became ready`);
+export function createTerminationController(signalSource: SignalSource): TerminationController {
+  const trackedChildren = new Set<ChildProcess>();
+  let requestedExitCode: number | undefined;
+  let shutdownPromise: Promise<void> | undefined;
+
+  const beginShutdown = (): Promise<void> => {
+    if (!shutdownPromise) {
+      const children = [...trackedChildren].reverse();
+      shutdownPromise = Promise.allSettled(children.map((child) => stopManagedProcess(child)))
+        .then((results) => {
+          const failures = results
+            .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+            .map((result) => result.reason);
+          if (failures.length > 0) {
+            throw new AggregateError(failures, 'Failed to stop one or more browser test processes');
+          }
+        });
     }
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-      if (response.ok) return;
-    } catch {
-      // The service is still starting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
+    return shutdownPromise;
+  };
+
+  const onSigint = () => {
+    requestedExitCode ??= 130;
+    void beginShutdown().catch(() => undefined);
+  };
+  const onSigterm = () => {
+    requestedExitCode ??= 143;
+    void beginShutdown().catch(() => undefined);
+  };
+
+  signalSource.on('SIGINT', onSigint);
+  signalSource.on('SIGTERM', onSigterm);
+
+  return {
+    track(child) {
+      trackedChildren.add(child);
+      if (shutdownPromise && !hasExited(child)) {
+        shutdownPromise = shutdownPromise.then(() => stopManagedProcess(child));
+      }
+    },
+    waitForShutdown: beginShutdown,
+    get exitCode() {
+      return requestedExitCode;
+    },
+    dispose() {
+      signalSource.off('SIGINT', onSigint);
+      signalSource.off('SIGTERM', onSigterm);
+    },
+  };
 }
 
-async function waitForProcessExit(child: ChildProcess): Promise<number> {
+export async function waitForManagedUrl(
+  url: string,
+  child: ChildProcess,
+  timeoutMs = 120_000,
+): Promise<void> {
+  if (hasExited(child)) {
+    throw new Error(
+      `Managed process exited before ${url} became ready; port may have been claimed after preflight`,
+    );
+  }
+  const deadline = Date.now() + timeoutMs;
+  let spawnError: Error | undefined;
+  const onSpawnError = (error: Error) => {
+    spawnError = error;
+  };
+  child.once('error', onSpawnError);
+  try {
+    while (Date.now() < deadline) {
+      if (spawnError) throw spawnError;
+      if (hasExited(child)) {
+        throw new Error(
+          `Managed process exited before ${url} became ready; port may have been claimed after preflight`,
+        );
+      }
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
+        if (response.ok) return;
+      } catch {
+        // The service is still starting.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error(`Timed out waiting for ${url}`);
+  } finally {
+    child.off('error', onSpawnError);
+  }
+}
+
+function waitForProcessExit(child: ChildProcess): Promise<number> {
+  if (hasExited(child)) return Promise.resolve(child.exitCode ?? 1);
   return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code) => resolve(code ?? 1));
+    const cleanup = () => {
+      child.off('error', onError);
+      child.off('exit', onExit);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    const onExit = (code: number | null) => {
+      cleanup();
+      resolve(code ?? 1);
+    };
+    child.once('error', onError);
+    child.once('exit', onExit);
+    if (hasExited(child)) onExit(child.exitCode);
   });
 }
 
@@ -166,6 +290,60 @@ function startProcess(plan: ProcessPlan): ChildProcess {
   });
 }
 
+export async function executeBrowserRunPlan(
+  plan: BrowserRunPlan,
+  dependencies: BrowserRunDependencies = {},
+): Promise<number> {
+  const signalSource = dependencies.signalSource ?? process;
+  const checkPortUnused = dependencies.assertPortUnused ?? assertPortUnused;
+  const checkUrlAvailable = dependencies.assertUrlAvailable ?? assertUrlAvailable;
+  const spawnProcess = dependencies.startProcess ?? startProcess;
+  const waitUntilManagedUrl = dependencies.waitForManagedUrl ?? waitForManagedUrl;
+  const termination = createTerminationController(signalSource);
+
+  try {
+    if (!plan.manageServers) {
+      await Promise.all([
+        checkUrlAvailable(`${plan.backendUrl}/api/health/ready`),
+        checkUrlAvailable(plan.webUrl),
+      ]);
+      if (termination.exitCode !== undefined) return termination.exitCode;
+      const playwright = spawnProcess(plan.playwright);
+      termination.track(playwright);
+      const code = await waitForProcessExit(playwright);
+      return termination.exitCode ?? code;
+    }
+
+    await Promise.all([
+      checkPortUnused(plan.backendPort),
+      checkPortUnused(plan.webPort),
+    ]);
+    if (termination.exitCode !== undefined) return termination.exitCode;
+
+    const backend = spawnProcess(plan.backend);
+    termination.track(backend);
+    const web = spawnProcess(plan.web);
+    termination.track(web);
+
+    await Promise.all([
+      waitUntilManagedUrl(`${plan.backendUrl}/api/health/ready`, backend),
+      waitUntilManagedUrl(plan.webUrl, web),
+    ]);
+    if (termination.exitCode !== undefined) return termination.exitCode;
+
+    const playwright = spawnProcess(plan.playwright);
+    termination.track(playwright);
+    const code = await waitForProcessExit(playwright);
+    return termination.exitCode ?? code;
+  } catch (error) {
+    if (termination.exitCode !== undefined) return termination.exitCode;
+    throw error;
+  } finally {
+    termination.dispose();
+    await termination.waitForShutdown();
+  }
+}
+
 async function run(): Promise<number> {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const plan = buildBrowserRunPlan({
@@ -174,33 +352,7 @@ async function run(): Promise<number> {
     repoRoot,
     testArgs: normalizeTestArgs(process.argv.slice(2)),
   });
-  if (!plan.manageServers) {
-    await Promise.all([
-      assertUrlAvailable(`${plan.backendUrl}/api/health/ready`),
-      assertUrlAvailable(plan.webUrl),
-    ]);
-    return waitForProcessExit(startProcess(plan.playwright));
-  }
-  await Promise.all([
-    assertPortUnused(plan.backendPort),
-    assertPortUnused(plan.webPort),
-  ]);
-  const backend = startProcess(plan.backend);
-  const web = startProcess(plan.web);
-
-  try {
-    await Promise.all([
-      waitForUrl(`${plan.backendUrl}/api/health/ready`, backend),
-      waitForUrl(plan.webUrl, web),
-    ]);
-    const playwright = startProcess(plan.playwright);
-    return await waitForProcessExit(playwright);
-  } finally {
-    await Promise.all([
-      stopManagedProcess(web),
-      stopManagedProcess(backend),
-    ]);
-  }
+  return executeBrowserRunPlan(plan);
 }
 
 const isMain = process.argv[1]
