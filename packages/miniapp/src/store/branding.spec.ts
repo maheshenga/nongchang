@@ -25,7 +25,7 @@ import { clearTenantBranding, getTenantBranding, loadTenantBranding } from './br
 
 beforeEach(() => {
   vi.resetAllMocks();
-  Taro.__reset();
+  (Taro as typeof Taro & { __reset(): void }).__reset();
   clearTenantBranding();
   getTokenMock.mockReturnValue('token-a');
 });
