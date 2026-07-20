@@ -8,14 +8,14 @@ This document is the release checklist for the production-hardening roadmap in `
 
 The formal `v*` release runs in the protected GitHub Environment `production-web`. It builds on Linux x64 and must pass all of the following before the archive/manifest pair is uploaded:
 
-- `pnpm verify:release:web` for shared/backend/Web build, typecheck, lint, unit, e2e, and audit;
+- `pnpm verify:release:web` for shared/backend/Web build, typecheck, lint, unit, and e2e;
 - `pnpm test:browser` and `pnpm test:accessibility`;
 - `pnpm --filter @nongchang/backend db:query-plans`;
 - `pnpm backup:verify-restore`;
-- `pnpm audit:prod` and `pnpm release:test`;
+- one `pnpm audit:prod` step and `pnpm release:test`;
 - `pnpm release:artifact -- --target web` followed by archive extraction verification with the expected SHA and `target=web`.
 
-The artifact contract excludes miniapp output and includes only the runtime scripts/configuration needed by Web/API. `VITE_PUBLIC_SALES_CONTACT` is a protected public build variable. E2E and backup credentials are GitHub secret references; Baota runtime secrets never enter the workflow or repository.
+The artifact contract excludes miniapp output and includes only the runtime scripts/configuration needed by Web/API. After artifact verification, CI deterministically creates a first-host tooling archive with normalized tar metadata and `gzip -n`; its manifest binds the tooling archive checksum to the verified application manifest checksum. `VITE_PUBLIC_SALES_CONTACT` is a protected public build variable. E2E and backup credentials are GitHub secret references; Baota runtime secrets never enter the workflow or repository.
 
 Production verification follows this immutable order: archive/manifest verification, server preflight, encrypted off-host backup confirmation, forward-only migration, inactive candidate readiness/live SHA smoke, atomic Nginx switch, public smoke, worker restart/health, and application-only state commit. See [Baota deployment](../deploy/baota.md) and [release runbook](./release-runbook.md).
 

@@ -1,0 +1,2 @@
+root "/www/wwwroot/farm.qingyouai.com/releases/0000000000000000000000000000000000000000/web";
+set $nongchang_api_origin http://127.0.0.1:3001;

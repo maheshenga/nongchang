@@ -87,6 +87,45 @@ jobs:
             --release-dir "$release" \
             --expected-sha "$GITHUB_SHA" \
             --expected-target web
+      - name: Create first-host release tooling bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/nongchang-release"
+          release="$RUNNER_TEMP/nongchang-release-verify/$GITHUB_SHA"
+          stage="$RUNNER_TEMP/nongchang-release-tooling"
+          tar_file="$RUNNER_TEMP/nongchang-$GITHUB_SHA.tooling.tar"
+          archive="$output/nongchang-$GITHUB_SHA.tooling.tar.gz"
+          manifest="$output/nongchang-$GITHUB_SHA.tooling.manifest.json"
+          rm -rf "$stage" "$tar_file"
+          mkdir -p "$stage/scripts/release" "$stage/packages/backend"
+          cp "$release/scripts/release/artifact-contract.mjs" "$stage/scripts/release/"
+          cp "$release/scripts/release/verify-artifact.mjs" "$stage/scripts/release/"
+          cp "$release/scripts/release/server-preflight.mjs" "$stage/scripts/release/"
+          cp "$release/scripts/release/switch-release.mjs" "$stage/scripts/release/"
+          cp "$release/scripts/release/smoke.mjs" "$stage/scripts/release/"
+          cp "$release/scripts/release/rollback.mjs" "$stage/scripts/release/"
+          cp "$release/packages/backend/package.json" "$stage/packages/backend/package.json"
+          cp -a "$release/node_modules" "$stage/node_modules"
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+            --pax-option=delete=atime,delete=ctime \
+            --format=posix -cf "$tar_file" -C "$stage" .
+          gzip -n -c "$tar_file" > "$archive"
+          tooling_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          source_manifest="$output/nongchang-$GITHUB_SHA.manifest.json"
+          source_manifest_sha="$(sha256sum "$source_manifest" | awk '{print $1}')"
+          cat > "$manifest" <<EOF
+          {
+            "schemaVersion": 1,
+            "gitSha": "$GITHUB_SHA",
+            "target": "web",
+            "archive": "$(basename "$archive")",
+            "toolingArchiveSha256": "$tooling_sha",
+            "sourceManifest": "$(basename "$source_manifest")",
+            "sourceManifestSha256": "$source_manifest_sha"
+          }
+          EOF
+          echo "$tooling_sha  $archive" | sha256sum --check --strict
       - uses: actions/upload-artifact@v4
         with:
           name: nongchang-${{ github.sha }}

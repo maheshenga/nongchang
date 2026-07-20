@@ -1,8 +1,8 @@
 import { resolve4, resolve6 } from 'node:dns/promises';
-import { statfs } from 'node:fs/promises';
+import { lstat, mkdir, rm, statfs } from 'node:fs/promises';
 import net from 'node:net';
 import { freemem } from 'node:os';
-import { isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import tls from 'node:tls';
 import { fileURLToPath } from 'node:url';
 import { assertReleaseSha, assertWebReleaseTarget } from './artifact-contract.mjs';
@@ -63,7 +63,7 @@ export function assertCapacity({ freeDiskBytes, availableMemoryBytes, artifactBy
   if (freeDiskBytes < artifactBytes + releaseBytes + backupBytes) throw new Error('free disk cannot hold the artifact, extracted release, and new backup');
 }
 
-function parseArgs(argv) {
+export function parseServerPreflightArgs(argv) {
   const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--') continue;
@@ -141,36 +141,69 @@ export async function assertCandidateArtifact({ archive, manifestFile, releaseDi
   });
 }
 
-export async function runServerPreflight(options) {
+export async function runServerPreflight(options, dependencies = {}) {
+  const verifyCandidate = dependencies.assertCandidateArtifact ?? assertCandidateArtifact;
+  const filesystemStats = dependencies.statfs ?? statfs;
+  const availableMemory = dependencies.freemem ?? freemem;
+  const resolveAddresses = dependencies.resolveDnsAddresses ?? resolveDnsAddresses;
+  const loadCertificate = dependencies.readCertificate ?? readCertificate;
+  const checkPort = dependencies.isPortAvailable ?? isPortAvailable;
   const capacityPath = options.releaseRoot ?? options.releaseDir;
-  const artifact = await assertCandidateArtifact({
-    ...options,
-    onBeforeExtract: async ({ archiveBytes, estimatedReleaseBytes }) => {
-      const filesystem = await statfs(capacityPath);
-      assertCapacity({
-        freeDiskBytes: Number(filesystem.bavail) * Number(filesystem.bsize),
-        availableMemoryBytes: freemem(),
-        artifactBytes: archiveBytes,
-        releaseBytes: estimatedReleaseBytes,
-        backupBytes: options.backupBytes,
-      });
-    },
-  });
-  const addresses = await resolveDnsAddresses(options.hostname);
-  assertDnsTarget(addresses, options.targetIp);
-  const peer = await readCertificate(options.targetIp, options.hostname);
-  assertCertificateNames(certificateNames(peer), options.hostname);
-  assertCertificateValidity(peer);
-  assertCandidatePortAvailability({ port: options.candidatePort, available: await isPortAvailable(options.candidatePort) });
-  const filesystem = await statfs(capacityPath);
-  const freeDiskBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
-  const availableMemoryBytes = freemem();
-  assertCapacity({ freeDiskBytes, availableMemoryBytes, artifactBytes: artifact.archiveBytes, releaseBytes: artifact.releaseBytes, backupBytes: options.backupBytes });
-  return { status: 'ok', hostname: options.hostname, targetIp: options.targetIp, candidatePort: options.candidatePort, expectedSha: options.expectedSha, target: artifact.target, freeDiskBytes, availableMemoryBytes };
+  const releaseDir = options.releaseDir ?? resolve(options.releaseRoot, 'releases', options.expectedSha);
+  if (await lstat(releaseDir).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))) {
+    throw new Error('candidate release directory must not pre-exist');
+  }
+  await mkdir(dirname(releaseDir), { recursive: true });
+  await mkdir(releaseDir);
+  try {
+    const artifact = await verifyCandidate({
+      ...options,
+      releaseDir,
+      onBeforeExtract: async ({ archiveBytes, estimatedReleaseBytes }) => {
+        const filesystem = await filesystemStats(capacityPath);
+        assertCapacity({
+          freeDiskBytes: Number(filesystem.bavail) * Number(filesystem.bsize),
+          availableMemoryBytes: availableMemory(),
+          artifactBytes: archiveBytes,
+          releaseBytes: estimatedReleaseBytes,
+          backupBytes: options.backupBytes,
+        });
+      },
+    });
+    const addresses = await resolveAddresses(options.hostname);
+    assertDnsTarget(addresses, options.targetIp);
+    const peer = await loadCertificate(options.targetIp, options.hostname);
+    assertCertificateNames(certificateNames(peer), options.hostname);
+    assertCertificateValidity(peer);
+    assertCandidatePortAvailability({ port: options.candidatePort, available: await checkPort(options.candidatePort) });
+    const filesystem = await filesystemStats(capacityPath);
+    const freeDiskBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
+    const availableMemoryBytes = availableMemory();
+    assertCapacity({
+      freeDiskBytes,
+      availableMemoryBytes,
+      artifactBytes: artifact.archiveBytes,
+      releaseBytes: artifact.releaseBytes,
+      backupBytes: options.backupBytes,
+    });
+    return {
+      status: 'ok',
+      hostname: options.hostname,
+      targetIp: options.targetIp,
+      candidatePort: options.candidatePort,
+      expectedSha: options.expectedSha,
+      target: artifact.target,
+      freeDiskBytes,
+      availableMemoryBytes,
+    };
+  } catch (error) {
+    await rm(releaseDir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runServerPreflight(parseArgs(process.argv.slice(2)))
+  runServerPreflight(parseServerPreflightArgs(process.argv.slice(2)))
     .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
     .catch((error) => {
       process.stderr.write(`server preflight failed: ${error.message}\n`);

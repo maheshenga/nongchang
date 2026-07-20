@@ -13,7 +13,7 @@ server {
     ssl_certificate /www/server/panel/vhost/cert/farm.qingyouai.com/fullchain.pem;
     ssl_certificate_key /www/server/panel/vhost/cert/farm.qingyouai.com/privkey.pem;
 
-    root /www/wwwroot/farm.qingyouai.com/current/web;
+    include /www/wwwroot/farm.qingyouai.com/shared/active-release.conf;
     index index.html;
     client_max_body_size 12m;
     client_body_timeout 30s;
@@ -32,7 +32,7 @@ server {
         allow 127.0.0.1;
         allow ::1;
         deny all;
-        include /www/wwwroot/farm.qingyouai.com/shared/active-api.conf;
+        proxy_pass $nongchang_api_origin;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -41,7 +41,7 @@ server {
     }
 
     location /api/ {
-        include /www/wwwroot/farm.qingyouai.com/shared/active-api.conf;
+        proxy_pass $nongchang_api_origin;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

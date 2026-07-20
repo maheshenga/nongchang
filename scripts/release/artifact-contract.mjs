@@ -17,7 +17,7 @@ export const WEB_REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'ops/data-stack/compose.production.yml',
   'ops/data-stack/data-stack.env.example',
   'ops/pm2/ecosystem.config.cjs',
-  'ops/nginx/active-api.conf.example',
+  'ops/nginx/active-release.conf.example',
   'ops/nginx/farm.qingyouai.com.conf.template',
   'ops/runtime/production.env.example',
   'ops/logrotate/nongchang',

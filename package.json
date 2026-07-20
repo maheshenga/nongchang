@@ -19,7 +19,7 @@
     "test:accessibility": "pnpm test:browser:prepare && pnpm test:browser:run -- --grep @a11y",
     "verify:local": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm build:web && pnpm build:miniapp && pnpm audit:prod",
     "verify:production": "pnpm verify:local && pnpm test:e2e",
-    "verify:release:web": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web && pnpm audit:prod",
+    "verify:release:web": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web",
     "backup:postgres": "node scripts/backup-postgres.mjs",
     "backup:restore": "node scripts/restore-postgres.mjs",
     "backup:verify-restore": "node scripts/verify-backup-restore.mjs",
@@ -45,6 +45,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "typescript": "~5.8.2",
-    "typescript-eslint": "^8.61.1"
+    "typescript-eslint": "^8.61.1",
+    "yaml": "2.8.1"
   }
 }

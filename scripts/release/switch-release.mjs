@@ -40,10 +40,12 @@ export function assertNode20Version(version) {
   }
 }
 
-export function renderActiveApi(port) {
+export function renderActiveRelease(releasePath, port) {
+  assertAbsoluteReleasePath(releasePath, 'active release');
   const numericPort = Number(port);
   if (!ALLOWED_API_PORTS.has(numericPort)) throw new Error('active API port must be 3001 or 3002');
-  return `proxy_pass http://127.0.0.1:${numericPort};\n`;
+  const webRoot = `${releasePath.replaceAll('\\', '/').replace(/\/$/, '')}/web`.replaceAll('"', '\\"');
+  return `root "${webRoot}";\nset $nongchang_api_origin http://127.0.0.1:${numericPort};\n`;
 }
 
 export function validateDeployState(state) {
@@ -117,14 +119,15 @@ async function writeTextAtomic(path, content) {
   await rename(temp, path);
 }
 
-async function writeActiveApiAtomic(outputFile, port) {
-  await writeTextAtomic(outputFile, renderActiveApi(port));
+async function writeActiveReleaseAtomic(outputFile, releasePath, port) {
+  await writeTextAtomic(outputFile, renderActiveRelease(releasePath, port));
 }
 
 async function replaceSymlinkAtomic(linkPath, target) {
   const temp = `${linkPath}.tmp-${process.pid}`;
   await rm(temp, { force: true, recursive: true });
   await symlink(target, temp, 'dir');
+  if (process.platform === 'win32') await rm(linkPath, { force: true, recursive: true });
   await rename(temp, linkPath);
 }
 
@@ -147,6 +150,12 @@ async function readOptionalLink(path) {
   });
 }
 
+export async function readDeployState(releaseRoot) {
+  if (!isAbsolute(releaseRoot)) throw new Error('release root must be absolute');
+  const raw = await readOptionalFile(join(releaseRoot, 'deploy-state.json'));
+  return raw === null ? null : validateDeployState(JSON.parse(raw));
+}
+
 export async function assertSwitchCandidateArtifact({ candidateRelease, candidateGitSha, expectedTarget }) {
   assertWebReleaseTarget(expectedTarget);
   return readAndAssertArtifactManifest(candidateRelease, candidateGitSha, expectedTarget);
@@ -164,7 +173,7 @@ export function assertRoutingState(current, snapshot, releaseRoot) {
     throw new Error('active release is outside releases/<40-character-git-sha>');
   }
   if (snapshot.currentRelease !== expectedActive) throw new Error('current symlink does not match deploy-state.json');
-  if (snapshot.activeInclude !== renderActiveApi(current.activePort)) {
+  if (snapshot.activeInclude !== renderActiveRelease(current.activeRelease, current.activePort)) {
     throw new Error('active Nginx include does not match deploy-state.json');
   }
   if (current.previousRelease) {
@@ -215,6 +224,7 @@ export async function executeReleaseSwitch(candidate, operations) {
   let candidateStarted = false;
   let trafficStaged = false;
   let reloadAttempted = false;
+  let workerChanged = false;
 
   try {
     candidateStarted = true;
@@ -226,18 +236,26 @@ export async function executeReleaseSwitch(candidate, operations) {
     reloadAttempted = true;
     await operations.reloadNginx();
     await operations.smokePublic(candidate);
-    await operations.updatePrevious(snapshot.currentRelease ?? null);
+    workerChanged = true;
+    await operations.restartWorker(candidate);
+    await operations.smokeWorker(candidate);
+    await operations.updateLinks(candidate, snapshot.currentRelease ?? null);
     await operations.commitState(next);
   } catch (error) {
+    const restorationErrors = [];
     if (trafficStaged) {
       try {
         await operations.restoreTraffic(snapshot);
         if (reloadAttempted) await operations.reloadNginx();
       } catch (rollbackError) {
-        throw new Error(
-          `release switch failed: ${error.message}; traffic rollback also failed: ${rollbackError.message}`,
-          { cause: error },
-        );
+        restorationErrors.push(`traffic rollback failed: ${rollbackError.message}`);
+      }
+    }
+    if (workerChanged) {
+      try {
+        await operations.restoreWorker(current);
+      } catch (rollbackError) {
+        restorationErrors.push(`worker rollback failed: ${rollbackError.message}`);
       }
     }
     if (candidateStarted) {
@@ -247,23 +265,16 @@ export async function executeReleaseSwitch(candidate, operations) {
         // The inactive candidate remains out of traffic and can be cleaned up manually.
       }
     }
+    if (restorationErrors.length) {
+      throw new Error(`release switch failed: ${error.message}; ${restorationErrors.join('; ')}`, { cause: error });
+    }
     throw error;
   }
 
-  const lifecycleErrors = [];
   try {
     if (current) await operations.stopOldApi(current);
   } catch (error) {
-    lifecycleErrors.push(error.message);
-  }
-  try {
-    await operations.restartWorker(candidate);
-    await operations.smokeWorker(candidate);
-  } catch (error) {
-    lifecycleErrors.push(error.message);
-  }
-  if (lifecycleErrors.length) {
-    throw new Error(`traffic is active but post-switch lifecycle failed: ${lifecycleErrors.join('; ')}`);
+    throw new Error(`release committed but old API cleanup failed: ${error.message}`, { cause: error });
   }
 
   await operations.pruneReleases(next);
@@ -310,12 +321,14 @@ function assertReleaseLayout(options) {
   assertWebReleaseTarget(options.expectedTarget);
 }
 
-export function createProductionOperations(options) {
+export function createProductionOperations(options, dependencies = {}) {
   assertReleaseLayout(options);
+  const executeCommand = dependencies.runCommand ?? runCommand;
+  const smoke = dependencies.runSmoke ?? runSmoke;
   const stateFile = join(options.releaseRoot, 'deploy-state.json');
   const currentLink = join(options.releaseRoot, 'current');
   const previousLink = join(options.releaseRoot, 'previous');
-  const activeInclude = join(options.releaseRoot, 'shared', 'active-api.conf');
+  const activeInclude = join(options.releaseRoot, 'shared', 'active-release.conf');
   const ecosystem = join(options.candidateRelease, 'ops', 'pm2', 'ecosystem.config.cjs');
   const candidateName = releaseProcessName(options.candidatePort);
   const processEnv = {
@@ -323,13 +336,10 @@ export function createProductionOperations(options) {
     NONGCHANG_NODE_BIN: options.nodeBin,
     DEPLOYED_GIT_SHA: options.candidateGitSha,
   };
-  const nginx = (args) => runCommand(options.nginxBin, [...args, '-c', options.nginxConf]);
+  const nginx = (args) => executeCommand(options.nginxBin, [...args, '-c', options.nginxConf]);
 
   return {
-    readState: async () => {
-      const raw = await readOptionalFile(stateFile);
-      return raw === null ? null : validateDeployState(JSON.parse(raw));
-    },
+    readState: () => readDeployState(options.releaseRoot),
     captureRouting: async (current) => {
       const currentLinkTarget = await readOptionalLink(currentLink);
       const previousLinkTarget = await readOptionalLink(previousLink);
@@ -353,13 +363,13 @@ export function createProductionOperations(options) {
       ]) {
         if (!(await stat(required).catch(() => null))) throw new Error(`candidate release input is missing: ${required}`);
       }
-      const nodeVersion = await runCommand(options.nodeBin, ['--version']);
+      const nodeVersion = await executeCommand(options.nodeBin, ['--version']);
       assertNode20Version(nodeVersion.stdout);
       await mkdir(join(options.releaseRoot, 'shared', 'logs'), { recursive: true, mode: 0o750 });
-      await runCommand(options.pm2Bin, ['delete', candidateName], { allowFailure: true });
-      await runCommand(options.pm2Bin, ['start', ecosystem, '--only', candidateName, '--update-env'], { env: processEnv });
+      await executeCommand(options.pm2Bin, ['delete', candidateName], { allowFailure: true });
+      await executeCommand(options.pm2Bin, ['start', ecosystem, '--only', candidateName, '--update-env'], { env: processEnv });
     },
-    smokeCandidate: () => runSmoke({
+    smokeCandidate: () => smoke({
       baseUrl: `http://127.0.0.1:${options.candidatePort}`,
       expectedSha: options.candidateGitSha,
       traceCode: options.traceCode,
@@ -367,12 +377,11 @@ export function createProductionOperations(options) {
     }),
     stageTraffic: async () => {
       await mkdir(dirname(activeInclude), { recursive: true });
-      await writeActiveApiAtomic(activeInclude, options.candidatePort);
-      await replaceSymlinkAtomic(currentLink, options.candidateRelease);
+      await writeActiveReleaseAtomic(activeInclude, options.candidateRelease, options.candidatePort);
     },
     validateNginx: () => nginx(['-t']),
     reloadNginx: () => nginx(['-s', 'reload']),
-    smokePublic: () => runSmoke({
+    smokePublic: () => smoke({
       baseUrl: `https://${options.hostname}`,
       expectedSha: options.candidateGitSha,
       traceCode: options.traceCode,
@@ -383,21 +392,40 @@ export function createProductionOperations(options) {
       await restoreLink(currentLink, snapshot.currentLinkTarget);
       await restoreLink(previousLink, snapshot.previousLinkTarget);
     },
-    updatePrevious: async (oldRelease) => {
+    updateLinks: async (_candidate, oldRelease) => {
       if (oldRelease) await replaceSymlinkAtomic(previousLink, oldRelease);
       else await rm(previousLink, { force: true, recursive: true });
+      await replaceSymlinkAtomic(currentLink, options.candidateRelease);
     },
     commitState: (state) => writeDeployStateAtomic(stateFile, state),
-    stopOldApi: (state) => runCommand(options.pm2Bin, ['stop', releaseProcessName(state.activePort)]),
-    restartWorker: () => runCommand(
+    stopOldApi: (state) => executeCommand(options.pm2Bin, ['stop', releaseProcessName(state.activePort)]),
+    restartWorker: () => executeCommand(
       options.pm2Bin,
       ['startOrRestart', ecosystem, '--only', 'nongchang-worker', '--update-env'],
       { env: processEnv },
     ),
-    smokeWorker: () => runSmoke({
+    smokeWorker: () => smoke({
       baseUrl: 'http://127.0.0.1:3003',
       expectedSha: options.candidateGitSha,
     }),
+    restoreWorker: async (state) => {
+      if (!state) {
+        await executeCommand(options.pm2Bin, ['delete', 'nongchang-worker'], { allowFailure: true });
+        return;
+      }
+      const oldEcosystem = join(state.activeRelease, 'ops', 'pm2', 'ecosystem.config.cjs');
+      const oldEnv = {
+        NONGCHANG_RELEASE_DIR: state.activeRelease,
+        NONGCHANG_NODE_BIN: options.nodeBin,
+        DEPLOYED_GIT_SHA: state.activeGitSha,
+      };
+      await executeCommand(
+        options.pm2Bin,
+        ['startOrRestart', oldEcosystem, '--only', 'nongchang-worker', '--update-env'],
+        { env: oldEnv },
+      );
+      await smoke({ baseUrl: 'http://127.0.0.1:3003', expectedSha: state.activeGitSha });
+    },
     pruneReleases: async (state) => {
       const releasesDir = join(options.releaseRoot, 'releases');
       const entries = await readdir(releasesDir, { withFileTypes: true });
@@ -416,11 +444,11 @@ export function createProductionOperations(options) {
         await rm(path, { recursive: true, force: true });
       }
     },
-    cleanupCandidate: () => runCommand(options.pm2Bin, ['delete', candidateName], { allowFailure: true }),
+    cleanupCandidate: () => executeCommand(options.pm2Bin, ['delete', candidateName], { allowFailure: true }),
   };
 }
 
-function parseArgs(argv) {
+export function parseSwitchArgs(argv, env = process.env) {
   const options = { hostname: 'farm.qingyouai.com' };
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--') continue;
@@ -444,12 +472,12 @@ function parseArgs(argv) {
   assertReleaseSha(options.candidateGitSha);
   options.candidateRelease = join(options.releaseRoot, 'releases', options.candidateGitSha);
   options.expectedTarget = assertWebReleaseTarget(options.expectedTarget);
-  options.accessToken = process.env.NONGCHANG_SMOKE_ACCESS_TOKEN;
+  options.accessToken = env.NONGCHANG_SMOKE_ACCESS_TOKEN;
   return options;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const options = parseArgs(process.argv.slice(2));
+  const options = parseSwitchArgs(process.argv.slice(2));
   withReleaseLock(options.releaseRoot, () => executeReleaseSwitch(options, createProductionOperations(options)))
     .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
     .catch((error) => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -77,6 +77,26 @@ test('capacity requires one GiB memory, ten GiB disk, and artifact extraction pl
   assert.throws(() => assertCapacity({ freeDiskBytes: 12 * GiB, availableMemoryBytes: 2 * GiB, artifactBytes: 2 * GiB, releaseBytes: 9 * GiB, backupBytes: 2 * GiB }), /artifact.*release.*backup/i);
 });
 
+test('server preflight CLI resolves immutable artifact inputs and candidate release path', async () => {
+  const { parseServerPreflightArgs } = await loadPreflight();
+  const root = join(tmpdir(), 'nongchang-preflight-cli');
+  const gitSha = '7'.repeat(40);
+  const options = parseServerPreflightArgs([
+    '--hostname', 'farm.qingyouai.com',
+    '--target-ip', '47.103.96.48',
+    '--candidate-port', '3002',
+    '--archive', join(root, `nongchang-${gitSha}.tar.gz`),
+    '--manifest', join(root, `nongchang-${gitSha}.manifest.json`),
+    '--release-root', root,
+    '--backup-bytes', '1024',
+    '--expected-sha', gitSha,
+    '--expected-target', 'web',
+  ]);
+  assert.equal(options.releaseDir, join(root, 'releases', gitSha));
+  assert.equal(options.candidatePort, 3002);
+  assert.equal(options.expectedTarget, 'web');
+});
+
 test('candidate artifact verification extracts and verifies the immutable archive before preflight', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-server-preflight-'));
   try {
@@ -88,6 +108,85 @@ test('candidate artifact verification extracts and verifies the immutable archiv
     const result = await assertCandidateArtifact({ ...artifact, releaseDir, expectedSha: gitSha, expectedTarget: 'web' });
     assert.equal(result.gitSha, gitSha);
     assert.ok(result.releaseBytes > 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+function successfulPreflightDependencies({ failDnsOnce = false } = {}) {
+  let dnsCalls = 0;
+  return {
+    assertCandidateArtifact: async ({ releaseDir, onBeforeExtract }) => {
+      await onBeforeExtract({ archiveBytes: 10, estimatedReleaseBytes: 20 });
+      await mkdir(releaseDir, { recursive: true });
+      await writeFile(join(releaseDir, 'candidate-marker'), 'candidate');
+      return { archiveBytes: 10, releaseBytes: 20, target: 'web' };
+    },
+    statfs: async () => ({ bavail: 30 * 1024, bsize: 1024 ** 2 }),
+    freemem: () => 2 * 1024 ** 3,
+    resolveDnsAddresses: async () => {
+      dnsCalls += 1;
+      if (failDnsOnce && dnsCalls === 1) throw new Error('transient DNS failure');
+      return ['47.103.96.48'];
+    },
+    readCertificate: async () => ({
+      raw: Buffer.from('certificate'),
+      subjectaltname: 'DNS:farm.qingyouai.com',
+      valid_from: '2026-07-19T00:00:00Z',
+      valid_to: '2026-07-21T00:00:00Z',
+    }),
+    isPortAvailable: async () => true,
+  };
+}
+
+test('transient post-extraction preflight failure removes owned candidate and retry succeeds', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-preflight-retry-'));
+  const gitSha = 'f'.repeat(40);
+  const releaseDir = join(root, 'releases', gitSha);
+  const options = {
+    releaseRoot: root,
+    releaseDir,
+    archive: join(root, `nongchang-${gitSha}.tar.gz`),
+    manifestFile: join(root, `nongchang-${gitSha}.manifest.json`),
+    expectedSha: gitSha,
+    expectedTarget: 'web',
+    hostname: 'farm.qingyouai.com',
+    targetIp: '47.103.96.48',
+    candidatePort: 3002,
+    backupBytes: 1024,
+  };
+  const dependencies = successfulPreflightDependencies({ failDnsOnce: true });
+  try {
+    const { runServerPreflight } = await loadPreflight();
+    await assert.rejects(() => runServerPreflight(options, dependencies), /transient DNS failure/);
+    await assert.rejects(() => readFile(join(releaseDir, 'candidate-marker')), /ENOENT/);
+    const result = await runServerPreflight(options, dependencies);
+    assert.equal(result.status, 'ok');
+    assert.equal(await readFile(join(releaseDir, 'candidate-marker'), 'utf8'), 'candidate');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('server preflight never deletes or overwrites a pre-existing candidate path', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-preflight-existing-'));
+  const gitSha = '9'.repeat(40);
+  const releaseDir = join(root, 'releases', gitSha);
+  try {
+    await mkdir(releaseDir, { recursive: true });
+    await writeFile(join(releaseDir, 'owner-marker'), 'keep');
+    const { runServerPreflight } = await loadPreflight();
+    await assert.rejects(() => runServerPreflight({
+      releaseRoot: root,
+      releaseDir,
+      expectedSha: gitSha,
+      expectedTarget: 'web',
+      hostname: 'farm.qingyouai.com',
+      targetIp: '47.103.96.48',
+      candidatePort: 3002,
+      backupBytes: 1024,
+    }, successfulPreflightDependencies()), /must not pre-exist/i);
+    assert.equal(await readFile(join(releaseDir, 'owner-marker'), 'utf8'), 'keep');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

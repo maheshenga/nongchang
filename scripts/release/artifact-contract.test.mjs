@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { parse as parseYaml } from 'yaml';
 import {
   ARTIFACT_MANIFEST_SCHEMA_VERSION,
   WEB_REQUIRED_ARTIFACT_ENTRIES,
@@ -83,7 +84,7 @@ test('Web artifact contract includes the Baota runtime and release switch inputs
     'ops/data-stack/compose.production.yml',
     'ops/data-stack/data-stack.env.example',
     'ops/pm2/ecosystem.config.cjs',
-    'ops/nginx/active-api.conf.example',
+    'ops/nginx/active-release.conf.example',
     'ops/nginx/farm.qingyouai.com.conf.template',
     'ops/runtime/production.env.example',
     'ops/logrotate/nongchang',
@@ -96,17 +97,20 @@ test('Web artifact contract includes the Baota runtime and release switch inputs
 test('tag release gates the immutable Web artifact without committed production credentials', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
   const packageJson = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+  const parsedWorkflow = parseYaml(workflow);
+  const steps = parsedWorkflow.jobs['build-once'].steps;
+  const commands = steps.map((step) => step.run).filter(Boolean);
 
   assert.equal(packageJson.scripts['release:test'], 'node --test scripts/release/*.test.mjs');
   assert.equal(
     packageJson.scripts['verify:release:web'],
-    'pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web && pnpm audit:prod',
+    'pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web',
   );
   assert.match(workflow, /runs-on:\s*ubuntu-latest/);
   assert.match(workflow, /environment:\s*production-web/);
   assert.match(workflow, /VITE_PUBLIC_SALES_CONTACT:\s*\$\{\{\s*vars\.VITE_PUBLIC_SALES_CONTACT\s*\}\}/);
   assert.doesNotMatch(workflow, /TARO_APP_(?:API|WX_APPID|SUPPORT_CONTACT)/);
-  for (const command of [
+  const orderedCommands = [
     'pnpm verify:release:web',
     'pnpm test:browser',
     'pnpm test:accessibility',
@@ -115,11 +119,36 @@ test('tag release gates the immutable Web artifact without committed production 
     'pnpm audit:prod',
     'pnpm release:test',
     'pnpm release:artifact -- --target web',
-  ]) {
-    assert.ok(workflow.includes(command), `missing workflow command: ${command}`);
-  }
+  ];
+  assert.deepEqual(commands.filter((command) => orderedCommands.some((expected) => command.includes(expected))).map(
+    (command) => orderedCommands.find((expected) => command.includes(expected)),
+  ), orderedCommands);
+  assert.equal(commands.filter((command) => command.includes('pnpm audit:prod')).length, 1);
   assert.match(workflow, /Verify immutable artifact archive/);
   assert.match(workflow, /--expected-target web/);
+  const verifyIndex = steps.findIndex((step) => step.name === 'Verify immutable artifact archive');
+  const toolingIndex = steps.findIndex((step) => step.name === 'Create first-host release tooling bundle');
+  const uploadIndex = steps.findIndex((step) => step.uses === 'actions/upload-artifact@v4');
+  assert.ok(verifyIndex >= 0 && toolingIndex > verifyIndex && uploadIndex > toolingIndex);
+  const tooling = steps[toolingIndex].run;
+  assert.match(tooling, /tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner/);
+  assert.match(tooling, /gzip -n/);
+  assert.match(tooling, /toolingArchiveSha256/);
+  assert.match(tooling, /sourceManifestSha256/);
+  assert.match(tooling, /scripts\/release\/(?:verify-artifact|server-preflight|switch-release)\.mjs/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.doesNotMatch(workflow, /BEGIN (?:RSA |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}/);
+});
+
+test('restricted runtime env includes backup encryption key without a committed value', async () => {
+  const runtimeEnv = await readFile(new URL('../../ops/runtime/production.env.example', import.meta.url), 'utf8');
+  assert.match(runtimeEnv, /^BACKUP_ENCRYPTION_KEY=$/m);
+  assert.doesNotMatch(runtimeEnv, /^BACKUP_ENCRYPTION_KEY=.+$/m);
+});
+
+test('Nginx serves Web and API from one active release include', async () => {
+  const nginx = await readFile(new URL('../../ops/nginx/farm.qingyouai.com.conf.template', import.meta.url), 'utf8');
+  assert.equal((nginx.match(/include \/www\/wwwroot\/farm\.qingyouai\.com\/shared\/active-release\.conf;/g) ?? []).length, 1);
+  assert.match(nginx, /proxy_pass \$nongchang_api_origin;/);
+  assert.doesNotMatch(nginx, /current\/web|active-api\.conf/);
 });

@@ -89,7 +89,7 @@ export function requiredArtifactInputMappings(target) {
     { target: 'ops/data-stack/compose.production.yml', source: 'ops/data-stack/compose.production.yml', producer: 'release-input' },
     { target: 'ops/data-stack/data-stack.env.example', source: 'ops/data-stack/data-stack.env.example', producer: 'release-input' },
     { target: 'ops/pm2/ecosystem.config.cjs', source: 'ops/pm2/ecosystem.config.cjs', producer: 'release-input' },
-    { target: 'ops/nginx/active-api.conf.example', source: 'ops/nginx/active-api.conf.example', producer: 'release-input' },
+    { target: 'ops/nginx/active-release.conf.example', source: 'ops/nginx/active-release.conf.example', producer: 'release-input' },
     { target: 'ops/nginx/farm.qingyouai.com.conf.template', source: 'ops/nginx/farm.qingyouai.com.conf.template', producer: 'release-input' },
     { target: 'ops/runtime/production.env.example', source: 'ops/runtime/production.env.example', producer: 'release-input' },
     { target: 'ops/logrotate/nongchang', source: 'ops/logrotate/nongchang', producer: 'release-input' },
