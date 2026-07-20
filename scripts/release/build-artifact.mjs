@@ -13,6 +13,7 @@ import {
   assertReleaseSha,
   assertWebArtifactPayload,
   assertWebReleaseTarget,
+  assertWebRuntimePathsResolveWithinRelease,
   releaseArchiveName,
   releaseManifestName,
 } from './artifact-contract.mjs';
@@ -30,6 +31,10 @@ export function requiredArtifactEntries() {
 
 export function assertRequiredArtifactEntries(actualEntries) {
   assertWebArtifactPayload(actualEntries);
+}
+
+export async function assertRuntimeArtifactPathsResolveWithinRelease(releaseRoot) {
+  return assertWebRuntimePathsResolveWithinRelease(releaseRoot);
 }
 
 export function assertLinuxArtifactHost(platform, arch) {
@@ -81,9 +86,9 @@ export function requiredArtifactInputMappings(target) {
     { target: 'prisma/schema.prisma', source: 'packages/backend/prisma/schema.prisma', producer: 'release-input' },
     { target: 'packages/backend/package.json', source: 'packages/backend/package.json', producer: 'release-input' },
     { target: 'packages/shared/package.json', source: 'packages/shared/package.json', producer: 'release-input' },
-    { target: 'node_modules/@prisma/client/package.json', source: `${BACKEND_DEPLOYMENT_ROOT}/@prisma/client/package.json`, producer: 'backend-deployment' },
+    { target: 'node_modules/@prisma/client', source: `${BACKEND_DEPLOYMENT_ROOT}/@prisma/client`, producer: 'backend-deployment' },
     { target: 'node_modules/.prisma/client/schema.prisma', source: `${GENERATED_PRISMA_CLIENT_ROOT}/schema.prisma`, producer: 'generated-prisma-client' },
-    { target: 'node_modules/prisma/package.json', source: `${BACKEND_DEPLOYMENT_ROOT}/prisma/package.json`, producer: 'backend-deployment' },
+    { target: 'node_modules/prisma', source: `${BACKEND_DEPLOYMENT_ROOT}/prisma`, producer: 'backend-deployment' },
     { target: 'node_modules/.bin/prisma', source: `${BACKEND_DEPLOYMENT_ROOT}/.bin/prisma`, producer: 'backend-deployment' },
     { target: 'ops/pgbouncer/pgbouncer.ini', source: 'ops/pgbouncer/pgbouncer.ini', producer: 'release-input' },
     { target: 'ops/data-stack/compose.production.yml', source: 'ops/data-stack/compose.production.yml', producer: 'release-input' },
@@ -199,11 +204,11 @@ function isPathWithin(root, candidate) {
 async function rebaseDependencySymlinks(sourceRoot, destinationRoot, current = sourceRoot) {
   for (const entry of await readdir(current, { withFileTypes: true })) {
     const sourcePath = join(current, entry.name);
-    if (entry.isDirectory()) {
-      await rebaseDependencySymlinks(sourceRoot, destinationRoot, sourcePath);
+    const sourceInfo = await lstat(sourcePath);
+    if (!sourceInfo.isSymbolicLink()) {
+      if (sourceInfo.isDirectory()) await rebaseDependencySymlinks(sourceRoot, destinationRoot, sourcePath);
       continue;
     }
-    if (!entry.isSymbolicLink()) continue;
 
     const target = await readlink(sourcePath);
     const resolvedTarget = resolve(dirname(sourcePath), target);
@@ -231,13 +236,15 @@ export async function copyPortableDependencyTree(source, destination) {
   await rebaseDependencySymlinks(sourceRoot, destinationRoot);
 }
 
-async function listFiles(root, current = root) {
+export async function listArtifactFiles(root, current = root) {
   const entries = await readdir(current, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
     const path = join(current, entry.name);
-    if (entry.isDirectory()) files.push(...await listFiles(root, path));
-    else if (entry.isFile() || entry.isSymbolicLink()) files.push(relative(root, path).split(sep).join('/'));
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) files.push(relative(root, path).split(sep).join('/'));
+    else if (info.isDirectory()) files.push(...await listArtifactFiles(root, path));
+    else if (info.isFile()) files.push(relative(root, path).split(sep).join('/'));
   }
   return files.sort();
 }
@@ -304,8 +311,9 @@ export async function buildArtifact(options) {
     }
     assertRequiredArtifactEntries(presentRequiredEntries);
 
-    const paths = await listFiles(payload);
+    const paths = await listArtifactFiles(payload);
     assertWebArtifactPayload(paths);
+    await assertRuntimeArtifactPathsResolveWithinRelease(payload);
     const files = {};
     for (const path of paths) files[path] = await sha256File(join(payload, path));
     const payloadManifest = createPayloadManifest(gitSha, parsed.target, files);

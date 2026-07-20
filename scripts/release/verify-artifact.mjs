@@ -8,6 +8,7 @@ import {
   assertReleaseSha,
   assertWebArtifactPayload,
   assertWebReleaseTarget,
+  assertWebRuntimePathsResolveWithinRelease,
   releaseArchiveName,
   releaseManifestName,
 } from './artifact-contract.mjs';
@@ -85,8 +86,10 @@ async function listPayloadFiles(root, current = root) {
   const files = [];
   for (const entry of entries) {
     const path = join(current, entry.name);
-    if (entry.isDirectory()) files.push(...await listPayloadFiles(root, path));
-    else if ((entry.isFile() || entry.isSymbolicLink()) && entry.name !== 'artifact-manifest.json') files.push(relative(root, path).split(sep).join('/'));
+    const info = await lstat(path);
+    if (info.isSymbolicLink() && entry.name !== 'artifact-manifest.json') files.push(relative(root, path).split(sep).join('/'));
+    else if (info.isDirectory()) files.push(...await listPayloadFiles(root, path));
+    else if (info.isFile() && entry.name !== 'artifact-manifest.json') files.push(relative(root, path).split(sep).join('/'));
   }
   return files.sort();
 }
@@ -96,8 +99,9 @@ async function measureReleaseBytes(root, current = root) {
   let bytes = 0;
   for (const entry of entries) {
     const path = join(current, entry.name);
-    if (entry.isDirectory()) bytes += await measureReleaseBytes(root, path);
-    else bytes += (await lstat(path)).size;
+    const info = await lstat(path);
+    if (info.isDirectory()) bytes += await measureReleaseBytes(root, path);
+    else bytes += info.size;
   }
   return bytes;
 }
@@ -161,6 +165,7 @@ export async function verifyReleaseArtifact({ archive, manifestFile, releaseDir,
       if (info.isSymbolicLink()) assertPortableSymlink(releaseDir, payloadPath, await readlink(payloadPath));
       if (await sha256File(payloadPath) !== external.files[path]) throw new Error(`artifact payload hash mismatch: ${path}`);
     }
+    await assertWebRuntimePathsResolveWithinRelease(releaseDir);
     return {
       status: 'ok',
       gitSha: expectedGitSha,

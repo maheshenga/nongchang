@@ -33,7 +33,7 @@ test('buildArtifact defaults its API target to Web', async () => {
   const outputDir = resolve('..', 'nongchang-artifact-output');
   await assert.rejects(
     () => artifactModule.buildArtifact({ outputDir, skipBuild: true }),
-    /Linux x64/i,
+    /Linux x64|clean worktree/i,
   );
 });
 
@@ -117,6 +117,81 @@ test('runtime dependency copy rewrites temporary pnpm-style links inside the art
   assert.equal(isAbsolute(copiedTarget), false);
   assert.equal(resolve(dirname(copiedLink), copiedTarget), join(destination, '.pnpm', 'package'));
   assert.equal(await readFile(join(copiedLink, 'index.js'), 'utf8'), 'module.exports = 1;\n');
+});
+
+test('pnpm directory links are physical archive entries with separate internal runtime paths', { skip: process.platform !== 'linux' }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-artifact-prisma-links-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const release = join(root, 'release');
+  const source = join(release, 'node_modules');
+  const destination = join(root, 'destination');
+  const clientStore = join(source, '.pnpm', '@prisma+client', 'node_modules', '@prisma', 'client');
+  const prismaStore = join(source, '.pnpm', 'prisma', 'node_modules', 'prisma');
+  await mkdir(join(source, '@prisma'), { recursive: true });
+  await mkdir(join(source, '.prisma', 'client'), { recursive: true });
+  await mkdir(join(prismaStore, 'build'), { recursive: true });
+  await mkdir(clientStore, { recursive: true });
+  await writeFile(join(clientStore, 'package.json'), '{"name":"@prisma/client"}\n');
+  await writeFile(join(prismaStore, 'package.json'), '{"name":"prisma"}\n');
+  await writeFile(join(prismaStore, 'build', 'index.js'), 'module.exports = {};\n');
+  await writeFile(join(source, '.prisma', 'client', 'schema.prisma'), 'generator client {}\n');
+  await mkdir(join(source, '.bin'), { recursive: true });
+  await symlink('../.pnpm/@prisma+client/node_modules/@prisma/client', join(source, '@prisma', 'client'), 'dir');
+  await symlink('.pnpm/prisma/node_modules/prisma', join(source, 'prisma'), 'dir');
+  await symlink('../prisma/build/index.js', join(source, '.bin', 'prisma'));
+
+  const archiveEntries = await artifactModule.listArtifactFiles(source);
+  const pnpmLinkEntries = new Set([
+    'node_modules/@prisma/client',
+    'node_modules/prisma',
+    'node_modules/.bin/prisma',
+  ]);
+  const requiredNonPrismaEntries = requiredArtifactEntries().filter((path) => !pnpmLinkEntries.has(path));
+  assert.doesNotThrow(() => assertRequiredArtifactEntries([
+    ...requiredNonPrismaEntries,
+    ...archiveEntries.map((path) => `node_modules/${path}`),
+  ]));
+  assert.ok(archiveEntries.includes('@prisma/client'));
+  assert.ok(archiveEntries.includes('prisma'));
+  assert.equal(archiveEntries.includes('@prisma/client/package.json'), false);
+  assert.equal(archiveEntries.includes('prisma/package.json'), false);
+  await assert.doesNotReject(() => artifactModule.assertRuntimeArtifactPathsResolveWithinRelease(release));
+
+  await rm(join(source, '.pnpm', '@prisma+client', 'node_modules', '@prisma', 'client', 'package.json'));
+  await assert.rejects(
+    () => artifactModule.assertRuntimeArtifactPathsResolveWithinRelease(release),
+    /runtime path.*@prisma\/client\/package\.json/i,
+  );
+});
+
+test('artifact enumeration preserves a symbolic link as a physical entry and runtime paths fail closed', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-artifact-runtime-paths-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const release = join(root, 'release');
+  const linkedFile = join(release, 'linked.js');
+  await mkdir(release, { recursive: true });
+  await writeFile(join(release, 'target.js'), 'module.exports = 1;\n');
+  await symlink('target.js', linkedFile);
+  for (const path of [
+    'node_modules/@prisma/client/package.json',
+    'node_modules/.prisma/client/schema.prisma',
+    'node_modules/prisma/package.json',
+    'node_modules/.bin/prisma',
+  ]) {
+    const runtimePath = join(release, path);
+    await mkdir(dirname(runtimePath), { recursive: true });
+    await writeFile(runtimePath, 'runtime\n');
+  }
+
+  const entries = await artifactModule.listArtifactFiles(release);
+  assert.ok(entries.includes('linked.js'));
+  await assert.doesNotReject(() => artifactModule.assertRuntimeArtifactPathsResolveWithinRelease(release));
+
+  await rm(join(release, 'node_modules', 'prisma', 'package.json'));
+  await assert.rejects(
+    () => artifactModule.assertRuntimeArtifactPathsResolveWithinRelease(release),
+    /runtime path.*prisma\/package\.json/i,
+  );
 });
 
 test('runtime dependency copy removes only the pnpm backend self-link that escapes the deployment tree', async (t) => {

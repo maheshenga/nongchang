@@ -5,6 +5,7 @@ import { parse as parseYaml } from 'yaml';
 import {
   ARTIFACT_MANIFEST_SCHEMA_VERSION,
   WEB_REQUIRED_ARTIFACT_ENTRIES,
+  WEB_REQUIRED_RUNTIME_PATHS,
   WEB_RELEASE_TARGET,
   assertArtifactManifestContract,
   assertWebArtifactPayload,
@@ -77,6 +78,19 @@ test('Web payload requires runtime inputs and rejects miniapp output', () => {
     () => assertWebArtifactPayload([...WEB_REQUIRED_ARTIFACT_ENTRIES, 'miniapp/app.js']),
     /must not contain miniapp payload/,
   );
+});
+
+test('Web archive entries keep pnpm directory links physical and declare their resolved runtime paths separately', () => {
+  assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('node_modules/@prisma/client'));
+  assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('node_modules/prisma'));
+  assert.equal(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('node_modules/@prisma/client/package.json'), false);
+  assert.equal(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('node_modules/prisma/package.json'), false);
+  assert.deepEqual(WEB_REQUIRED_RUNTIME_PATHS, [
+    'node_modules/@prisma/client/package.json',
+    'node_modules/.prisma/client/schema.prisma',
+    'node_modules/prisma/package.json',
+    'node_modules/.bin/prisma',
+  ]);
 });
 
 test('Web artifact contract includes the Baota runtime and release switch inputs', () => {

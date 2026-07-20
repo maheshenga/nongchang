@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -24,13 +24,31 @@ function tar(args) {
 async function writeArchive(root, gitSha) {
   const payload = join(root, 'payload');
   const files = {};
+  const pnpmDirectoryLinks = new Set([
+    'node_modules/@prisma/client',
+    'node_modules/prisma',
+  ]);
   for (const [index, path] of WEB_REQUIRED_ARTIFACT_ENTRIES.entries()) {
+    if (pnpmDirectoryLinks.has(path)) continue;
     const content = `payload ${index}`;
     const target = join(payload, path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, content);
     files[path] = sha256(content);
   }
+  const clientStore = join(payload, 'node_modules/.pnpm/@prisma+client/node_modules/@prisma/client');
+  const prismaStore = join(payload, 'node_modules/.pnpm/prisma/node_modules/prisma');
+  await mkdir(clientStore, { recursive: true });
+  await mkdir(prismaStore, { recursive: true });
+  await writeFile(join(clientStore, 'package.json'), '{"name":"@prisma/client"}\n');
+  await writeFile(join(prismaStore, 'package.json'), '{"name":"prisma"}\n');
+  await mkdir(join(payload, 'node_modules/@prisma'), { recursive: true });
+  await symlink('../.pnpm/@prisma+client/node_modules/@prisma/client', join(payload, 'node_modules/@prisma/client'), 'dir');
+  await symlink('.pnpm/prisma/node_modules/prisma', join(payload, 'node_modules/prisma'), 'dir');
+  files['node_modules/@prisma/client'] = sha256('symlink:../.pnpm/@prisma+client/node_modules/@prisma/client');
+  files['node_modules/prisma'] = sha256('symlink:.pnpm/prisma/node_modules/prisma');
+  files['node_modules/.pnpm/@prisma+client/node_modules/@prisma/client/package.json'] = sha256('{"name":"@prisma/client"}\n');
+  files['node_modules/.pnpm/prisma/node_modules/prisma/package.json'] = sha256('{"name":"prisma"}\n');
   const embedded = { schemaVersion: 2, target: 'web', gitSha, provenance: { platform: 'linux', arch: 'x64' }, files };
   await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
   const archive = join(root, `nongchang-${gitSha}.tar.gz`);
@@ -97,7 +115,7 @@ test('server preflight CLI resolves immutable artifact inputs and candidate rele
   assert.equal(options.expectedTarget, 'web');
 });
 
-test('candidate artifact verification extracts and verifies the immutable archive before preflight', async () => {
+test('candidate artifact verification extracts and verifies the immutable archive before preflight', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-server-preflight-'));
   try {
     const gitSha = 'd'.repeat(40);

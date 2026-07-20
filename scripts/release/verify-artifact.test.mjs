@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readdir, readFile, readlink, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
 import { WEB_REQUIRED_ARTIFACT_ENTRIES } from './artifact-contract.mjs';
@@ -39,6 +39,42 @@ async function writeRawTarGz(path, entries) {
   await writeFile(path, gzipSync(bytes));
 }
 
+async function writePayloadArchive(archive, root, current = root) {
+  const entries = [];
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const path = join(current, entry.name);
+    const archivePath = relative(root, path).split(sep).join('/');
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) {
+      entries.push({ path: archivePath, type: '2', linkpath: await portableLinkTarget(path) });
+    } else if (info.isDirectory()) {
+      entries.push(...await writePayloadArchiveEntries(root, path));
+    } else if (info.isFile()) {
+      entries.push({ path: archivePath, content: await readFile(path) });
+    }
+  }
+  if (current === root) await writeRawTarGz(archive, entries);
+  return entries;
+}
+
+async function portableLinkTarget(path) {
+  const target = await readlink(path);
+  return (isAbsolute(target) ? relative(dirname(path), target) : target).split(sep).join('/');
+}
+
+async function writePayloadArchiveEntries(root, current) {
+  const entries = [];
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const path = join(current, entry.name);
+    const archivePath = relative(root, path).split(sep).join('/');
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) entries.push({ path: archivePath, type: '2', linkpath: await portableLinkTarget(path) });
+    else if (info.isDirectory()) entries.push(...await writePayloadArchiveEntries(root, path));
+    else if (info.isFile()) entries.push({ path: archivePath, content: await readFile(path) });
+  }
+  return entries;
+}
+
 function tar(args) {
   return new Promise((resolveRun, reject) => {
     const child = spawn('tar', args, { windowsHide: true });
@@ -53,13 +89,37 @@ async function loadVerifier() {
 
 async function writeRequiredWebPayload(release) {
   const files = {};
+  const pnpmManagedPaths = new Set([
+    'node_modules/@prisma/client',
+    'node_modules/prisma',
+    'node_modules/.bin/prisma',
+  ]);
   for (const [index, path] of WEB_REQUIRED_ARTIFACT_ENTRIES.entries()) {
+    if (pnpmManagedPaths.has(path)) continue;
     const content = `web payload ${index}`;
     const payloadPath = join(release, path);
     await mkdir(dirname(payloadPath), { recursive: true });
     await writeFile(payloadPath, content);
     files[path] = sha256(content);
   }
+  const clientStore = join(release, 'node_modules', '.pnpm', '@prisma+client', 'node_modules', '@prisma', 'client');
+  const prismaStore = join(release, 'node_modules', '.pnpm', 'prisma', 'node_modules', 'prisma');
+  await mkdir(clientStore, { recursive: true });
+  await mkdir(join(prismaStore, 'build'), { recursive: true });
+  await writeFile(join(clientStore, 'package.json'), '{"name":"@prisma/client"}\n');
+  await writeFile(join(prismaStore, 'package.json'), '{"name":"prisma"}\n');
+  await writeFile(join(prismaStore, 'build', 'index.js'), 'module.exports = {};\n');
+  await mkdir(join(release, 'node_modules', '@prisma'), { recursive: true });
+  await mkdir(join(release, 'node_modules', '.bin'), { recursive: true });
+  await symlink('../.pnpm/@prisma+client/node_modules/@prisma/client', join(release, 'node_modules', '@prisma', 'client'), 'dir');
+  await symlink('.pnpm/prisma/node_modules/prisma', join(release, 'node_modules', 'prisma'), 'dir');
+  await symlink('../prisma/build/index.js', join(release, 'node_modules', '.bin', 'prisma'));
+  files['node_modules/@prisma/client'] = sha256(`symlink:${await portableLinkTarget(join(release, 'node_modules', '@prisma', 'client'))}`);
+  files['node_modules/prisma'] = sha256(`symlink:${await portableLinkTarget(join(release, 'node_modules', 'prisma'))}`);
+  files['node_modules/.bin/prisma'] = sha256(`symlink:${await portableLinkTarget(join(release, 'node_modules', '.bin', 'prisma'))}`);
+  files['node_modules/.pnpm/@prisma+client/node_modules/@prisma/client/package.json'] = sha256('{"name":"@prisma/client"}\n');
+  files['node_modules/.pnpm/prisma/node_modules/prisma/package.json'] = sha256('{"name":"prisma"}\n');
+  files['node_modules/.pnpm/prisma/node_modules/prisma/build/index.js'] = sha256('module.exports = {};\n');
   return files;
 }
 
@@ -78,13 +138,17 @@ async function writeArtifact(root, gitSha, mutatePayload) {
     archive: `nongchang-${gitSha}.tar.gz`,
   };
   if (mutatePayload) await mutatePayload({ payload, embedded, external });
-  await tar(['-czf', archive, '-C', payload, '.']);
+  await writePayloadArchive(archive, payload);
   external.archiveSha256 = sha256(await readFile(archive));
   await writeFile(manifestFile, JSON.stringify(external));
   return { archive, release, manifestFile, files };
 }
 
-test('verifies the archive, matching external and embedded manifests, and the extracted payload', async () => {
+async function writePnpmPrismaArtifact(root, gitSha, mutatePayload) {
+  return writeArtifact(root, gitSha, mutatePayload);
+}
+
+test('verifies the archive, matching external and embedded manifests, and the extracted payload', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = 'a'.repeat(40);
@@ -100,7 +164,44 @@ test('verifies the archive, matching external and embedded manifests, and the ex
   }
 });
 
-test('rejects a nonempty unrelated release directory instead of trusting it over the archive', async () => {
+test('verifies pnpm directory symlinks as archive entries and resolves Prisma runtime paths after extraction', { skip: process.platform !== 'linux' }, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-pnpm-prisma-'));
+  try {
+    const gitSha = '9'.repeat(40);
+    const artifact = await writePnpmPrismaArtifact(root, gitSha);
+    const { verifyReleaseArtifact } = await loadVerifier();
+    await assert.doesNotReject(() => verifyReleaseArtifact({
+      archive: artifact.archive,
+      manifestFile: artifact.manifestFile,
+      releaseDir: artifact.release,
+      expectedGitSha: gitSha,
+      expectedTarget: 'web',
+    }));
+
+    const brokenSha = '8'.repeat(40);
+    const brokenArtifact = await writePnpmPrismaArtifact(root, brokenSha, async ({ payload, embedded, external }) => {
+      const clientLink = join(payload, 'node_modules', '@prisma', 'client');
+      const brokenTarget = '../.pnpm/missing-client/node_modules/@prisma/client';
+      await rm(clientLink, { recursive: true, force: true });
+      await symlink(brokenTarget, clientLink, 'dir');
+      const hash = sha256(`symlink:${await readlink(clientLink)}`);
+      embedded.files['node_modules/@prisma/client'] = hash;
+      external.files['node_modules/@prisma/client'] = hash;
+      await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
+    });
+    await assert.rejects(() => verifyReleaseArtifact({
+      archive: brokenArtifact.archive,
+      manifestFile: brokenArtifact.manifestFile,
+      releaseDir: brokenArtifact.release,
+      expectedGitSha: brokenSha,
+      expectedTarget: 'web',
+    }), /runtime path.*@prisma\/client\/package\.json/i);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('rejects a nonempty unrelated release directory instead of trusting it over the archive', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = 'b'.repeat(40);
@@ -135,7 +236,7 @@ test('rejects unsafe archive entries before extraction', async () => {
   assert.doesNotThrow(() => assertSafeArchiveEntry('./web/index.html'));
 });
 
-test('runs the inventory callback before extracting the archive', async () => {
+test('runs the inventory callback before extracting the archive', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = '1'.repeat(40);
@@ -192,7 +293,7 @@ test('rejects escaping archive links before extraction leaves an outside sentine
   }
 });
 
-test('accepts matching embedded file maps regardless of JSON property order', async () => {
+test('accepts matching embedded file maps regardless of JSON property order', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = 'f'.repeat(40);
@@ -208,7 +309,7 @@ test('accepts matching embedded file maps regardless of JSON property order', as
   }
 });
 
-test('rejects payload hash drift, embedded manifest drift, unexpected files, and escaping symlinks from the archive', async () => {
+test('rejects payload hash drift, embedded manifest drift, unexpected files, and escaping symlinks from the archive', { skip: process.platform !== 'linux' }, async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = 'b'.repeat(40);

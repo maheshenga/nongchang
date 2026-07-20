@@ -1,3 +1,6 @@
+import { realpath } from 'node:fs/promises';
+import { isAbsolute, join, relative, sep } from 'node:path';
+
 export const WEB_RELEASE_TARGET = 'web';
 export const ARTIFACT_MANIFEST_SCHEMA_VERSION = 2;
 export const ARTIFACT_PROVENANCE = Object.freeze({ platform: 'linux', arch: 'x64' });
@@ -9,9 +12,9 @@ export const WEB_REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'prisma/schema.prisma',
   'packages/backend/package.json',
   'packages/shared/package.json',
-  'node_modules/@prisma/client/package.json',
+  'node_modules/@prisma/client',
   'node_modules/.prisma/client/schema.prisma',
-  'node_modules/prisma/package.json',
+  'node_modules/prisma',
   'node_modules/.bin/prisma',
   'ops/pgbouncer/pgbouncer.ini',
   'ops/data-stack/compose.production.yml',
@@ -31,6 +34,13 @@ export const WEB_REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'pnpm-lock.yaml',
 ]);
 
+export const WEB_REQUIRED_RUNTIME_PATHS = Object.freeze([
+  'node_modules/@prisma/client/package.json',
+  'node_modules/.prisma/client/schema.prisma',
+  'node_modules/prisma/package.json',
+  'node_modules/.bin/prisma',
+]);
+
 export function assertWebReleaseTarget(target) {
   if (target !== WEB_RELEASE_TARGET) throw new Error('release target must be web');
   return target;
@@ -45,6 +55,22 @@ export function assertWebArtifactPayload(paths) {
   const miniappPath = [...entries].find((path) => path === 'miniapp' || path.startsWith('miniapp/'));
   if (miniappPath) {
     throw new Error(`web release artifact must not contain miniapp payload: ${miniappPath}`);
+  }
+}
+
+export async function assertWebRuntimePathsResolveWithinRelease(releaseRoot) {
+  const resolvedReleaseRoot = await realpath(releaseRoot);
+  for (const runtimePath of WEB_REQUIRED_RUNTIME_PATHS) {
+    let resolvedRuntimePath;
+    try {
+      resolvedRuntimePath = await realpath(join(releaseRoot, runtimePath));
+    } catch {
+      throw new Error(`release runtime path does not resolve: ${runtimePath}`);
+    }
+    const pathFromRelease = relative(resolvedReleaseRoot, resolvedRuntimePath);
+    if (pathFromRelease === '..' || pathFromRelease.startsWith(`..${sep}`) || isAbsolute(pathFromRelease)) {
+      throw new Error(`release runtime path must resolve within the immutable release: ${runtimePath}`);
+    }
   }
 }
 
