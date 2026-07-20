@@ -7,6 +7,57 @@ import { describe, expect, it, vi } from 'vitest';
 import * as browserTestRunner from '../../../scripts/run-browser-tests';
 
 describe('browser test runner', () => {
+  it('reports execution and cleanup failures together', async () => {
+    const readinessError = new Error('readiness error');
+    const cleanupError = new Error('cleanup error');
+    const createControlledChild = (failCleanup: boolean) => {
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null as number | null,
+        signalCode: null as NodeJS.Signals | null,
+        kill: vi.fn(),
+      });
+      child.kill.mockImplementation(() => {
+        child.signalCode = 'SIGTERM';
+        child.emit('exit', null, 'SIGTERM');
+        if (failCleanup) throw cleanupError;
+        return true;
+      });
+      return child;
+    };
+    const backend = createControlledChild(true);
+    const web = createControlledChild(false);
+    const children = [backend, web];
+    let nextChild = 0;
+    const plan = browserTestRunner.buildBrowserRunPlan({
+      env: {},
+      nodeExecutable: 'node-test',
+      repoRoot: 'repo-root',
+      testArgs: [],
+    });
+
+    let thrown: unknown;
+    try {
+      await browserTestRunner.executeBrowserRunPlan(plan, {
+        signalSource: new EventEmitter() as never,
+        assertPortUnused: vi.fn().mockResolvedValue(undefined),
+        waitForManagedUrl: vi.fn().mockRejectedValue(readinessError),
+        startProcess: vi.fn(() => children[nextChild++]) as never,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    const combinedError = thrown as AggregateError;
+    expect(combinedError.message).toMatch(/execution.*cleanup/i);
+    expect(combinedError.errors).toHaveLength(2);
+    expect(combinedError.errors[0]).toBe(readinessError);
+    expect(combinedError.errors[1]).toBeInstanceOf(AggregateError);
+    const teardownError = combinedError.errors[1] as AggregateError;
+    expect(teardownError.message).toMatch(/stop one or more browser test processes/i);
+    expect(teardownError.errors).toContain(cleanupError);
+  });
+
   it('preserves termination signals until managed teardown completes', async () => {
     const signalSource = new EventEmitter();
     let teardownStarted!: () => void;

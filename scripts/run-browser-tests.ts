@@ -355,6 +355,12 @@ export async function executeBrowserRunPlan(
     }
   }
 
+  if (executionFailed && cleanupFailed) {
+    throw new AggregateError(
+      [executionError, cleanupError],
+      'Browser test execution and cleanup both failed',
+    );
+  }
   if (executionFailed) throw executionError;
   if (cleanupFailed) throw cleanupError;
   return termination.exitCode ?? resultCode ?? 1;
