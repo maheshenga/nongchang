@@ -268,12 +268,17 @@ export function parseArtifactArgs(argv) {
   return { ...options, outputDir, target: assertWebReleaseTarget(options.target) };
 }
 
-export async function buildArtifact(options) {
-  const parsed = parseArtifactArgs([
+export function normalizeBuildArtifactOptions(options = {}) {
+  if (!options.outputDir) throw new Error('--output-dir must be absolute');
+  return parseArtifactArgs([
     '--output-dir', options.outputDir,
     '--target', options.target ?? 'web',
     ...(options.skipBuild ? ['--skip-build'] : []),
   ]);
+}
+
+export async function buildArtifact(options) {
+  const parsed = normalizeBuildArtifactOptions(options);
   assertLinuxArtifactHost(process.platform, process.arch);
   assertCleanWorktree(await run('git', ['status', '--porcelain'], { capture: true }));
   const gitSha = await run('git', ['rev-parse', 'HEAD'], { capture: true });

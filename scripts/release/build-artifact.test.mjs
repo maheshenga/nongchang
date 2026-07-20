@@ -10,6 +10,7 @@ import {
   assertRequiredArtifactEntries,
   artifactSourceEntries,
   createPayloadManifest,
+  normalizeBuildArtifactOptions,
   parseArtifactArgs,
   releaseBuildCommands,
   requiredArtifactEntries,
@@ -29,12 +30,13 @@ test('artifact arguments require an explicit Web target', () => {
   );
 });
 
-test('buildArtifact defaults its API target to Web', async () => {
+test('buildArtifact defaults its API target to Web without starting a build', () => {
   const outputDir = resolve('..', 'nongchang-artifact-output');
-  await assert.rejects(
-    () => artifactModule.buildArtifact({ outputDir, skipBuild: true }),
-    /Linux x64|clean worktree/i,
-  );
+  assert.deepEqual(normalizeBuildArtifactOptions({ outputDir, skipBuild: true }), {
+    outputDir,
+    target: 'web',
+    skipBuild: true,
+  });
 });
 
 test('backend declares the Prisma CLI as a production dependency for artifact deployment', async () => {
