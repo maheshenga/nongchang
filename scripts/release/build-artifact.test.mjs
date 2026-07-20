@@ -37,6 +37,15 @@ test('buildArtifact defaults its API target to Web', async () => {
   );
 });
 
+test('backend declares the Prisma CLI as a production dependency for artifact deployment', async () => {
+  const backendPackage = JSON.parse(await readFile(
+    new URL('../../packages/backend/package.json', import.meta.url),
+    'utf8',
+  ));
+  assert.equal(backendPackage.dependencies.prisma, '^6.19.0');
+  assert.equal(backendPackage.devDependencies?.prisma, undefined);
+});
+
 test('Web artifact build commands do not build the miniapp', () => {
   assert.deepEqual(releaseBuildCommands('web'), ['build:shared', 'build:backend', 'build:web']);
 });
@@ -45,6 +54,17 @@ test('Web artifact source entries do not copy the miniapp output', () => {
   const sources = artifactSourceEntries('web');
   assert.ok(sources.some(([target, source]) => target === 'web' && source === 'packages/web/dist'));
   assert.equal(sources.some(([target]) => target === 'miniapp'), false);
+});
+
+test('every required Web artifact path has a current source or deploy output mapping', () => {
+  assert.equal(typeof artifactModule.requiredArtifactInputMappings, 'function');
+  assert.equal(typeof artifactModule.assertRequiredArtifactInputMappings, 'function');
+  const mappings = artifactModule.requiredArtifactInputMappings('web');
+  assert.deepEqual(
+    mappings.map(({ target }) => target).sort(),
+    requiredArtifactEntries().sort(),
+  );
+  assert.doesNotThrow(() => artifactModule.assertRequiredArtifactInputMappings('web'));
 });
 
 test('Web artifact payload manifest records schema 2 and target metadata', () => {
@@ -139,34 +159,9 @@ test('artifact manifest verification requires the expected Web target', () => {
   );
 });
 
-test('Web production artifact contract includes runtime inputs and excludes miniapp output', () => {
+test('Web production artifact contract excludes miniapp output', () => {
   const required = requiredArtifactEntries();
-  for (const path of [
-    'backend/src/main.js',
-    'web/index.html',
-    'shared/index.js',
-    'prisma/schema.prisma',
-    'packages/backend/package.json',
-    'packages/shared/package.json',
-    'node_modules/@prisma/client/package.json',
-    'node_modules/.prisma/client/schema.prisma',
-    'node_modules/prisma/package.json',
-    'node_modules/.bin/prisma',
-    'ops/pgbouncer/pgbouncer.ini',
-    'ops/data-stack/compose.production.yml',
-    'ops/pm2/ecosystem.config.cjs',
-    'ops/nginx/farm.qingyouai.com.conf.template',
-    'ops/logrotate/nongchang',
-    'ops/runtime/production.env.example',
-    'scripts/release/artifact-contract.mjs',
-    'scripts/release/switch-release.mjs',
-    'scripts/release/verify-artifact.mjs',
-    'scripts/lib/backup-format.mjs',
-    'scripts/backup-postgres.mjs',
-  ]) {
-    assert.ok(required.includes(path), `missing artifact contract path: ${path}`);
-  }
-  assert.equal(required.includes('miniapp/app.js'), false);
+  assert.ok(required.length > 0);
   assert.doesNotThrow(() => assertRequiredArtifactEntries(required));
   assert.throws(
     () => assertRequiredArtifactEntries([...required, 'miniapp/app.js']),

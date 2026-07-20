@@ -18,6 +18,8 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const COREPACK = process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 const BACKEND_REQUIRE = createRequire(join(REPO_ROOT, 'packages/backend/package.json'));
 const PNPM_BACKEND_SELF_LINK = '.pnpm/node_modules/@nongchang/backend';
+const BACKEND_DEPLOYMENT_ROOT = 'backend-deployment/node_modules';
+const GENERATED_PRISMA_CLIENT_ROOT = 'generated-prisma-client';
 
 export function requiredArtifactEntries() {
   return [...WEB_REQUIRED_ARTIFACT_ENTRIES];
@@ -60,7 +62,65 @@ export function artifactSourceEntries(target) {
     ['scripts/backup-postgres.mjs', 'scripts/backup-postgres.mjs'],
     ['scripts/restore-postgres.mjs', 'scripts/restore-postgres.mjs'],
     ['scripts/verify-backup-restore.mjs', 'scripts/verify-backup-restore.mjs'],
+    ['packages/backend/package.json', 'packages/backend/package.json'],
+    ['packages/shared/package.json', 'packages/shared/package.json'],
+    ['package.json', 'package.json'],
+    ['pnpm-lock.yaml', 'pnpm-lock.yaml'],
   ];
+}
+
+export function requiredArtifactInputMappings(target) {
+  assertWebReleaseTarget(target);
+  return [
+    { target: 'backend/src/main.js', source: 'packages/backend/dist/src/main.js', producer: 'release-input' },
+    { target: 'web/index.html', source: 'packages/web/dist/index.html', producer: 'release-input' },
+    { target: 'shared/index.js', source: 'packages/shared/dist/index.js', producer: 'release-input' },
+    { target: 'prisma/schema.prisma', source: 'packages/backend/prisma/schema.prisma', producer: 'release-input' },
+    { target: 'packages/backend/package.json', source: 'packages/backend/package.json', producer: 'release-input' },
+    { target: 'packages/shared/package.json', source: 'packages/shared/package.json', producer: 'release-input' },
+    { target: 'node_modules/@prisma/client/package.json', source: `${BACKEND_DEPLOYMENT_ROOT}/@prisma/client/package.json`, producer: 'backend-deployment' },
+    { target: 'node_modules/.prisma/client/schema.prisma', source: `${GENERATED_PRISMA_CLIENT_ROOT}/schema.prisma`, producer: 'generated-prisma-client' },
+    { target: 'node_modules/prisma/package.json', source: `${BACKEND_DEPLOYMENT_ROOT}/prisma/package.json`, producer: 'backend-deployment' },
+    { target: 'node_modules/.bin/prisma', source: `${BACKEND_DEPLOYMENT_ROOT}/.bin/prisma`, producer: 'backend-deployment' },
+    { target: 'ops/pgbouncer/pgbouncer.ini', source: 'ops/pgbouncer/pgbouncer.ini', producer: 'release-input' },
+    { target: 'scripts/release/artifact-contract.mjs', source: 'scripts/release/artifact-contract.mjs', producer: 'release-input' },
+    { target: 'scripts/lib/backup-format.mjs', source: 'scripts/lib/backup-format.mjs', producer: 'release-input' },
+    { target: 'scripts/backup-postgres.mjs', source: 'scripts/backup-postgres.mjs', producer: 'release-input' },
+    { target: 'package.json', source: 'package.json', producer: 'release-input' },
+    { target: 'pnpm-lock.yaml', source: 'pnpm-lock.yaml', producer: 'release-input' },
+  ];
+}
+
+function pathIsWithin(root, path) {
+  return path === root || path.startsWith(`${root}/`);
+}
+
+export function assertRequiredArtifactInputMappings(target) {
+  const mappings = requiredArtifactInputMappings(target);
+  const sourceEntries = artifactSourceEntries(target);
+  const targets = mappings.map(({ target: mappedTarget }) => mappedTarget).sort();
+  const requiredTargets = requiredArtifactEntries().sort();
+  if (new Set(targets).size !== targets.length || targets.join('\n') !== requiredTargets.join('\n')) {
+    throw new Error('every required artifact path must have exactly one input mapping');
+  }
+  for (const mapping of mappings) {
+    if (mapping.producer === 'release-input') {
+      const isMapped = sourceEntries.some(([targetRoot, sourceRoot]) => (
+        pathIsWithin(targetRoot, mapping.target) && pathIsWithin(sourceRoot, mapping.source)
+      ));
+      if (!isMapped) throw new Error(`artifact input mapping has no release source: ${mapping.target}`);
+    } else if (mapping.producer === 'backend-deployment') {
+      if (!pathIsWithin('node_modules', mapping.target) || !pathIsWithin(BACKEND_DEPLOYMENT_ROOT, mapping.source)) {
+        throw new Error(`artifact input mapping has no backend deployment output: ${mapping.target}`);
+      }
+    } else if (mapping.producer === 'generated-prisma-client') {
+      if (!pathIsWithin('node_modules/.prisma/client', mapping.target) || !pathIsWithin(GENERATED_PRISMA_CLIENT_ROOT, mapping.source)) {
+        throw new Error(`artifact input mapping has no generated Prisma output: ${mapping.target}`);
+      }
+    } else {
+      throw new Error(`unknown artifact input mapping producer: ${mapping.producer}`);
+    }
+  }
 }
 
 export function verifyArtifactManifest(manifest, expectedGitSha, expectedTarget, actualFiles) {
@@ -209,23 +269,20 @@ export async function buildArtifact(options) {
   const deployment = join(tempDir, 'backend-deployment');
   await mkdir(payload, { recursive: true });
   try {
+    assertRequiredArtifactInputMappings(parsed.target);
     await run(COREPACK, [
       'pnpm@10.33.2', '--filter', '@nongchang/backend', 'deploy', '--prod', '--legacy', deployment,
     ], { shell: process.platform === 'win32' });
     for (const [target, source] of artifactSourceEntries(parsed.target)) {
       if (!(await stat(join(REPO_ROOT, source)).catch(() => null))) throw new Error(`missing release input: ${source}`);
-      await cp(join(REPO_ROOT, source), join(payload, target), { recursive: true });
+      const destination = join(payload, target);
+      await mkdir(dirname(destination), { recursive: true });
+      await cp(join(REPO_ROOT, source), destination, { recursive: true });
     }
     await copyPortableDependencyTree(join(deployment, 'node_modules'), join(payload, 'node_modules'));
     const prismaClientPackage = BACKEND_REQUIRE.resolve('@prisma/client/package.json');
     const generatedPrismaClient = generatedPrismaClientDirectory(prismaClientPackage);
     await cp(generatedPrismaClient, join(payload, 'node_modules/.prisma/client'), { recursive: true });
-    await mkdir(join(payload, 'packages/backend'), { recursive: true });
-    await mkdir(join(payload, 'packages/shared'), { recursive: true });
-    await cp(join(REPO_ROOT, 'packages/backend/package.json'), join(payload, 'packages/backend/package.json'));
-    await cp(join(REPO_ROOT, 'packages/shared/package.json'), join(payload, 'packages/shared/package.json'));
-    await cp(join(REPO_ROOT, 'pnpm-lock.yaml'), join(payload, 'pnpm-lock.yaml'));
-    await cp(join(REPO_ROOT, 'package.json'), join(payload, 'package.json'));
 
     const presentRequiredEntries = [];
     for (const path of WEB_REQUIRED_ARTIFACT_ENTRIES) {
