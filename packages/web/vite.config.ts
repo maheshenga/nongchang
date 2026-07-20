@@ -4,6 +4,10 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import { dashboardDemoManualChunk } from './src/config/manual-chunks';
 
+export function resolveApiProxyTarget(env: NodeJS.ProcessEnv): string {
+  return env.WEB_API_PROXY_TARGET?.trim() || 'http://127.0.0.1:3001';
+}
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
@@ -36,7 +40,7 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
-        '/api': { target: 'http://localhost:3001', changeOrigin: true },
+        '/api': { target: resolveApiProxyTarget(process.env), changeOrigin: true },
       },
     },
   };
