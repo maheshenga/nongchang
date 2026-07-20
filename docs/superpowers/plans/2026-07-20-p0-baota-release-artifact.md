@@ -83,10 +83,10 @@
 
 ### Task 4: P0 artifact build and independent review
 
-- [ ] **Step 1:** On Linux x64 CI, run `pnpm@10.33.2 release:artifact -- --target web --skip-build --output-dir /tmp/nongchang-release`.
-- [ ] **Step 2:** Extract into a SHA-named empty directory and run `release:verify-artifact`; confirm backend entry, Prisma schema/migrations, generated client, and Web index work without a source checkout.
-- [ ] **Step 3:** Run `node --test scripts/lib/backup-format.test.mjs scripts/release/*.test.mjs`, backend build, Web typecheck, and existing browser runner tests.
-- [ ] **Step 4:** Generate a review package, require no Critical/Important findings, and update `.superpowers/sdd/progress.md` with artifact and Linux/Baota evidence.
+- [x] **Step 1:** On Linux x64 CI, run `pnpm@10.33.2 release:artifact -- --target web --skip-build --output-dir /tmp/nongchang-release`.
+- [x] **Step 2:** Extract into a SHA-named empty directory and run `release:verify-artifact`; confirm backend entry, Prisma schema/migrations, generated client, and Web index work without a source checkout.
+- [x] **Step 3:** Run `node --test scripts/lib/backup-format.test.mjs scripts/release/*.test.mjs`, backend build, Web typecheck, and existing browser runner tests.
+- [x] **Step 4:** Generate a review package, require no Critical/Important findings, and update `.superpowers/sdd/progress.md` with artifact and Linux/Baota evidence.
 
 ## P1/P2 follow-up order
 
