@@ -11,6 +11,7 @@ export interface TenantSettingsRow {
   defaultCropName: string;
   workbenchTitle: string;
   defaultBaseLabel: string;
+  supportContact: string | null;
 }
 
 export function toTenantSettingsView(
@@ -30,6 +31,7 @@ export function toTenantSettingsView(
     defaultCropName: row.defaultCropName,
     workbenchTitle: row.workbenchTitle,
     defaultBaseLabel: row.defaultBaseLabel,
+    supportContact: row.supportContact ?? null,
   };
 }
 

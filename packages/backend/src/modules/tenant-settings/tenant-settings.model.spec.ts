@@ -18,6 +18,7 @@ describe('tenant settings model', () => {
       defaultCropName: '葡萄',
       workbenchTitle: '云岭工作台',
       defaultBaseLabel: '一号基地',
+      supportContact: 'support@example.com',
     }, 'ignored')).toEqual({
       publicCoordinateMode: 'approximate',
       brandName: '云岭农业',
@@ -25,6 +26,7 @@ describe('tenant settings model', () => {
       defaultCropName: '葡萄',
       workbenchTitle: '云岭工作台',
       defaultBaseLabel: '一号基地',
+      supportContact: 'support@example.com',
     });
   });
 

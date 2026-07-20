@@ -15,6 +15,7 @@ describe('tenant settings contract', () => {
       defaultCropName: '作物',
       workbenchTitle: '农业工作台',
       defaultBaseLabel: '当前基地',
+      supportContact: null,
     });
   });
 
@@ -36,5 +37,25 @@ describe('tenant settings contract', () => {
 
   it('requires a complete view from the backend', () => {
     expect(tenantSettingsViewSchema.parse(DEFAULT_TENANT_SETTINGS)).toEqual(DEFAULT_TENANT_SETTINGS);
+  });
+
+  it('defaults support contact to null and trims bounded values', () => {
+    expect(DEFAULT_TENANT_SETTINGS.supportContact).toBeNull();
+    expect(tenantSettingsViewSchema.parse({
+      ...DEFAULT_TENANT_SETTINGS,
+      supportContact: '  sales@example.com / 400-123  ',
+    }).supportContact).toBe('sales@example.com / 400-123');
+    expect(updateTenantSettingsSchema.parse({ supportContact: null })).toEqual({
+      supportContact: null,
+    });
+    expect(() => updateTenantSettingsSchema.parse({
+      supportContact: 'x'.repeat(129),
+    })).toThrow();
+  });
+
+  it('accepts legacy complete views without support contact as null', () => {
+    const legacyView = { ...DEFAULT_TENANT_SETTINGS };
+    delete (legacyView as { supportContact?: null }).supportContact;
+    expect(tenantSettingsViewSchema.parse(legacyView).supportContact).toBeNull();
   });
 });

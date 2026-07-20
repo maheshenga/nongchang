@@ -20,6 +20,7 @@ vi.mock('../branding/branding-context', () => ({
     defaultCropName: '作物',
     workbenchTitle: '农业工作台',
     defaultBaseLabel: '当前基地',
+    supportContact: null,
     save: (...args: unknown[]) => saveTenantSettingsMock(...args),
     loading: false,
     error: null,
@@ -63,6 +64,19 @@ describe('Settings production wording', () => {
     expect(screen.getByRole('heading', { name: '租户展示与公开策略' })).toBeTruthy();
     expect(screen.getByLabelText('品牌名称')).toBeTruthy();
     expect(screen.getByLabelText('公开坐标模式')).toBeTruthy();
+  });
+
+  it('edits and saves the tenant support contact', async () => {
+    renderSettings();
+
+    fireEvent.change(screen.getByLabelText('客服联系方式'), {
+      target: { value: ' support@example.com ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存租户配置' }));
+
+    await waitFor(() => expect(saveTenantSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ supportContact: 'support@example.com' }),
+    ));
   });
 
   it('saves trimmed tenant branding through the shared context', async () => {

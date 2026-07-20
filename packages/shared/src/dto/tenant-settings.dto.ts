@@ -4,6 +4,7 @@ export const publicCoordinateModeSchema = z.enum(['hidden', 'approximate', 'exac
 export type PublicCoordinateMode = z.infer<typeof publicCoordinateModeSchema>;
 
 const tenantSettingCopySchema = z.string().trim().min(1).max(64);
+const tenantSupportContactSchema = z.string().trim().min(1).max(128).nullable().default(null);
 
 export const DEFAULT_TENANT_SETTINGS = {
   publicCoordinateMode: 'hidden',
@@ -12,6 +13,7 @@ export const DEFAULT_TENANT_SETTINGS = {
   defaultCropName: '作物',
   workbenchTitle: '农业工作台',
   defaultBaseLabel: '当前基地',
+  supportContact: null,
 } as const;
 
 export const tenantSettingsViewSchema = z.object({
@@ -21,6 +23,7 @@ export const tenantSettingsViewSchema = z.object({
   defaultCropName: tenantSettingCopySchema,
   workbenchTitle: tenantSettingCopySchema,
   defaultBaseLabel: tenantSettingCopySchema,
+  supportContact: tenantSupportContactSchema,
 }).strict();
 export type TenantSettingsView = z.infer<typeof tenantSettingsViewSchema>;
 

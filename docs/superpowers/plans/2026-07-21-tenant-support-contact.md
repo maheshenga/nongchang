@@ -44,7 +44,7 @@ Interfaces:
 - DEFAULT_TENANT_SETTINGS.supportContact: null
 - Prisma TenantSettings.supportContact: String? mapped to support_contact
 
-- [ ] Step 1: Add failing Shared assertions.
+- [x] Step 1: Add failing Shared assertions.
 
 Extend the existing tenant settings contract test with:
 
@@ -64,7 +64,7 @@ it('defaults support contact to null and trims bounded values', () => {
 });
 ~~~
 
-- [ ] Step 2: Run the focused Shared test and confirm RED.
+- [x] Step 2: Run the focused Shared test and confirm RED.
 
 Run:
 
@@ -74,19 +74,19 @@ corepack pnpm@10.33.2 --filter @nongchang/shared test -- tenant-settings.dto.spe
 
 Expected: FAIL because supportContact is not part of the current schema.
 
-- [ ] Step 3: Implement the shared contract.
+- [x] Step 3: Implement the shared contract.
 
 Add a nullable support-contact schema with trim and max 128 characters. Include the
 field in DEFAULT_TENANT_SETTINGS, tenantSettingsViewSchema, and the inferred update
 type. Keep strict object parsing so unknown fields remain rejected.
 
-- [ ] Step 4: Add the Prisma model field and forward-only migration.
+- [x] Step 4: Add the Prisma model field and forward-only migration.
 
 Add supportContact String? @map("support_contact") to TenantSettings. Create SQL that
 adds nullable support_contact to tenant_settings without inserting rows or changing
 existing values. Do not add a reverse migration or destructive operation.
 
-- [ ] Step 5: Run Shared and Prisma validation.
+- [x] Step 5: Run Shared and Prisma validation.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/shared test -- tenant-settings.dto.spec.ts
@@ -108,7 +108,7 @@ Interfaces:
 - toTenantSettingsView returns supportContact for persisted and default rows.
 - Existing PUT endpoint accepts the field through the updated shared schema.
 
-- [ ] Step 1: Add failing model/service assertions.
+- [x] Step 1: Add failing model/service assertions.
 
 Add supportContact to the persisted-row fixture and assert it is preserved. Add a
 service update fixture containing supportContact and assert the upsert create/update
@@ -147,7 +147,7 @@ it('allows a system admin to clear the support contact', async () => {
 });
 ~~~
 
-- [ ] Step 2: Run model and service tests and confirm RED.
+- [x] Step 2: Run model and service tests and confirm RED.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/modules/tenant-settings/tenant-settings.model.spec.ts src/modules/tenant-settings/tenant-settings.service.spec.ts
@@ -155,13 +155,13 @@ corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/modules/te
 
 Expected: FAIL because the row mapper and test fixtures do not expose supportContact.
 
-- [ ] Step 3: Implement the minimal row mapping.
+- [x] Step 3: Implement the minimal row mapping.
 
 Add supportContact to TenantSettingsRow and include row.supportContact ?? null in
 the returned TenantSettingsView. The existing upsert helper already spreads the
 validated DTO, so do not add a second persistence path.
 
-- [ ] Step 4: Run backend focused tests and the backend build.
+- [x] Step 4: Run backend focused tests and the backend build.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/backend exec vitest run src/modules/tenant-settings/tenant-settings.model.spec.ts src/modules/tenant-settings/tenant-settings.service.spec.ts
@@ -180,7 +180,7 @@ Interfaces:
 - Settings draft includes supportContact.
 - System-admin save sends supportContact through BrandingContext.save.
 
-- [ ] Step 1: Add a failing Web form assertion.
+- [x] Step 1: Add a failing Web form assertion.
 
 Add supportContact to the mocked branding value and assert the labeled input exists,
 is initialized, and is included in the save payload:
@@ -198,7 +198,7 @@ it('edits and saves the tenant support contact', async () => {
 });
 ~~~
 
-- [ ] Step 2: Run the focused Web test and confirm RED.
+- [x] Step 2: Run the focused Web test and confirm RED.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter web exec vitest run src/components/Settings.spec.tsx
@@ -206,13 +206,13 @@ corepack pnpm@10.33.2 --filter web exec vitest run src/components/Settings.spec.
 
 Expected: FAIL because the input and draft property do not exist.
 
-- [ ] Step 3: Implement the form field.
+- [x] Step 3: Implement the form field.
 
 Include supportContact in draft initialization and the branding dependency list.
 Add one system-admin input labeled 客服联系方式 with helper text that accepts phone,
 email, or a support entry. Keep the existing save button and error handling.
 
-- [ ] Step 4: Run the focused Web test and typecheck.
+- [x] Step 4: Run the focused Web test and typecheck.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter web exec vitest run src/components/Settings.spec.tsx
@@ -233,7 +233,7 @@ Interfaces:
 - loadTenantBranding(options?: { forceRefresh?: boolean }): Promise<TenantSettingsView>
 - The Me page loads forceRefresh true and uses getTenantBranding().supportContact.
 
-- [ ] Step 1: Add failing store and Me boundary assertions.
+- [x] Step 1: Add failing store and Me boundary assertions.
 
 Add a store test that loads a cached value, then calls loadTenantBranding with
 forceRefresh true and expects a second API call with the new supportContact. Add
@@ -257,7 +257,7 @@ it('force refreshes cached tenant branding', async () => {
 });
 ~~~
 
-- [ ] Step 2: Run focused miniapp tests and confirm RED.
+- [x] Step 2: Run focused miniapp tests and confirm RED.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/store/branding.spec.ts src/pages/me/decomposition.spec.ts
@@ -266,7 +266,7 @@ corepack pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/store/bran
 Expected: FAIL because loadTenantBranding has no options and Me has no branding
 contact state.
 
-- [ ] Step 3: Implement force refresh and help-modal wiring.
+- [x] Step 3: Implement force refresh and help-modal wiring.
 
 Skip the cache read when forceRefresh is true; fetch the current tenant settings.
 On fetch failure, retain the existing safe default behavior. In Me, initialize a
@@ -274,7 +274,7 @@ supportContact state from getTenantBranding, refresh it in useDidShow, and rende
 the configured value in the modal only when non-empty; otherwise render the generic
 operator prompt. Remove the hardcoded phone literal.
 
-- [ ] Step 4: Run focused miniapp tests and build.
+- [x] Step 4: Run focused miniapp tests and build.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/miniapp exec vitest run src/store/branding.spec.ts src/pages/me/decomposition.spec.ts
@@ -290,7 +290,7 @@ Files:
 - Verify all files from Tasks 1-4.
 - Update docs/superpowers/plans/2026-07-21-tenant-support-contact.md checkboxes.
 
-- [ ] Step 1: Run affected package gates.
+- [x] Step 1: Run affected package gates.
 
 ~~~powershell
 corepack pnpm@10.33.2 --filter @nongchang/shared test
@@ -304,23 +304,27 @@ corepack pnpm@10.33.2 --filter @nongchang/miniapp build:weapp
 Expected: all available package gates pass. Database-dependent E2E remains an
 environmental gate if DATABASE_URL is unavailable and must be reported as blocked.
 
-- [ ] Step 2: Scan for the removed hardcoded contact and check whitespace.
+- [x] Step 2: Scan for the removed hardcoded contact and check whitespace.
 
 ~~~powershell
 rg -n "400-000-0000|supportContact|客服联系方式" packages/miniapp/src packages/web/src packages/shared/src packages/backend/src
 git diff --check
 ~~~
 
-Expected: no hardcoded 400-000-0000 remains; supportContact appears only in the
-intended settings path and diff check is clean.
+Expected: no hardcoded 400-000-0000 remains in miniapp production code;
+supportContact appears only in the intended settings path and diff check is clean.
+The existing PublicLanding test may retain its independent
+VITE_PUBLIC_SALES_CONTACT fixture.
 
-- [ ] Step 3: Request an independent read-only review.
+- [x] Step 3: Request an independent read-only review.
 
 Review the complete implementation against the design spec. Critical and Important
 findings must be fixed before commit; a missing DATABASE_URL is an environment
-limitation, not a reason to fabricate E2E evidence.
+limitation, not a reason to fabricate E2E evidence. The final review found no
+Critical or Important findings; it identified and the implementation fixed a
+test-only literal-type error in the concurrent branding regression.
 
-- [ ] Step 4: Commit the implementation.
+- [x] Step 4: Commit the implementation.
 
 ~~~powershell
 git add packages/shared packages/backend packages/web packages/miniapp docs/superpowers/plans/2026-07-21-tenant-support-contact.md

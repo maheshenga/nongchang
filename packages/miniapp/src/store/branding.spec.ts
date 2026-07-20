@@ -1,8 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Taro from '@tarojs/taro';
+import { DEFAULT_TENANT_SETTINGS, type TenantSettingsView } from '@nongchang/shared';
 
 const getTokenMock = vi.fn();
 const fetchTenantSettingsMock = vi.fn();
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 vi.mock('./auth', () => ({
   getToken: () => getTokenMock(),
@@ -15,7 +24,7 @@ vi.mock('../api/tenant-settings', () => ({
 import { clearTenantBranding, getTenantBranding, loadTenantBranding } from './branding';
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   Taro.__reset();
   clearTenantBranding();
   getTokenMock.mockReturnValue('token-a');
@@ -42,6 +51,52 @@ describe('miniapp branding store', () => {
 
     await expect(loadTenantBranding()).resolves.toMatchObject({ workbenchTitle: '农业工作台' });
     expect(getTenantBranding().defaultCropName).toBe('作物');
+  });
+
+  it('force refreshes cached tenant branding', async () => {
+    fetchTenantSettingsMock.mockResolvedValueOnce({
+      ...DEFAULT_TENANT_SETTINGS,
+      supportContact: 'old@example.com',
+    });
+    await loadTenantBranding();
+
+    fetchTenantSettingsMock.mockResolvedValueOnce({
+      ...DEFAULT_TENANT_SETTINGS,
+      supportContact: 'new@example.com',
+    });
+    await loadTenantBranding({ forceRefresh: true });
+
+    expect(fetchTenantSettingsMock).toHaveBeenCalledTimes(2);
+    expect(getTenantBranding().supportContact).toBe('new@example.com');
+  });
+
+  it('normalizes legacy cached branding without support contact', async () => {
+    const legacyBranding = { ...DEFAULT_TENANT_SETTINGS };
+    delete (legacyBranding as { supportContact?: null }).supportContact;
+    fetchTenantSettingsMock.mockResolvedValue(legacyBranding);
+
+    await loadTenantBranding({ forceRefresh: true });
+    await loadTenantBranding();
+
+    expect(getTenantBranding().supportContact).toBeNull();
+    expect(fetchTenantSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the newest concurrent refresh as the global branding', async () => {
+    const first = deferred<TenantSettingsView>();
+    const second = deferred<TenantSettingsView>();
+    fetchTenantSettingsMock
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const firstLoad = loadTenantBranding({ forceRefresh: true });
+    const secondLoad = loadTenantBranding({ forceRefresh: true });
+    second.resolve({ ...DEFAULT_TENANT_SETTINGS, supportContact: 'new@example.com' });
+    await secondLoad;
+    first.resolve({ ...DEFAULT_TENANT_SETTINGS, supportContact: 'old@example.com' });
+    await firstLoad;
+
+    expect(getTenantBranding().supportContact).toBe('new@example.com');
   });
 
   it('clears the previous tenant cache when the token changes', async () => {

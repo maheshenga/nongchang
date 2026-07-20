@@ -53,6 +53,7 @@ model TenantSettings {
   defaultCropName      String   @default("作物") @map("default_crop_name")
   workbenchTitle       String   @default("农业工作台") @map("workbench_title")
   defaultBaseLabel     String   @default("当前基地") @map("default_base_label")
+  supportContact       String?  @map("support_contact")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
   tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

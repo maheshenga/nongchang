@@ -45,6 +45,7 @@ export default function Settings() {
     defaultCropName: branding.defaultCropName,
     workbenchTitle: branding.workbenchTitle,
     defaultBaseLabel: branding.defaultBaseLabel,
+    supportContact: branding.supportContact,
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -57,6 +58,7 @@ export default function Settings() {
       defaultCropName: branding.defaultCropName,
       workbenchTitle: branding.workbenchTitle,
       defaultBaseLabel: branding.defaultBaseLabel,
+      supportContact: branding.supportContact,
     });
   }, [
     branding.publicCoordinateMode,
@@ -65,6 +67,7 @@ export default function Settings() {
     branding.defaultCropName,
     branding.workbenchTitle,
     branding.defaultBaseLabel,
+    branding.supportContact,
   ]);
 
   const update = <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
@@ -84,7 +87,10 @@ export default function Settings() {
     setSaving(true);
     setSaveError(null);
     try {
-      await branding.save(draft);
+      await branding.save({
+        ...draft,
+        supportContact: draft.supportContact?.trim() || null,
+      });
       showToast('租户展示配置已保存');
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : '保存失败');
@@ -216,6 +222,19 @@ export default function Settings() {
                   onChange={(e) => updateTenantDraft('defaultBaseLabel', e.target.value)}
                   className={`${fluentInput} w-full`}
                 />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-[#323130]">客服联系方式</span>
+                <input
+                  aria-label="客服联系方式"
+                  value={draft.supportContact ?? ''}
+                  onChange={(e) => updateTenantDraft('supportContact', e.target.value)}
+                  placeholder="电话、邮箱或客服入口"
+                  className={`${fluentInput} w-full`}
+                />
+                <span className="mt-1 block text-xs leading-5 text-[#605E5C]">
+                  留空时小程序显示通用的运营人员提示。
+                </span>
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold text-[#323130]">公开坐标模式</span>

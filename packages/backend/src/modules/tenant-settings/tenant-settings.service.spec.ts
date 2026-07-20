@@ -60,6 +60,7 @@ describe('TenantSettingsService', () => {
       defaultCropName: '葡萄',
       workbenchTitle: '农业工作台',
       defaultBaseLabel: '当前基地',
+      supportContact: null,
     });
 
     await h.service.update(systemAdmin, { defaultCropName: '葡萄' });
@@ -68,6 +69,27 @@ describe('TenantSettingsService', () => {
       where: { tenantId: 't1' },
     }));
     expect(h.cache.invalidateTenant).toHaveBeenCalledWith('t1');
+  });
+
+  it('allows a system admin to clear the support contact', async () => {
+    const h = make();
+    h.prisma.tenantSettings.upsert.mockResolvedValue({
+      publicCoordinateMode: 'hidden',
+      brandName: '农场溯源管理',
+      industryName: '农业',
+      defaultCropName: '作物',
+      workbenchTitle: '农业工作台',
+      defaultBaseLabel: '当前基地',
+      supportContact: null,
+    });
+
+    await h.service.update(systemAdmin, { supportContact: null });
+
+    expect(h.prisma.tenantSettings.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenantId: 't1' },
+      create: { tenantId: 't1', supportContact: null },
+      update: { supportContact: null },
+    }));
   });
 
   it('rejects writes from non-system administrators', async () => {
