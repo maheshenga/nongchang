@@ -110,8 +110,11 @@ test('Web artifact contract includes the Baota runtime and release switch inputs
 
 test('tag release gates the immutable Web artifact without committed production credentials', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const ciWorkflow = await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const packageJson = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
   const parsedWorkflow = parseYaml(workflow);
+  const ciBrowserEnv = parseYaml(ciWorkflow).jobs.browser.env;
+  const releaseEnv = parsedWorkflow.jobs['build-once'].env;
   const steps = parsedWorkflow.jobs['build-once'].steps;
   const commands = steps.map((step) => step.run).filter(Boolean);
 
@@ -123,6 +126,10 @@ test('tag release gates the immutable Web artifact without committed production 
   assert.match(workflow, /runs-on:\s*ubuntu-latest/);
   assert.match(workflow, /environment:\s*production-web/);
   assert.match(workflow, /VITE_PUBLIC_SALES_CONTACT:\s*\$\{\{\s*vars\.VITE_PUBLIC_SALES_CONTACT\s*\}\}/);
+  for (const name of ['E2E_TENANT_CODE', 'E2E_USERNAME', 'E2E_PASSWORD', 'E2E_BILLING_USERNAME']) {
+    assert.equal(releaseEnv[name], ciBrowserEnv[name]);
+  }
+  assert.match(releaseEnv.BACKUP_ENCRYPTION_KEY, /^[0-9a-f]{64}$/);
   assert.doesNotMatch(workflow, /TARO_APP_(?:API|WX_APPID|SUPPORT_CONTACT)/);
   const orderedCommands = [
     'pnpm verify:release:web',
