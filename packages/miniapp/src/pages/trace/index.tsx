@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, Canvas } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken } from '../../store/auth';
+import { getTenantBranding, loadTenantBranding } from '../../store/branding';
 import { listBatches, type Batch } from '../../api/farm';
 import { listTraceEvents, type TraceEvent } from '../../api/trace';
 import TraceTimeline from '../../components/TraceTimeline';
+import { createLatestRequestGate } from '../../utils/latest-request';
 import './index.scss';
 
 export default function Trace() {
@@ -13,12 +15,22 @@ export default function Trace() {
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [branding, setBranding] = useState(getTenantBranding());
+  const requestGateRef = useRef(createLatestRequestGate());
+
+  useEffect(() => () => {
+    requestGateRef.current.dispose();
+  }, []);
 
   useDidShow(() => {
     if (!getToken()) {
       Taro.redirectTo({ url: '/pages/login/index' });
       return;
     }
+    void loadTenantBranding().then((next) => {
+      setBranding(next);
+      Taro.setNavigationBarTitle({ title: `${next.defaultCropName}溯源记录` });
+    });
     void initBatches();
   });
 
@@ -36,15 +48,18 @@ export default function Trace() {
   }
 
   async function loadEvents(batchId: string) {
+    const requestId = requestGateRef.current.begin();
     setSelectedId(batchId);
     setLoading(true);
     setErr(null);
     try {
-      setEvents(await listTraceEvents(batchId));
+      const nextEvents = await listTraceEvents(batchId);
+      if (!requestGateRef.current.isLatest(requestId)) return;
+      setEvents(nextEvents);
     } catch (e: any) {
-      setErr(e?.message || '加载溯源失败');
+      if (requestGateRef.current.isLatest(requestId)) setErr(e?.message || '加载溯源失败');
     } finally {
-      setLoading(false);
+      if (requestGateRef.current.isLatest(requestId)) setLoading(false);
     }
   }
 
@@ -60,7 +75,7 @@ export default function Trace() {
     ctx.fillRect(0, 0, 300, 200);
     ctx.setFillStyle('#ffffff');
     ctx.setFontSize(18);
-    ctx.fillText('芍药溯源记录', 20, 40);
+    ctx.fillText(`${branding.defaultCropName}溯源记录`, 20, 40);
     ctx.setFontSize(14);
     ctx.fillText(`批次：${selected.batchNo}`, 20, 80);
     ctx.fillText(`品种：${selected.cropName}`, 20, 110);

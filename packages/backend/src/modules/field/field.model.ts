@@ -70,13 +70,27 @@ export function buildFieldIds(fields: FieldRow[]): string[] {
   return fields.map((field) => field.id);
 }
 
+export function buildFieldView(
+  field: FieldRow,
+  owner: FieldOwnerRow | null,
+  coordinate: FieldCoordinateRow | null,
+) {
+  return {
+    ...field,
+    ownerName: owner?.displayName ?? null,
+    lng: coordinate?.lng ?? null,
+    lat: coordinate?.lat ?? null,
+  };
+}
+
 export function enrichFieldRows(input: { fields: FieldRow[]; owners: FieldOwnerRow[]; coords: FieldCoordinateRow[] }) {
   const ownerNameById = new Map(input.owners.map((owner) => [owner.id, owner.displayName]));
   const coordByFieldId = new Map(input.coords.map((coord) => [coord.id, coord]));
-  return input.fields.map((field) => ({
-    ...field,
-    ownerName: ownerNameById.get(field.ownerId) ?? null,
-    lng: coordByFieldId.get(field.id)?.lng ?? null,
-    lat: coordByFieldId.get(field.id)?.lat ?? null,
-  }));
+  return input.fields.map((field) => buildFieldView(
+    field,
+    ownerNameById.has(field.ownerId)
+      ? { id: field.ownerId, displayName: ownerNameById.get(field.ownerId)! }
+      : null,
+    coordByFieldId.get(field.id) ?? null,
+  ));
 }

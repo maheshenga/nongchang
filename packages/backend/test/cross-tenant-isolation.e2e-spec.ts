@@ -85,7 +85,11 @@ describe('跨租户隔离(多租户深度)e2e', () => {
   afterAll(async () => {
     // 先删子表再删父(FK Restrict)。
     await prisma.traceScan.deleteMany({ where: { tenantId: t2TenantId } });
+    await prisma.traceEvent.deleteMany({ where: { tenantId: t2TenantId } });
+    await prisma.traceCredential.deleteMany({ where: { tenantId: t2TenantId } });
     await prisma.traceCode.deleteMany({ where: { tenantId: t2TenantId } });
+    await prisma.supplyIssue.deleteMany({ where: { tenantId: t2TenantId } });
+    await prisma.farmRecord.deleteMany({ where: { tenantId: t2TenantId } });
     await prisma.batch.deleteMany({ where: { tenantId: t2TenantId } });
     await prisma.field.deleteMany({ where: { tenantId: t2TenantId } });
     await prisma.creditAccount.deleteMany({ where: { tenantId: t2TenantId } });

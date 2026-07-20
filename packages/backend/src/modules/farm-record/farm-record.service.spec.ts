@@ -11,30 +11,45 @@ const base = { batchId: BATCH, fieldId: FIELD, action: '施肥', recordedAt: '20
 
 function makeService(overrides: any = {}) {
   let created: any;
+  let published: any;
+  const invalidateBatch = vi.fn(async () => undefined);
   const farmRecord = {
     create: async (a: any) => { created = a; return { id: 'fr1', ...a.data }; },
     aggregate: async () => ({ _sum: { supplyAmount: overrides.consumed ?? 0 } }),
   };
+  const traceEvent = {
+    create: async (a: any) => {
+      if (overrides.publishError) throw new Error('publish failed');
+      published = a;
+      return { id: 'te1', ...a.data };
+    },
+  };
   const supplyIssue = { aggregate: async () => ({ _sum: { amount: overrides.quota ?? 0 } }) };
+  const tx = { farmRecord, traceEvent, supplyIssue, $queryRaw: async () => [{ id: 'sup1' }] };
   const prisma = {
     batch: { findFirst: async ({ where }: any = {}) => {
       if (overrides.batchScoped === false) return null;
       if (where?.fieldId && overrides.batchFieldMatches === false) return null;
-      return { id: 'b1', ownerId: 'm1', fieldId: FIELD };
+      return { id: 'b1', ownerId: 'm1', fieldId: FIELD, owner: { displayName: 'Demo Farm' }, field: { name: 'Field One' } };
     } },
     field: { findFirst: async () => (overrides.fieldScoped === false ? null : { id: 'f1' }) },
     farmRecord,
+    traceEvent,
     supplyIssue,
-    supply: { findFirst: async ({ where }: any = {}) => {
+    supply: { findFirst: async () => {
       if (overrides.supplyScoped === false) return null;
-      if (where?.ownerId && overrides.supplyOwnerMatches === false) return null;
-      return { id: 'sup1', ownerId: 'm1' };
+      return { id: 'sup1', ownerId: overrides.supplyOwnerMatches === false ? 'm2' : 'm1' };
     } },
     // 核销路径用事务 + FOR UPDATE 行锁;tx 复用同一组 mock 表。
     $queryRaw: async () => [{ id: 'sup1' }],
-    $transaction: async (fn: any) => fn({ farmRecord, supplyIssue, $queryRaw: async () => [{ id: 'sup1' }] }),
+    $transaction: async (fn: any) => fn(tx),
   };
-  return { svc: new FarmRecordService(prisma as any, new ScopeService()), get created() { return created; } };
+  return {
+    svc: new FarmRecordService(prisma as any, new ScopeService(), { invalidateBatch } as any),
+    get created() { return created; },
+    get published() { return published; },
+    invalidateBatch,
+  };
 }
 
 describe('FarmRecordService.create 核销', () => {
@@ -99,11 +114,142 @@ describe('FarmRecordService.create 核销', () => {
         aggregate: async () => ({ _sum: { supplyAmount: 0 } }),
         create: async (a: any) => { calls.push('create-record'); return { id: 'fr1', ...a.data }; },
       },
+      traceEvent: {
+        create: async () => {
+          calls.push('publish-event');
+          return { id: 'te1' };
+        },
+      },
     });
 
     await h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 50 });
 
-    expect(calls).toEqual(['lock-batch', 'lock-supply', 'create-record']);
+    expect(calls).toEqual(['lock-batch', 'lock-supply', 'create-record', 'publish-event']);
+  });
+
+  it('completed create publishes exactly one linked public event', async () => {
+    const h = makeService();
+    const result = await h.svc.create(merchant, {
+      ...base,
+      action: 'fertilize',
+      detail: { note: 'leaf feeding completed', cost: 200 },
+      images: ['https://cdn.example/1.jpg'],
+    });
+
+    expect(result.status).toBe('completed');
+    expect(h.published.data.sourceFarmRecordId).toBe('fr1');
+    expect(h.published.data.payload).toEqual({ desc: 'leaf feeding completed', image: 'https://cdn.example/1.jpg' });
+    expect(h.invalidateBatch).toHaveBeenCalledOnce();
+    expect(h.invalidateBatch).toHaveBeenCalledWith(BATCH);
+  });
+
+  it('pending create remains private', async () => {
+    const h = makeService();
+    await h.svc.create(merchant, { ...base, action: 'weeding', status: 'pending' });
+
+    expect(h.published).toBeUndefined();
+    expect(h.invalidateBatch).not.toHaveBeenCalled();
+  });
+
+  it('completed supply-quota create publishes inside the quota transaction', async () => {
+    const h = makeService({ quota: 100 });
+    await h.svc.create(merchant, { ...base, supplyId: 'sup1', supplyAmount: 10 });
+
+    expect(h.published.data.sourceFarmRecordId).toBe('fr1');
+  });
+
+  it('publication failure rejects completed creation', async () => {
+    const h = makeService({ publishError: true });
+
+    await expect(h.svc.create(merchant, { ...base })).rejects.toThrow('publish failed');
+  });
+});
+
+function makeStatusService(overrides: { status?: 'pending' | 'completed'; publishError?: boolean } = {}) {
+  const recordScalars = {
+    id: 'fr-status',
+    tenantId: 't1',
+    batchId: BATCH,
+    fieldId: FIELD,
+    operatorId: 'u1',
+    action: 'weeding',
+    detail: { desc: 'weeding completed' },
+    images: null,
+    location: null,
+    recordedAt: new Date('2026-07-17T01:02:03.000Z'),
+    source: 'web',
+    status: overrides.status ?? 'pending',
+    supplyId: null,
+    supplyAmount: null,
+    createdAt: new Date('2026-07-17T01:02:03.000Z'),
+  };
+  const current = {
+    ...recordScalars,
+    batch: { owner: { displayName: 'Demo Farm' } },
+    field: { name: 'Field One' },
+  };
+  const traceEventCreate = vi.fn(async () => {
+    if (overrides.publishError) throw new Error('publish failed');
+    return { id: 'te-status' };
+  });
+  const farmRecordUpdate = vi.fn(async () => ({ ...recordScalars, status: 'completed' }));
+  const invalidateBatch = vi.fn(async () => undefined);
+  const tx = {
+    $queryRaw: vi.fn(async () => [{ id: current.id }]),
+    farmRecord: { findFirst: vi.fn(async () => current), update: farmRecordUpdate },
+    traceEvent: { create: traceEventCreate },
+  };
+  const prisma = {
+    farmRecord: { findFirst: vi.fn(async () => ({ id: current.id, batchId: BATCH })) },
+    batch: { findFirst: vi.fn(async () => ({ id: BATCH })) },
+    $transaction: vi.fn(async (fn: any) => fn(tx)),
+  };
+  return {
+    svc: new FarmRecordService(prisma as any, new ScopeService(), { invalidateBatch } as any),
+    tx,
+    traceEventCreate,
+    farmRecordUpdate,
+    invalidateBatch,
+  };
+}
+
+describe('FarmRecordService.updateStatus automatic publication', () => {
+  it('pending to completed updates and publishes once', async () => {
+    const h = makeStatusService({ status: 'pending' });
+    const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' });
+
+    expect(result.status).toBe('completed');
+    expect(h.farmRecordUpdate).toHaveBeenCalledTimes(1);
+    expect(h.traceEventCreate).toHaveBeenCalledTimes(1);
+    expect(h.invalidateBatch).toHaveBeenCalledOnce();
+    expect(h.invalidateBatch).toHaveBeenCalledWith(BATCH);
+    expect(result).not.toHaveProperty('batch');
+    expect(result).not.toHaveProperty('field');
+  });
+
+  it('repeated completed is an idempotent no-op', async () => {
+    const h = makeStatusService({ status: 'completed' });
+    const result = await h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' });
+
+    expect(result.status).toBe('completed');
+    expect(h.farmRecordUpdate).not.toHaveBeenCalled();
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+    expect(h.invalidateBatch).not.toHaveBeenCalled();
+  });
+
+  it('completed to pending is rejected', async () => {
+    const h = makeStatusService({ status: 'completed' });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'pending' }))
+      .rejects.toThrow('已完成农事记录不可退回待完成');
+    expect(h.traceEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('publication failure rolls back completion', async () => {
+    const h = makeStatusService({ status: 'pending', publishError: true });
+
+    await expect(h.svc.updateStatus(merchant, 'fr-status', { status: 'completed' }))
+      .rejects.toThrow('publish failed');
   });
 });
 

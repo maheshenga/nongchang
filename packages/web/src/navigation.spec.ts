@@ -81,4 +81,13 @@ describe('production navigation', () => {
     expect(firstAllowedTab('member', 'fields')).toBe('memberHome');
     expect(firstAllowedTab('member', 'settings')).toBe('settings');
   });
+
+  it('derives merchant archive copy from tenant crop settings', () => {
+    const merchantItem = flattenNavItems(getNavItems('merchant_admin', {
+      defaultCropName: '葡萄',
+    })).find((item) => item.id === 'merchant');
+
+    expect(merchantItem?.label).toBe('我的葡萄档案');
+    expect(merchantItem?.label).not.toContain('芍药');
+  });
 });

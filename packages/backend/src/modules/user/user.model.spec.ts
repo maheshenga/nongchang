@@ -129,6 +129,10 @@ describe('user.model list helpers', () => {
       skip: 0,
       take: DEFAULT_USER_LIST_CAP,
     });
+    expect(MERCHANT_USER_LIST_SELECT).toMatchObject({
+      groupId: true,
+      group: { select: { name: true } },
+    });
   });
 
   it('builds paginated envelopes without transforming raw user rows', () => {
@@ -151,6 +155,8 @@ describe('user.model list helpers', () => {
         phone: null,
         status: 'active',
         agentId: 'a1',
+        groupId: 'g31',
+        group: { name: '默认用户组' },
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },
       {
@@ -160,6 +166,8 @@ describe('user.model list helpers', () => {
         phone: '13800000002',
         status: 'active',
         agentId: null,
+        groupId: null,
+        group: null,
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
       },
     ];
@@ -180,6 +188,8 @@ describe('user.model list helpers', () => {
         phone: null,
         status: 'active',
         agentId: 'a1',
+        groupId: 'g31',
+        groupName: '默认用户组',
         createdAt: '2026-01-01T00:00:00.000Z',
         fieldCount: 3,
         totalArea: 12.5,
@@ -191,11 +201,14 @@ describe('user.model list helpers', () => {
         phone: '13800000002',
         status: 'active',
         agentId: null,
+        groupId: null,
+        groupName: null,
         createdAt: '2026-01-02T00:00:00.000Z',
         fieldCount: 0,
         totalArea: 0,
       },
     ]);
+    expect(toMerchantListItems(merchants, [])[0]).not.toHaveProperty('group');
   });
 });
 

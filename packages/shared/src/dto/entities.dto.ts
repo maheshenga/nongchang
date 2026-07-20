@@ -5,6 +5,7 @@ export const createUserSchema = z.object({
   username: z.string().min(3).max(64),
   role: z.enum([Role.SYSTEM_ADMIN, Role.AGENT_ADMIN, Role.MERCHANT, Role.MEMBER]),
   agentId: z.string().uuid().nullable().optional(),
+  groupId: z.string().uuid().optional(),
   phone: z.string().max(20).optional(),
   displayName: z.string().max(64),
 }).strict();
@@ -134,6 +135,8 @@ export const merchantListItemSchema = z.object({
   phone: z.string().nullable(),
   status: z.string(),
   agentId: z.string().nullable(),
+  groupId: z.string().nullable(),
+  groupName: z.string().nullable(),
   createdAt: z.string(),
   fieldCount: z.number(),
   totalArea: z.number(),

@@ -73,6 +73,37 @@ describe('公开溯源接口(免登录)', () => {
     expect(r2.body.scanCount).toBe(r1.body.scanCount + 1);
   });
 
+  it('一次公开扫码会让计数和明细同时增加', async () => {
+    const code = `ORC-E2E-${Date.now()}`;
+    const source = await prisma.traceCode.findUniqueOrThrow({ where: { code: 'ORC-DEMO0001' } });
+    await prisma.traceCode.create({
+      data: {
+        tenantId: source.tenantId,
+        batchId: source.batchId,
+        code,
+        status: 'active',
+        scanCount: 0,
+      },
+    });
+    try {
+      const detailBefore = await prisma.traceScan.count({ where: { code } });
+      const res = await request(app.getHttpServer())
+        .get(`/api/public/trace/${code}`)
+        .set('User-Agent', 'public-trace-atomicity-e2e')
+        .expect(200);
+      const [storedCode, detailAfter] = await Promise.all([
+        prisma.traceCode.findUniqueOrThrow({ where: { code } }),
+        prisma.traceScan.count({ where: { code } }),
+      ]);
+      expect(res.body.scanCount).toBe(1);
+      expect(storedCode.scanCount).toBe(1);
+      expect(detailAfter).toBe(detailBefore + 1);
+    } finally {
+      await prisma.traceScan.deleteMany({ where: { code } });
+      await prisma.traceCode.delete({ where: { code } });
+    }
+  });
+
   it('响应体不泄露任何敏感字段', async () => {
     const res = await request(app.getHttpServer()).get('/api/public/trace/ORC-DEMO0001').expect(200);
     const json = JSON.stringify(res.body);

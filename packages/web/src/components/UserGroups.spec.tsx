@@ -1,11 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UserGroupView } from '@nongchang/shared';
+import { Role, type UserGroupView } from '@nongchang/shared';
 
 const listUserGroupsMock = vi.fn();
 const createUserGroupMock = vi.fn();
 const updateUserGroupMock = vi.fn();
 const deleteUserGroupMock = vi.fn();
+let currentRole: Role = Role.SYSTEM_ADMIN;
+
+vi.mock('../auth/auth-context', () => ({
+  useAuth: () => ({ user: { role: currentRole } }),
+}));
 
 vi.mock('../api/user-group', () => ({
   listUserGroups: () => listUserGroupsMock(),
@@ -31,6 +36,7 @@ const groups: UserGroupView[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  currentRole = Role.SYSTEM_ADMIN;
   listUserGroupsMock.mockResolvedValue(groups);
   createUserGroupMock.mockResolvedValue(groups[0]);
   updateUserGroupMock.mockResolvedValue(groups[0]);
@@ -48,6 +54,17 @@ describe('UserGroups permission enforcement wording', () => {
     expect(screen.getByText(/管理员与未接入接口仍按角色与业务范围鉴权/)).toBeTruthy();
     expect(screen.queryByText(/当前系统仍以角色作为接口鉴权依据/)).toBeNull();
     expect(screen.queryByText(/暂不参与接口放行/)).toBeNull();
+  });
+
+  it('renders group definitions read-only for agent admins', async () => {
+    currentRole = Role.AGENT_ADMIN;
+    renderWithDialog();
+    await screen.findByText('记录员');
+
+    expect(screen.getByText(/可在商户档案中分配用户组/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /新建用户组/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: '编辑 记录员' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '删除 记录员' })).toBeNull();
   });
 
   it('saves selected permissions used by connected interfaces', async () => {

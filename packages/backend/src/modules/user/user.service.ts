@@ -1,10 +1,11 @@
 import { Injectable, ForbiddenException, Optional } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, ListQuery, Paginated } from '@nongchang/shared';
+import { AuthUser, CreateUserDto, ReviewUserInput, UpdateUserDto, ListQuery, Paginated, Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ScopeService } from '../../common/scope/scope.service';
 import { SessionValidationCacheService } from '../../auth/session-validation-cache.service';
+import { UserGroupService } from '../user-group/user-group.service';
 import {
   MerchantFieldAggregateRow,
   MerchantListRow,
@@ -30,6 +31,7 @@ export class UserService {
   constructor(
     private prisma: PrismaService,
     private scope: ScopeService,
+    private userGroups: UserGroupService,
     @Optional() private sessions?: SessionValidationCacheService,
   ) {}
 
@@ -42,17 +44,23 @@ export class UserService {
       });
       if (!agent) throw new ForbiddenException('Agent does not exist in the current tenant');
     }
+    const groupId = await this.resolveCreateGroupId(actor, dto);
     const initialPassword = randomBytes(8).toString('base64url');
     const passwordHash = await bcrypt.hash(initialPassword, 10);
     const created = await this.prisma.user.create({
       data: {
-        tenantId: actor.tenantId, role: dto.role, agentId,
+        tenantId: actor.tenantId, role: dto.role, agentId, groupId,
         username: dto.username, passwordHash, phone: dto.phone ?? null,
         displayName: dto.displayName,
       },
       select: { id: true, username: true, role: true, agentId: true, displayName: true },
     });
     return { ...created, initialPassword };
+  }
+
+  private resolveCreateGroupId(actor: AuthUser, dto: CreateUserDto): Promise<string | null> {
+    if (dto.role !== Role.MERCHANT && dto.role !== Role.MEMBER) return Promise.resolve(null);
+    return this.userGroups.resolveForCreate(actor.tenantId, dto.groupId);
   }
 
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。

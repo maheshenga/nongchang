@@ -1,7 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { buildPublicTraceResponse, pickPublicPayload } from './public-trace.model';
+import {
+  buildPublicTraceResponse,
+  pickPublicPayload,
+  projectPublicCoordinates,
+} from './public-trace.model';
 
 describe('public trace response model', () => {
+  it('projects field coordinates according to the tenant privacy mode', () => {
+    expect(projectPublicCoordinates('hidden', 100.123456, 25.987654))
+      .toEqual({ fieldLng: null, fieldLat: null });
+    expect(projectPublicCoordinates('approximate', 100.126, 25.984))
+      .toEqual({ fieldLng: 100.13, fieldLat: 25.98 });
+    expect(projectPublicCoordinates('exact', 100.123456, 25.987654))
+      .toEqual({ fieldLng: 100.123456, fieldLat: 25.987654 });
+  });
+
+  it('does not expose a partial coordinate pair', () => {
+    expect(projectPublicCoordinates('exact', 100.1, null))
+      .toEqual({ fieldLng: null, fieldLat: null });
+  });
+
   it('keeps only public payload fields and returns null for empty payloads', () => {
     expect(pickPublicPayload(null)).toBeNull();
     expect(pickPublicPayload(undefined)).toBeNull();

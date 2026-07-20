@@ -11,7 +11,7 @@ export const BASE_URL = API_BASE_URL;
 
 interface RequestOptions {
   url: string;
-  method?: 'GET' | 'POST' | 'PATCH';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH';
   data?: Record<string, unknown>;
   auth?: boolean;
   header?: Record<string, string>;

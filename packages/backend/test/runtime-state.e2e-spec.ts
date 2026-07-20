@@ -6,8 +6,8 @@ import { SessionValidationCacheService } from '../src/auth/session-validation-ca
 import { Role } from '@nongchang/shared';
 
 describe('Redis runtime state multi-instance integration', () => {
-  const first = new RedisRuntimeStateService(process.env.REDIS_URL ?? 'redis://127.0.0.1:56379');
-  const second = new RedisRuntimeStateService(process.env.REDIS_URL ?? 'redis://127.0.0.1:56379');
+  const first = new RedisRuntimeStateService(process.env.REDIS_URL ?? 'redis://127.0.0.1:57379');
+  const second = new RedisRuntimeStateService(process.env.REDIS_URL ?? 'redis://127.0.0.1:57379');
   const prefix = `e2e:${randomUUID()}:`;
 
   beforeAll(async () => {

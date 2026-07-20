@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, Input, Button } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { getToken, clearToken } from '../../store/auth';
@@ -7,6 +7,8 @@ import { getMe, updateMe, changePassword } from '../../api/auth';
 import { listBatches, listFields, type Field, type FarmRecord } from '../../api/farm';
 import { decodeToken, roleLabel } from '../../utils/token';
 import { countThisMonth } from '../../utils/stats';
+import { getTenantBranding, loadTenantBranding } from '../../store/branding';
+import { createLatestRequestGate } from '../../utils/latest-request';
 import MeFieldSection from './MeFieldSection';
 import './index.scss';
 
@@ -19,6 +21,8 @@ export default function Me() {
   const [batchCount, setBatchCount] = useState<number | null>(null);
   const [fieldCount, setFieldCount] = useState<number | null>(null);
   const [fields, setFields] = useState<Field[] | null>(null);
+  const [supportContact, setSupportContact] = useState<string | null>(getTenantBranding().supportContact);
+  const supportRequestGateRef = useRef(createLatestRequestGate());
 
   // 编辑资料面板
   const [editing, setEditing] = useState(false);
@@ -42,6 +46,11 @@ export default function Me() {
     const p = decodeToken(token);
     if (p?.username) setUsername(p.username);
     setRole(roleLabel(p?.role));
+    const supportRequestId = supportRequestGateRef.current.begin();
+    setSupportContact(null);
+    void loadTenantBranding({ forceRefresh: true }).then((next) => {
+      if (supportRequestGateRef.current.isLatest(supportRequestId)) setSupportContact(next.supportContact);
+    });
     void loadProfile();
     void loadStats();
   });
@@ -85,7 +94,9 @@ export default function Me() {
   function showHelp() {
     Taro.showModal({
       title: '系统帮助与客服',
-      content: '如需帮助请联系平台管理员，或拨打服务热线 400-000-0000。',
+      content: supportContact
+        ? ['如需帮助请通过以下方式联系平台运营人员：', supportContact].join('')
+        : '如需帮助请联系平台运营人员获取客服联系方式。',
       showCancel: false,
     });
   }

@@ -1,11 +1,13 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { Role, type MerchantListItem } from '@nongchang/shared';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { Role, type MerchantListItem, type UserGroupView } from '@nongchang/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listMerchantsMock = vi.fn();
 const createUserMock = vi.fn();
 const updateUserMock = vi.fn();
 const setUserStatusMock = vi.fn();
+const listUserGroupsMock = vi.fn();
+const assignUserGroupMock = vi.fn();
 
 vi.mock('../api/users', () => ({
   listMerchants: (...args: unknown[]) => listMerchantsMock(...args),
@@ -14,10 +16,22 @@ vi.mock('../api/users', () => ({
   setUserStatus: (...args: unknown[]) => setUserStatusMock(...args),
 }));
 
+vi.mock('../api/user-group', () => ({
+  listUserGroups: () => listUserGroupsMock(),
+  assignUserGroup: (...args: unknown[]) => assignUserGroupMock(...args),
+}));
+
 import MerchantManagement from './MerchantManagement';
 import { DialogHost } from '../hooks/useDialog';
 
 const renderWithDialog = () => render(<><MerchantManagement /><DialogHost /></>);
+const waitForGroups = () => screen.findByRole('option', { name: 'Default Farm Group（默认）' });
+const waitForGroupData = async () => {
+  await waitFor(() => expect(listUserGroupsMock).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    await listUserGroupsMock.mock.results[0]?.value;
+  });
+};
 
 const merchants: MerchantListItem[] = [
   {
@@ -27,6 +41,8 @@ const merchants: MerchantListItem[] = [
     phone: '13800000001',
     status: 'active',
     agentId: 'agent-1',
+    groupId: 'group-default',
+    groupName: 'Default Farm Group',
     createdAt: '2026-07-01T00:00:00.000Z',
     fieldCount: 2,
     totalArea: 18.5,
@@ -38,15 +54,36 @@ const merchants: MerchantListItem[] = [
     phone: null,
     status: 'suspended',
     agentId: null,
+    groupId: null,
+    groupName: null,
     createdAt: '2026-07-02T00:00:00.000Z',
     fieldCount: 0,
     totalArea: 0,
   },
 ];
 
+const groups: UserGroupView[] = [
+  {
+    id: 'group-default',
+    name: 'Default Farm Group',
+    isDefault: true,
+    permissions: [],
+    createdAt: '2026-07-01T00:00:00.000Z',
+  },
+  {
+    id: 'group-alt',
+    name: 'Alternate Farm Group',
+    isDefault: false,
+    permissions: [],
+    createdAt: '2026-07-02T00:00:00.000Z',
+  },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   listMerchantsMock.mockResolvedValue(merchants);
+  listUserGroupsMock.mockResolvedValue(groups);
+  assignUserGroupMock.mockResolvedValue({ ok: true });
   createUserMock.mockResolvedValue({
     id: 'merchant-3',
     username: 'east-owner',
@@ -83,8 +120,11 @@ describe('MerchantManagement Fluent table', () => {
   it('creates a merchant user and shows the backend generated initial password', async () => {
     renderWithDialog();
     await screen.findByText('North Farm');
+    await waitForGroupData();
 
     fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
+    await waitForGroups();
+    expect((screen.getByLabelText('用户组') as HTMLSelectElement).value).toBe('group-default');
     fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
     fireEvent.change(screen.getByLabelText('联系人 / 用户名'), { target: { value: 'east-owner' } });
     fireEvent.change(screen.getByLabelText('手机号码'), { target: { value: '13800000003' } });
@@ -96,6 +136,7 @@ describe('MerchantManagement Fluent table', () => {
         role: Role.MERCHANT,
         displayName: 'East Farm',
         phone: '13800000003',
+        groupId: 'group-default',
       });
     });
     const dialog = await screen.findByRole('dialog', { name: '商户已创建' });
@@ -103,6 +144,25 @@ describe('MerchantManagement Fluent table', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '知道了' }));
 
     await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('creates a merchant with the selected tenant group', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+    await waitForGroupData();
+
+    fireEvent.click(screen.getByRole('button', { name: '新增入驻' }));
+    await waitForGroups();
+    expect((screen.getByLabelText('用户组') as HTMLSelectElement).value).toBe('group-default');
+    fireEvent.change(screen.getByLabelText('企业 / 商户名称'), { target: { value: 'East Farm' } });
+    fireEvent.change(screen.getByLabelText('联系人 / 用户名'), { target: { value: 'east-owner' } });
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认添加' }));
+
+    await waitFor(() => expect(createUserMock).toHaveBeenCalledWith(expect.objectContaining({
+      role: Role.MERCHANT,
+      groupId: 'group-alt',
+    })));
   });
 
   it('updates a merchant with username disabled and phone nullable', async () => {
@@ -117,6 +177,91 @@ describe('MerchantManagement Fluent table', () => {
 
     await waitFor(() => {
       expect(updateUserMock).toHaveBeenCalledWith('merchant-1', { displayName: 'North Updated', phone: null });
+    });
+  });
+
+  it('does not reassign an edited merchant when its group is unchanged', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    await waitForGroups();
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(updateUserMock).toHaveBeenCalledWith('merchant-1', {
+      displayName: 'North Farm',
+      phone: '13800000001',
+    }));
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog', { name: '编辑商户档案' })).toBeNull();
+    expect(assignUserGroupMock).not.toHaveBeenCalled();
+  });
+
+  it('reassigns an edited merchant only when its group changes', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    await waitForGroups();
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(assignUserGroupMock).toHaveBeenCalledWith({
+      userId: 'merchant-1',
+      groupId: 'group-alt',
+    }));
+  });
+
+  it('unassigns an edited merchant when its group is cleared', async () => {
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    await waitForGroups();
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(assignUserGroupMock).toHaveBeenCalledWith({
+      userId: 'merchant-1',
+      groupId: null,
+    }));
+  });
+
+  it('does not reassign an already-unassigned merchant when its group stays empty', async () => {
+    renderWithDialog();
+    await screen.findByText('South Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 South Farm' }));
+    await waitForGroups();
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => expect(updateUserMock).toHaveBeenCalledWith('merchant-2', {
+      displayName: 'South Farm',
+      phone: null,
+    }));
+    await waitFor(() => expect(listMerchantsMock).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog', { name: '编辑商户档案' })).toBeNull();
+    expect(assignUserGroupMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the edit dialog open and avoids reload when reassignment fails', async () => {
+    assignUserGroupMock.mockRejectedValue(new Error('group assignment failed'));
+    renderWithDialog();
+    await screen.findByText('North Farm');
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑商户 North Farm' }));
+    await waitForGroups();
+    fireEvent.change(screen.getByLabelText('用户组'), { target: { value: 'group-alt' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    const errorDialog = await screen.findByRole('dialog', { name: '操作失败' });
+    expect(within(errorDialog).getByText('group assignment failed')).toBeTruthy();
+    fireEvent.click(within(errorDialog).getByRole('button', { name: '知道了' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '操作失败' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: '编辑商户档案' })).toBeTruthy();
+      expect(listMerchantsMock).toHaveBeenCalledTimes(1);
     });
   });
 

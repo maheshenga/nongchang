@@ -57,6 +57,19 @@ describe('AuthController web sessions', () => {
     expect(auth.refresh).not.toHaveBeenCalled();
   });
 
+  it('expires a malformed refresh cookie before rejecting it', async () => {
+    await expect(controller.webRefresh(
+      { headers: { cookie: 'nc_refresh=%' } } as never,
+      response as never,
+    )).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(response.setHeader).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('nc_refresh=; Path=/api/auth/web; HttpOnly'),
+    );
+    expect(auth.refresh).not.toHaveBeenCalled();
+  });
+
   it('logs out by expiring the cookie and returning no body', () => {
     const result = controller.webLogout(response as never);
 

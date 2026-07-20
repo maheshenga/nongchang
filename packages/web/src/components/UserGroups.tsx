@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Plus, RefreshCw, Trash2, Users, X } from 'lucide-react';
-import { Permission, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
+import { Permission, Role, type Permission as PermissionValue, type UserGroupInput, type UserGroupView } from '@nongchang/shared';
+import { useAuth } from '../auth/auth-context';
 import { useApi } from '../hooks/useApi';
 import { alertDialog, confirmDialog } from '../hooks/useDialog';
 import { createUserGroup, deleteUserGroup, listUserGroups, updateUserGroup } from '../api/user-group';
@@ -30,12 +31,14 @@ function knownPermissions(permissions: string[]): PermissionValue[] {
 }
 
 export default function UserGroups() {
+  const { user } = useAuth();
   const { data, loading, error, reload } = useApi(listUserGroups, { cacheKey: 'user-groups' });
   const [edit, setEdit] = useState<EditState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const groups = data ?? [];
+  const canManageGroups = user?.role === Role.SYSTEM_ADMIN;
 
   const openCreate = () => { setErr(null); setEdit({ ...EMPTY }); };
   const openEdit = (g: UserGroupView) => {
@@ -89,13 +92,19 @@ export default function UserGroups() {
             <Users className="h-5 w-5 text-[#0078D4]" />
             用户分组
           </h2>
-          <p className="mt-1 text-sm text-[#605E5C]">
-            微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入: 创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。
-          </p>
+          {canManageGroups ? (
+            <p className="mt-1 text-sm text-[#605E5C]">
+              微信新注册用户默认进入「默认用户组」。经营角色在已接入接口会按用户组权限放行；当前已接入: 创建农事记录、查看农事记录、查看地块、查看批次、查看溯源。管理员与未接入接口仍按角色与业务范围鉴权。
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-[#605E5C]">可查看当前组定义；可在商户档案中分配用户组。</p>
+          )}
         </div>
-        <button type="button" onClick={openCreate} className={fluentButton('primary')}>
-          <Plus className="h-4 w-4" /> 新建用户组
-        </button>
+        {canManageGroups && (
+          <button type="button" onClick={openCreate} className={fluentButton('primary')}>
+            <Plus className="h-4 w-4" /> 新建用户组
+          </button>
+        )}
       </header>
 
       {loading && <div className="border border-[#E1DFDD] bg-white p-8 text-center text-sm text-[#605E5C]">加载中...</div>}
@@ -134,10 +143,14 @@ export default function UserGroups() {
                       <td className={`${fluentTable.td} text-[#605E5C]`}>{knownCount ? `${knownCount} 项` : '未配置'}</td>
                       <td className={`${fluentTable.td} text-right`}>
                         <div className="inline-flex gap-2">
-                          <button type="button" onClick={() => openEdit(g)} aria-label={`编辑 ${g.name}`} className={fluentButton('subtle')}>编辑</button>
-                          <button type="button" onClick={() => void onDelete(g)} aria-label={`删除 ${g.name}`} className={fluentButton('danger')}>
-                            <Trash2 className="h-4 w-4" /> 删除
-                          </button>
+                          {canManageGroups && (
+                            <>
+                              <button type="button" onClick={() => openEdit(g)} aria-label={`编辑 ${g.name}`} className={fluentButton('subtle')}>编辑</button>
+                              <button type="button" onClick={() => void onDelete(g)} aria-label={`删除 ${g.name}`} className={fluentButton('danger')}>
+                                <Trash2 className="h-4 w-4" /> 删除
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -149,7 +162,7 @@ export default function UserGroups() {
         </div>
       )}
 
-      {edit && (
+      {canManageGroups && edit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-label={edit.id ? '编辑用户组' : '新建用户组'}>
           <div className="w-full max-w-lg overflow-hidden rounded-[6px] border border-[#E1DFDD] bg-white shadow-xl">
             <div className="flex h-12 items-center justify-between border-b border-[#E1DFDD] bg-[#FAFAFA] px-5">

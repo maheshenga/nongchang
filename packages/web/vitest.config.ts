@@ -5,6 +5,11 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['src/test-setup.ts'],
-    include: ['src/**/*.spec.ts', 'src/**/*.spec.tsx'],
+    include: [
+      'src/**/*.spec.ts',
+      'src/**/*.spec.tsx',
+      'vite.config.spec.ts',
+      'test/**/*.spec.ts',
+    ],
   },
 });

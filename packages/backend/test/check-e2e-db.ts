@@ -45,8 +45,8 @@ function checkPort(host: string, port: number): Promise<void> {
 
 function setupCommands(): string[] {
   return [
-    'Start the local database before running e2e tests:',
-    '  docker compose -f docker-compose.dev.yml up -d',
+    'Start the local database and Redis before running e2e tests:',
+    '  docker compose -f docker-compose.dev.yml up -d db redis',
     'Then run migrations and seed data if needed:',
     '  pnpm --filter @nongchang/backend prisma:deploy',
     '  pnpm --filter @nongchang/backend prisma:seed',

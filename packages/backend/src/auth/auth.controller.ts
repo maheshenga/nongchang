@@ -85,7 +85,13 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<WebAccessTokenResponse> {
     const refreshToken = parseWebRefreshCookie(request.headers.cookie);
-    if (!refreshToken) throw new UnauthorizedException('刷新令牌无效');
+    if (!refreshToken) {
+      response.setHeader(
+        'Set-Cookie',
+        buildExpiredWebRefreshCookie(process.env.NODE_ENV === 'production'),
+      );
+      throw new UnauthorizedException('刷新令牌无效');
+    }
 
     const tokens = await this.auth.refresh(refreshToken);
     response.setHeader(

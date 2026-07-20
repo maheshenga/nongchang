@@ -1,0 +1,10 @@
+/www/wwwroot/farm.qingyouai.com/shared/logs/*.log {
+    daily
+    size 20M
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

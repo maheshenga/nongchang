@@ -31,6 +31,7 @@ type DialogRequest = {
 
 let dialogSeq = 0;
 let currentDialog: DialogRequest | null = null;
+const dialogQueue: DialogRequest[] = [];
 const listeners = new Set<(request: DialogRequest | null) => void>();
 
 function notify(request: DialogRequest | null): void {
@@ -41,6 +42,31 @@ function notify(request: DialogRequest | null): void {
 function settleRequest(request: DialogRequest, confirmed: boolean): void {
   request.resolveConfirm?.(confirmed);
   if (request.kind === 'alert') request.resolveAlert?.();
+}
+
+function enqueueDialog(request: DialogRequest): void {
+  if (currentDialog) {
+    dialogQueue.push(request);
+    return;
+  }
+  notify(request);
+}
+
+function settleCurrentDialog(requestId: number, confirmed: boolean): void {
+  if (currentDialog?.id !== requestId) return;
+  const settled = currentDialog;
+  currentDialog = null;
+  settleRequest(settled, confirmed);
+  notify(dialogQueue.shift() ?? null);
+}
+
+function cancelAllDialogs(): void {
+  const pending = [
+    ...(currentDialog ? [currentDialog] : []),
+    ...dialogQueue.splice(0),
+  ];
+  notify(null);
+  pending.forEach((request) => settleRequest(request, false));
 }
 
 function normalizeConfirm(options: DialogOptions | string): DialogOptions {
@@ -54,7 +80,7 @@ function normalizeAlert(options: AlertDialogOptions | string): AlertDialogOption
 export function confirmDialog(options: DialogOptions | string): Promise<boolean> {
   const normalized = normalizeConfirm(options);
   return new Promise((resolve) => {
-    notify({
+    enqueueDialog({
       id: ++dialogSeq,
       kind: 'confirm',
       title: normalized.title ?? '确认操作',
@@ -70,7 +96,7 @@ export function confirmDialog(options: DialogOptions | string): Promise<boolean>
 export function alertDialog(options: AlertDialogOptions | string): Promise<void> {
   const normalized = normalizeAlert(options);
   return new Promise((resolve) => {
-    notify({
+    enqueueDialog({
       id: ++dialogSeq,
       kind: 'alert',
       title: normalized.title ?? '提示',
@@ -91,11 +117,7 @@ function useDialogState(): DialogRequest | null {
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
-      if (listeners.size === 0 && currentDialog) {
-        const orphaned = currentDialog;
-        notify(null);
-        settleRequest(orphaned, false);
-      }
+      if (listeners.size === 0) cancelAllDialogs();
     };
   }, []);
 
@@ -107,9 +129,7 @@ export function DialogHost() {
   if (!request) return null;
 
   const closeConfirm = (value: boolean) => {
-    if (currentDialog?.id !== request.id) return;
-    notify(null);
-    settleRequest(request, value);
+    settleCurrentDialog(request.id, value);
   };
 
   const confirmVariant = request.tone === 'danger' ? 'danger' : 'primary';

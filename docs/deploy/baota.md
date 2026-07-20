@@ -1,181 +1,168 @@
-# 宝塔(Baota)部署指南
+# Baota Web/API Production Deployment
 
-本指南面向本仓库(pnpm workspace 单仓多包):`packages/backend`(NestJS)、`packages/web`(Vite + React)、`packages/shared`(共享类型/枚举)。在宝塔面板的 Linux 服务器上按下列步骤部署。
+This guide is the authoritative deployment path for `farm.qingyouai.com`. The release scope is Web/API only. Miniapp output is not part of this artifact or cutover.
 
-## 1. 安装 PostgreSQL 并启用 PostGIS
+The production server consumes the Linux x64 archive and external manifest produced by CI. It must never clone the repository, run `pnpm install`, or build application code. All credentials remain in Baota-managed files or protected GitHub Environment secrets; the repository contains placeholders only.
 
-1. 宝塔「软件商店」安装 PostgreSQL(建议 14+)。
-2. 创建数据库与专用用户:
-   ```sql
-   CREATE DATABASE nongchang;
-   CREATE USER nongchang_app WITH PASSWORD '替换为强密码';
-   GRANT ALL PRIVILEGES ON DATABASE nongchang TO nongchang_app;
-   ```
-3. 连接到 `nongchang` 库,启用 PostGIS 扩展:
-   ```sql
-   \c nongchang
-   CREATE EXTENSION postgis;
-   ```
-   (若软件商店无 PostGIS,可通过系统包管理器安装 `postgresql-XX-postgis-3` 后再执行。)
+## Topology and capacity
 
-## 2. Node 环境
+- Nginx exposes only ports 80 and 443.
+- Blue and green APIs bind to `127.0.0.1:3001` and `127.0.0.1:3002`.
+- The single operations worker binds to `127.0.0.1:3003` for local health checks only.
+- PostGIS, Redis, and PgBouncer bind to `127.0.0.1:5544`, `127.0.0.1:56380`, and `127.0.0.1:56432`.
+- The baseline host is 4 cores, 8 GiB RAM, and 60 GiB disk. Keep at least 1 GiB available RAM and 10 GiB free disk before each release.
 
-1. 宝塔「Node 版本管理器」安装 Node 20+ 并设为默认。
-2. 全局安装 pnpm:
-   ```bash
-   npm i -g pnpm
-   ```
-
-## 3. 拉取代码并构建后端
-
-在项目根目录执行:
-
-Before deploying a production-hardening branch, run the non-e2e gate from the repository root:
+Install a dedicated Node.js 20 runtime, PM2, Docker Compose v2.23.1 or newer, and Baota Nginx. Create a dedicated deploy user and do not alter unrelated PM2 processes, containers, or sites.
 
 ```bash
-pnpm verify:local
+ROOT=/www/wwwroot/farm.qingyouai.com
+install -d -m 0750 "$ROOT"/{incoming,releases,shared,backups}
+install -d -m 0750 "$ROOT/shared/logs"
 ```
 
-For the full local release gate, including PostGIS e2e setup, follow [docs/ops/production-verification.md](../ops/production-verification.md).
+## Protected configuration
+
+GitHub Environment `production-web` contains the public Vite variable `VITE_PUBLIC_SALES_CONTACT` plus test/backup secret references needed by the CI gates. It must not contain the Baota runtime environment.
+
+After verifying and extracting the tooling bundle below, create these mode-0600 files from its exact examples:
+
+- `$ROOT/shared/production.env` from `$TOOL_ROOT/ops/runtime/production.env.example`;
+- `$ROOT/shared/data-stack.env` from `$TOOL_ROOT/ops/data-stack/data-stack.env.example`;
+- `$ROOT/shared/pgbouncer-userlist.txt` with the application role's SCRAM verifier.
+
+`PUBLIC_SALES_CONTACT` and `PUBLIC_SUPPORT_CONTACT` must be real production contacts. Database, Redis, JWT, encryption, provider, and payment values must never be committed or placed on a command line. Use URL-encoded passwords in `DATABASE_URL` and `DIRECT_DATABASE_URL`.
+
+## Receive the immutable artifact
+
+CI uploads the application archive/manifest pair plus a first-host tooling archive/manifest, all named with the full 40-character commit SHA. The tooling bundle is derived from the already verified application artifact without another build and contains the release scripts and production dependency tree required for verification/preflight/switch. Download all four files into `incoming` through an authenticated operator channel; do not download source code.
 
 ```bash
-pnpm install
-pnpm build:shared
-pnpm build:backend
-psql "$DATABASE_URL" -f packages/backend/prisma/audit-data-consistency.sql
-pnpm --filter @nongchang/backend prisma:deploy   # 生产用 deploy,切勿用 migrate dev
+SHA='<40-character-lowercase-git-sha>'
+ARCHIVE="$ROOT/incoming/nongchang-$SHA.tar.gz"
+MANIFEST="$ROOT/incoming/nongchang-$SHA.manifest.json"
+RELEASE="$ROOT/releases/$SHA"
+TOOLING_ARCHIVE="$ROOT/incoming/nongchang-$SHA.tooling.tar.gz"
+TOOLING_MANIFEST="$ROOT/incoming/nongchang-$SHA.tooling.manifest.json"
+TOOL_ROOT="$ROOT/shared/release-tooling/$SHA"
+
+test "$(jq -r .gitSha "$MANIFEST")" = "$SHA"
+test "$(jq -r .target "$MANIFEST")" = web
+test "$(jq -r .archive "$MANIFEST")" = "$(basename "$ARCHIVE")"
+echo "$(jq -r .archiveSha256 "$MANIFEST")  $ARCHIVE" | sha256sum --check --strict
+test "$(jq -r .gitSha "$TOOLING_MANIFEST")" = "$SHA"
+test "$(jq -r .sourceManifestSha256 "$TOOLING_MANIFEST")" = "$(sha256sum "$MANIFEST" | awk '{print $1}')"
+echo "$(jq -r .toolingArchiveSha256 "$TOOLING_MANIFEST")  $TOOLING_ARCHIVE" | sha256sum --check --strict
+test ! -e "$RELEASE"
+test ! -e "$TOOL_ROOT"
+install -d -m 0750 "$TOOL_ROOT"
+tar --extract --gzip --file "$TOOLING_ARCHIVE" --directory "$TOOL_ROOT" --no-same-owner --no-same-permissions
+
+BOOTSTRAP_OPS="$ROOT/shared/bootstrap-ops/$SHA"
+test ! -e "$BOOTSTRAP_OPS"
+install -d -m 0750 "$BOOTSTRAP_OPS"
+cp -a "$TOOL_ROOT/ops/." "$BOOTSTRAP_OPS/"
+
+test -f "$TOOL_ROOT/ops/pm2/ecosystem.config.cjs"
+test -f "$TOOL_ROOT/ops/data-stack/compose.production.yml"
+test -e "$ROOT/shared/active-release.conf" || \
+  install -m 0644 "$TOOL_ROOT/ops/nginx/active-release.conf.example" "$ROOT/shared/active-release.conf"
+install -m 0644 "$TOOL_ROOT/ops/nginx/farm.qingyouai.com.conf.template" \
+  /www/server/panel/vhost/nginx/farm.qingyouai.com.conf
+install -m 0644 "$TOOL_ROOT/ops/logrotate/nongchang" /etc/logrotate.d/nongchang
+test -e "$ROOT/shared/production.env" || \
+  install -m 0600 "$TOOL_ROOT/ops/runtime/production.env.example" "$ROOT/shared/production.env"
+test -e "$ROOT/shared/data-stack.env" || \
+  install -m 0600 "$TOOL_ROOT/ops/data-stack/data-stack.env.example" "$ROOT/shared/data-stack.env"
 ```
-`audit-data-consistency.sql` 应返回 0 行。若返回跨商家/跨租户脏数据或重复微信 appId,先备份并清洗数据,再执行迁移。
-可选:初始化演示数据:
-```bash
-pnpm --filter @nongchang/backend prisma:seed
-```
 
-After migrations finish and the service is restarted, run the deployment smoke checks from [docs/ops/production-verification.md](../ops/production-verification.md). Do not treat e2e as passing unless `pnpm test:e2e` exits `0` against a prepared PostGIS database.
+The tooling archive contains the complete verified `ops/` tree; `BOOTSTRAP_OPS` is its immutable host copy for auditing and first-host recovery. The active release include is the single serving authority for both the immutable Web root and API port. Fill the restricted env files, install TLS through Baota, then validate the installed site config before reload.
 
-The tenant-consistency migration repeats the SQL audit as a preflight. If deployment
-reports a stable `tenant_consistency_*` name, back up and repair the corresponding
-historical rows first. Never bypass the release by disabling foreign keys or constraint
-triggers.
+Do not extract into `$RELEASE` manually. `server-preflight.mjs` owns verified extraction and requires that release directory not exist. Run preflight from the checksum-verified `$TOOL_ROOT`; after the first successful release, `$ROOT/current` contains the same tools. The server never clones, installs, or builds, and no repository checkout or extra ops transfer is required.
 
-Preview AI credit reconciliation before executing it:
+## Data stack, backup, and forward-only migration
 
-```bash
-pnpm --filter @nongchang/backend billing:recover-reservations -- --older-than-minutes=60 --limit=100
-```
-
-Only after reviewing candidates should an operator add `--execute --resource=AI`.
-`REVIEW_REQUIRED` means the provider outcome is ambiguous and the credit balance is
-intentionally unchanged; compare provider telemetry and the credit ledger before a
-controlled manual decision. Never automatically release these rows.
-
-Preview stale pending upload assets without changing OSS or database state:
-
-```bash
-pnpm --filter @nongchang/backend upload:cleanup -- --older-than-minutes 60 --limit 100
-```
-
-Only after reviewing the dry-run count, add `--execute`. Execution attempts OSS deletion first and then releases the durable reservation. A non-zero exit status means at least one asset still needs investigation; rerunning is safe because terminal assets are released idempotently.
-
-## 4. PM2 管理器启动后端
-
-宝塔「PM2 管理器」添加项目:
-
-- 启动文件:`packages/backend/dist/src/main.js`
-  > 注意:`nest build` 实际产出在 `dist/src/`,而非 `dist/main.js`。务必使用 `dist/src/main.js`。
-- 运行目录(工作目录):`packages/backend`
-- 监听端口:`3001`
-- 在 `packages/backend/.env` 配置环境变量,至少包含:
-  ```env
-  DATABASE_URL=postgresql://nongchang_app:密码@127.0.0.1:5432/nongchang
-  JWT_SECRET=强随机值
-  JWT_REFRESH_SECRET=另一个强随机值
-  PORT=3001
-  ALLOW_MANUAL_PAY=false
-  TRUST_PROXY_HOPS=1
-  UPLOAD_DAILY_BYTES_LIMIT=104857600
-  UPLOAD_ACTIVE_BYTES_LIMIT=5368709120
-  UPLOAD_PENDING_MAX_AGE_MINUTES=60
-  ```
-
-`TRUST_PROXY_HOPS=1` 对应“客户端 → 单层 Nginx → Node”。如果前面还有 CDN/WAF，必须按实际可信代理层数调整；不要为了让任意 `X-Forwarded-For` 生效而填大值。应用仅信任右侧已声明的代理链，限流和扫码 IP 记录据此识别真实客户端。
-
-### PM2 与健康探针职责
-
-后端提供两个无需认证但受限流保护的探针：
+Run server preflight first. It inventories archive paths and links before extracting, verifies the external and embedded manifests and every payload hash, checks DNS/TLS, confirms the candidate port is free, and checks disk/RAM capacity.
 
 ```bash
-curl --fail --silent http://127.0.0.1:3001/api/health/live
-curl --fail --silent http://127.0.0.1:3001/api/health/ready
+set -a
+. "$ROOT/shared/production.env"
+set +a
+
+node "$TOOL_ROOT/scripts/release/server-preflight.mjs" \
+  --hostname farm.qingyouai.com \
+  --target-ip '<production-ip>' \
+  --candidate-port 3001 \
+  --archive "$ARCHIVE" \
+  --manifest "$MANIFEST" \
+  --release-root "$ROOT" \
+  --backup-bytes 5368709120 \
+  --expected-sha "$SHA" \
+  --expected-target web
 ```
 
-- `/api/health/live` 表示 Node 进程仍可响应，可用于 PM2/宝塔的进程存活告警。只有进程退出或 liveness 持续失败时才应按 PM2 重启策略处理。
-- `/api/health/ready` 会实际执行 PostgreSQL `SELECT 1`。返回 `200 {"status":"ready"}` 时实例才应接收流量；返回 `503 {"status":"not_ready"}` 时，负载均衡或发布脚本应把实例从流量池摘除。
-- 短暂数据库故障导致的 readiness `503` 不等于 Node 进程失活。不要仅因为一次或短时 readiness 失败就重启 PM2；数据库恢复后探针会自动恢复为 `200`。
-
-建议在宝塔「计划任务」或外部监控中每 30 秒检查 liveness，并在发布切流前连续检查 readiness。单实例部署无法真正“摘流”时，应让 Nginx 保留 `503`，进入维护页或由上游负载均衡停止转发，而不是伪造 `200`。
-
-## 5. 构建前端
+After preflight creates `$RELEASE`, start or validate the isolated data stack. Inline Compose bootstrap configuration creates separate app, migration, and backup roles only for a new volume. Existing volumes require an audited forward SQL change.
 
 ```bash
-pnpm --filter web build
-```
-产物在 `packages/web/dist`。在宝塔为站点设置网站根目录指向该目录。
-
-## 6. Nginx 反向代理
-
-后端已设置全局前缀 `api`,因此 `/api/` 直接转发到 3001 端口。在站点配置中加入:
-
-```nginx
-location /api/ {
-    proxy_pass http://127.0.0.1:3001;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Request-Id $http_x_request_id;
-}
-location / {
-    try_files $uri $uri/ /index.html;
-}
+docker compose --env-file "$ROOT/shared/data-stack.env" \
+  -f "$RELEASE/ops/data-stack/compose.production.yml" config --quiet
+docker compose --env-file "$ROOT/shared/data-stack.env" \
+  -f "$RELEASE/ops/data-stack/compose.production.yml" up -d
+docker compose --env-file "$ROOT/shared/data-stack.env" \
+  -f "$RELEASE/ops/data-stack/compose.production.yml" ps
 ```
 
-`/api/health/live` 与 `/api/health/ready` 由同一 `/api/` 代理规则转发。Nginx 或上游负载均衡必须保留 readiness 的 `503` 状态；多实例发布时，只有 readiness 返回 `200` 的实例才能加入 upstream。应用会接受格式安全的入站 `X-Request-Id`，未提供或格式非法时自动生成 UUID，并在响应中返回最终使用的 `X-Request-Id`，便于从 Nginx 请求追到 PM2 日志。
+Create an encrypted PostgreSQL backup, verify its checksum, copy it to off-host immutable storage, and confirm the remote checksum. Do not migrate until that confirmation exists.
 
-发布或停止时，PM2 应发送 `SIGTERM` 并给进程留出优雅退出时间。应用收到关闭信号后会先把 readiness 切为 `503 not_ready`，再等待 Nest/Prisma 关闭；负载均衡必须先摘流，不能继续把新请求送入正在排空的实例。
+```bash
+DATABASE_URL="$DIRECT_DATABASE_URL" \
+  node "$RELEASE/scripts/backup-postgres.mjs" --output-dir "$ROOT/backups" --retention 3
 
-### 结构化请求日志
-
-后端会向标准输出写入每个已完成请求的一条 JSON 日志，PM2/宝塔应采集并轮转该输出。稳定字段为：
-
-- `requestId`、`method`、`path`、`status`、`durationMs`
-- 登录请求可识别调用方时，额外包含 `tenantId`、`userId`
-
-日志采用白名单构造，禁止记录 Authorization、Cookie、请求/响应 body、查询参数中的密钥、AI 提示词/图片/音频内容，以及微信、讯飞、地图、支付、对象存储等集成密钥。排障时使用 `X-Request-Id` 关联日志，不要临时打开 body 或 header 全量打印。
-
-在同一个 HTTPS `server` 块中加入以下响应头。Web 管理端与 `/api` 必须保持同源，
-这样 `nc_refresh` HttpOnly Cookie 才只会发送到 `/api/auth/web`：
-
-```nginx
-add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-add_header X-Content-Type-Options "nosniff" always;
-add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self)" always;
-add_header X-Frame-Options "DENY" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: https:; connect-src 'self' https:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; form-action 'self' https://*.alipay.com https://*.alipaydev.com" always;
+node "$RELEASE/scripts/release/migration-preflight.mjs"
+DATABASE_URL="$DIRECT_DATABASE_URL" "$RELEASE/node_modules/.bin/prisma" \
+  migrate deploy --schema "$RELEASE/prisma/schema.prisma"
 ```
 
-不要给 `script-src` 添加 `'unsafe-inline'`。当前页面中的 `application/ld+json`
-是结构化数据而非可执行脚本。发布后应在浏览器控制台确认无 CSP 违规，并完成登录、
-静默刷新、主要管理页面加载和支付宝跳转的冒烟验证。
+Only `prisma migrate deploy` is allowed. Reset/down migrations, reverse SQL, `DROP`, `TRUNCATE`, database rollback flags, and automatic data restoration are release blockers.
 
-## 7. 安全提醒
+## Candidate switch and verification
 
-- `JWT_SECRET` / `JWT_REFRESH_SECRET` 使用强随机值,例如:
-  ```bash
-  openssl rand -base64 48
-  ```
-- PostgreSQL 仅监听 `127.0.0.1`,不对公网开放。
-- `.env` 不入库(已在 `.gitignore` 中通过 `.env*` 排除)。
-- Keep `ALLOW_MANUAL_PAY=false` in production. The backend env validator rejects `ALLOW_MANUAL_PAY=true` when `NODE_ENV=production`.
-- 定期备份数据库(宝塔「计划任务」可配置定时 `pg_dump`)。
+Supply the smoke identity through the environment, never through a long-lived command-line token. The switcher verifies the embedded Web manifest and Node 20, starts the inactive PM2 API, verifies candidate readiness and `deployedGitSha`, stages and validates/reloads the combined Nginx include, runs public smoke, restarts the worker and verifies worker health, then updates the non-serving `current`/`previous` convenience links and commits deploy state; only after commit does it stop the old API.
+
+```bash
+export NONGCHANG_SMOKE_ACCESS_TOKEN='<short-lived-read-only-token>'
+node "$RELEASE/scripts/release/switch-release.mjs" \
+  --release-root "$ROOT" \
+  --candidate-port 3001 \
+  --candidate-sha "$SHA" \
+  --expected-target web \
+  --node-bin /absolute/path/to/node20 \
+  --pm2-bin /absolute/path/to/pm2 \
+  --nginx-bin /www/server/nginx/sbin/nginx \
+  --nginx-conf /www/server/nginx/conf/nginx.conf \
+  --hostname farm.qingyouai.com \
+  --trace-code '<known-public-trace-code>'
+unset NONGCHANG_SMOKE_ACCESS_TOKEN
+```
+
+If Nginx validation/reload, public smoke, worker restart, or worker health fails, the old combined serving include and old worker are restored; convenience links and deploy state remain on the prior release. Candidate links/state commit only after both public and worker health pass.
+
+Verify public live/ready SHA, authenticated read-only access, public trace, PM2 process count, worker health, queue backlog, request IDs, TLS, and the off-host backup record before closing the release.
+
+## Application-only rollback
+
+`deploy-state.json` retains the prior immutable application SHA, release directory, and inactive port. Before rollback, prove that the previous application remains compatible with the forward schema. `rollback.mjs` reads that same deploy-state schema and invokes the same candidate, combined-routing, public smoke, worker, and atomic-state transaction as a forward release:
+
+```bash
+node "$ROOT/current/scripts/release/rollback.mjs" \
+  --release-root "$ROOT" \
+  --expected-target web \
+  --confirm-forward-schema-compatible yes \
+  --node-bin /absolute/path/to/node20 \
+  --pm2-bin /absolute/path/to/pm2 \
+  --nginx-bin /www/server/nginx/sbin/nginx \
+  --nginx-conf /www/server/nginx/conf/nginx.conf \
+  --hostname farm.qingyouai.com \
+  --trace-code '<known-public-trace-code>'
+```
+
+The database is never rolled back by this procedure. If forward schema compatibility cannot be proved, stop and ship a forward-fix. `rollback.mjs` rejects Prisma reset/down, reverse SQL, `DROP`, `TRUNCATE`, and database rollback arguments.

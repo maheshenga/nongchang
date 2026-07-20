@@ -42,6 +42,20 @@ function makePrisma(overrides: any = {}) {
   return prisma;
 }
 
+function makeService(prisma: any, mode: 'hidden' | 'approximate' | 'exact' = 'exact') {
+  const settings = {
+    getByTenantId: vi.fn().mockResolvedValue({
+      publicCoordinateMode: mode,
+      brandName: '农场溯源管理',
+      industryName: '农业',
+      defaultCropName: '作物',
+      workbenchTitle: '农业工作台',
+      defaultBaseLabel: '当前基地',
+    }),
+  };
+  return { svc: new PublicTraceService(prisma, undefined, settings as any), settings };
+}
+
 describe('PublicTraceService.getByCode', () => {
   it('无效 code 抛 NotFoundException', async () => {
     const prisma = makePrisma({ traceCode: { findUnique: vi.fn().mockResolvedValue(null), update: vi.fn() } });
@@ -78,14 +92,14 @@ describe('PublicTraceService.getByCode', () => {
     const res = await svc.getByCode('ORC-X');
     expect(prisma.traceCode.update).toHaveBeenCalledWith({
       where: { code: 'ORC-X' }, data: { scanCount: { increment: 1 } },
+      select: { scanCount: true },
     });
     if (res.frozen) throw new Error('未预期的 frozen 响应');
     expect(res.scanCount).toBe(5);
   });
 
-  it('returns the updated response when scan-detail persistence fails outside a transaction', async () => {
+  it('does not increment scanCount when traceScan creation fails', async () => {
     const prisma = makePrisma({
-      $transaction: vi.fn().mockRejectedValue(new Error('interactive transaction must not be used')),
       traceCode: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-1', scanCount: 1,
@@ -97,10 +111,33 @@ describe('PublicTraceService.getByCode', () => {
     const service = new PublicTraceService(prisma);
 
     await expect(service.getByCode('ORC-1', { ip: '127.0.0.1', userAgent: null }))
-      .resolves.toMatchObject({ code: 'ORC-1', scanCount: 2 });
-    expect(prisma.traceCode.update).toHaveBeenCalledTimes(1);
+      .rejects.toThrow('scan detail unavailable');
+    expect(prisma.traceCode.update).not.toHaveBeenCalled();
     expect(prisma.traceScan.create).toHaveBeenCalledTimes(1);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not commit traceScan when scanCount update fails', async () => {
+    let transactionCommitted = false;
+    const prisma = makePrisma({
+      traceCode: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'tc1', tenantId: 't1', batchId: 'b1', code: 'ORC-1', scanCount: 1,
+        }),
+        update: vi.fn().mockRejectedValue(new Error('count update failed')),
+      },
+    });
+    prisma.$transaction = vi.fn(async (callback: any) => {
+      const result = await callback(prisma);
+      transactionCommitted = true;
+      return result;
+    });
+    const service = new PublicTraceService(prisma);
+
+    await expect(service.getByCode('ORC-1', { ip: '127.0.0.1', userAgent: null }))
+      .rejects.toThrow('count update failed');
+    expect(prisma.traceScan.create).toHaveBeenCalledTimes(1);
+    expect(transactionCommitted).toBe(false);
   });
 
   it('事件按 occurredAt 升序查询', async () => {
@@ -168,11 +205,42 @@ describe('PublicTraceService.getByCode', () => {
       coords: [{ lng: 100.25, lat: 25.6 }],
       integrationConfig: { findUnique: vi.fn().mockResolvedValue({ provider: 'tianditu', enabled: true, appId: 'TDT_KEY' }) },
     });
-    const svc = new PublicTraceService(prisma);
+    const { svc } = makeService(prisma, 'exact');
     const res = await svc.getByCode('ORC-X');
     if (res.frozen) throw new Error('未预期的 frozen 响应');
     expect(res.batch.fieldLng).toBe(100.25);
     expect(res.batch.fieldLat).toBe(25.6);
+    expect(res.tiandituKey).toBe('TDT_KEY');
+  });
+
+  it('默认隐藏模式不返回坐标且不查询天地图配置', async () => {
+    const prisma = makePrisma({
+      coords: [{ lng: 100.25, lat: 25.6 }],
+      integrationConfig: { findUnique: vi.fn().mockResolvedValue({ provider: 'tianditu', enabled: true, appId: 'TDT_KEY' }) },
+    });
+    const { svc } = makeService(prisma, 'hidden');
+
+    const res = await svc.getByCode('ORC-X');
+
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
+    expect(res.batch.fieldLng).toBeNull();
+    expect(res.batch.fieldLat).toBeNull();
+    expect(res.tiandituKey).toBeNull();
+    expect(prisma.integrationConfig.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('模糊模式仅返回两位小数坐标', async () => {
+    const prisma = makePrisma({
+      coords: [{ lng: 100.126, lat: 25.984 }],
+      integrationConfig: { findUnique: vi.fn().mockResolvedValue({ provider: 'tianditu', enabled: true, appId: 'TDT_KEY' }) },
+    });
+    const { svc } = makeService(prisma, 'approximate');
+
+    const res = await svc.getByCode('ORC-X');
+
+    if (res.frozen) throw new Error('未预期的 frozen 响应');
+    expect(res.batch.fieldLng).toBe(100.13);
+    expect(res.batch.fieldLat).toBe(25.98);
     expect(res.tiandituKey).toBe('TDT_KEY');
   });
 
@@ -197,7 +265,7 @@ describe('PublicTraceService.getByCode', () => {
     expect(prisma.integrationConfig?.findUnique).toBeUndefined();
   });
 
-  it('公开扫码不锁定 batch 行但仍记录扫码', async () => {
+  it('公开扫码不锁定 batch 行且在同一事务内先写明细再增加计数', async () => {
     const calls: string[] = [];
     const prisma = makePrisma({
       $queryRaw: vi.fn().mockResolvedValue([{ lng: null, lat: null }]),
@@ -209,10 +277,10 @@ describe('PublicTraceService.getByCode', () => {
         create: vi.fn(() => { calls.push('create-scan'); return Promise.resolve({ id: 'scan1' }); }),
       },
     });
-    const svc = new PublicTraceService(prisma);
+    const { svc } = makeService(prisma, 'exact');
     await svc.getByCode('ORC-X', { ip: '127.0.0.1', userAgent: 'vitest' });
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(['update-code', 'create-scan']);
+    expect(calls).toEqual(['create-scan', 'update-code']);
   });
 });

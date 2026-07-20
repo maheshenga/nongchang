@@ -18,7 +18,7 @@ function setValidProdEnv() {
   process.env.JWT_SECRET = 'a'.repeat(40);
   process.env.JWT_REFRESH_SECRET = 'b'.repeat(40);
   process.env.APP_ENCRYPTION_KEY = '0'.repeat(64);
-  process.env.REDIS_URL = 'redis://127.0.0.1:56379';
+  process.env.REDIS_URL = 'redis://127.0.0.1:57379';
 }
 
 beforeEach(() => {

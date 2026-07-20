@@ -10,6 +10,7 @@ import {
   buildFieldListFindManyArgs,
   buildFieldOwnerIds,
   buildFieldPagination,
+  buildFieldView,
   enrichFieldRows,
   type FieldCoordinateRow,
   type FieldOwnerRow,
@@ -27,15 +28,32 @@ export class FieldService {
   async create(user: AuthUser, dto: CreateFieldDto) {
     const { lng, lat } = dto;
     const ownerId = await this.scope.resolveOwnerId(this.prisma, user, dto.ownerId);
-    const field = await this.prisma.field.create({
-      data: buildFieldCreateData({ tenantId: user.tenantId, ownerId, dto }),
+    const view = await this.prisma.$transaction(async (tx) => {
+      const field = await tx.field.create({
+        data: buildFieldCreateData({ tenantId: user.tenantId, ownerId, dto }),
+      }) as FieldRow;
+      await tx.$executeRawUnsafe(
+        `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
+        lng, lat, field.id,
+      );
+      const [owner, coordinates] = await Promise.all([
+        tx.user.findUnique({
+          where: { id: ownerId },
+          select: { id: true, displayName: true },
+        }),
+        tx.$queryRawUnsafe<FieldCoordinateRow[]>(
+          `SELECT id, ST_X(location::geometry) AS lng, ST_Y(location::geometry) AS lat FROM fields WHERE id::text = $1`,
+          field.id,
+        ),
+      ]);
+      return buildFieldView(
+        field,
+        owner as FieldOwnerRow | null,
+        coordinates[0] ?? null,
+      );
     });
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE fields SET location = ST_SetSRID(ST_MakePoint($1,$2),4326) WHERE id = $3`,
-      lng, lat, field.id,
-    );
     await this.cache?.invalidateTenant(user.tenantId);
-    return field;
+    return view;
   }
 
   // 向后兼容分页:不传 page/pageSize 返回裸数组(带默认安全上限);传了则返回分页信封。
