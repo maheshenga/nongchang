@@ -55,10 +55,26 @@
     },
     {
       "package": "webpack-dev-server",
+      "advisory": "GHSA-f5vj-f2hx-8m93",
+      "owner": "miniapp-platform",
+      "reason": "Taro 4.2 pins webpack-dev-server 4.x; the patched 5.2.6 release is a major integration update and the affected endpoints exist only in local development tooling.",
+      "compensatingControl": "No remote development server is permitted; CI artifacts contain no webpack-dev-server process, and developers must keep the dev server on localhost.",
+      "expires": "2026-10-01"
+    },
+    {
+      "package": "webpack-dev-server",
       "advisory": "GHSA-mx8g-39q3-5c79",
       "owner": "miniapp-platform",
       "reason": "The affected HMR proxy interception path is not configured and is absent from production runtime.",
       "compensatingControl": "No broad WebSocket proxy is configured; development servers remain local-only.",
+      "expires": "2026-10-01"
+    },
+    {
+      "package": "webpack-dev-server",
+      "advisory": "GHSA-m28w-2pqf-7qgj",
+      "owner": "miniapp-platform",
+      "reason": "Taro 4.2 pins webpack-dev-server 4.x; the patched 5.2.6 release is a major integration update and the affected host validation runs only in local development tooling.",
+      "compensatingControl": "No remote development server is permitted; CI artifacts contain no webpack-dev-server process, and developers must keep the dev server on localhost.",
       "expires": "2026-10-01"
     },
     {
