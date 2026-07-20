@@ -8,7 +8,9 @@ test('application rollback refuses database reversal commands', () => {
     'migrate down 20260713',
     'psql -f reverse.sql',
     'DROP TABLE users',
+    'TRUNCATE TABLE audit_events',
     '--database-rollback',
+    '--rollback-database',
   ]) {
     assert.throws(() => assertSafeRollbackArgs([value]), /database rollback/i);
   }

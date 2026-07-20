@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   ARTIFACT_MANIFEST_SCHEMA_VERSION,
@@ -75,4 +76,50 @@ test('Web payload requires runtime inputs and rejects miniapp output', () => {
     () => assertWebArtifactPayload([...WEB_REQUIRED_ARTIFACT_ENTRIES, 'miniapp/app.js']),
     /must not contain miniapp payload/,
   );
+});
+
+test('Web artifact contract includes the Baota runtime and release switch inputs', () => {
+  for (const path of [
+    'ops/data-stack/compose.production.yml',
+    'ops/data-stack/data-stack.env.example',
+    'ops/pm2/ecosystem.config.cjs',
+    'ops/nginx/active-api.conf.example',
+    'ops/nginx/farm.qingyouai.com.conf.template',
+    'ops/runtime/production.env.example',
+    'ops/logrotate/nongchang',
+    'scripts/release/switch-release.mjs',
+  ]) {
+    assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes(path), `missing artifact contract entry: ${path}`);
+  }
+});
+
+test('tag release gates the immutable Web artifact without committed production credentials', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const packageJson = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+
+  assert.equal(packageJson.scripts['release:test'], 'node --test scripts/release/*.test.mjs');
+  assert.equal(
+    packageJson.scripts['verify:release:web'],
+    'pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web && pnpm audit:prod',
+  );
+  assert.match(workflow, /runs-on:\s*ubuntu-latest/);
+  assert.match(workflow, /environment:\s*production-web/);
+  assert.match(workflow, /VITE_PUBLIC_SALES_CONTACT:\s*\$\{\{\s*vars\.VITE_PUBLIC_SALES_CONTACT\s*\}\}/);
+  assert.doesNotMatch(workflow, /TARO_APP_(?:API|WX_APPID|SUPPORT_CONTACT)/);
+  for (const command of [
+    'pnpm verify:release:web',
+    'pnpm test:browser',
+    'pnpm test:accessibility',
+    'pnpm --filter @nongchang/backend db:query-plans',
+    'pnpm backup:verify-restore',
+    'pnpm audit:prod',
+    'pnpm release:test',
+    'pnpm release:artifact -- --target web',
+  ]) {
+    assert.ok(workflow.includes(command), `missing workflow command: ${command}`);
+  }
+  assert.match(workflow, /Verify immutable artifact archive/);
+  assert.match(workflow, /--expected-target web/);
+  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(workflow, /BEGIN (?:RSA |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}/);
 });

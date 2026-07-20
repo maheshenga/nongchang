@@ -4,6 +4,23 @@ For encrypted PostgreSQL backup, restore, RPO/RTO, and quarterly drill procedure
 
 This document is the release checklist for the production-hardening roadmap in `docs/superpowers/specs/2026-07-04-production-hardening-design.md`.
 
+## Web/API Immutable Release Gate
+
+The formal `v*` release runs in the protected GitHub Environment `production-web`. It builds on Linux x64 and must pass all of the following before the archive/manifest pair is uploaded:
+
+- `pnpm verify:release:web` for shared/backend/Web build, typecheck, lint, unit, e2e, and audit;
+- `pnpm test:browser` and `pnpm test:accessibility`;
+- `pnpm --filter @nongchang/backend db:query-plans`;
+- `pnpm backup:verify-restore`;
+- `pnpm audit:prod` and `pnpm release:test`;
+- `pnpm release:artifact -- --target web` followed by archive extraction verification with the expected SHA and `target=web`.
+
+The artifact contract excludes miniapp output and includes only the runtime scripts/configuration needed by Web/API. `VITE_PUBLIC_SALES_CONTACT` is a protected public build variable. E2E and backup credentials are GitHub secret references; Baota runtime secrets never enter the workflow or repository.
+
+Production verification follows this immutable order: archive/manifest verification, server preflight, encrypted off-host backup confirmation, forward-only migration, inactive candidate readiness/live SHA smoke, atomic Nginx switch, public smoke, worker restart/health, and application-only state commit. See [Baota deployment](../deploy/baota.md) and [release runbook](./release-runbook.md).
+
+Rollback selects the previous verified application artifact and uses the same switch gates. It never resets or migrates the database down, executes reverse SQL, uses `DROP`/`TRUNCATE`, or accepts database rollback flags.
+
 ## Local Non-E2E Gate
 
 Run before committing production-hardening changes:

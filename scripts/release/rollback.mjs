@@ -2,7 +2,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FORBIDDEN = /(?:prisma\s+migrate\s+reset|migrate\s+down|reverse\.sql|database[-_ ]rollback|\b(?:drop|alter|truncate)\s+(?:table|database|schema)|\bpsql\b)/i;
+const FORBIDDEN = /(?:prisma\s+migrate\s+reset|migrate\s+down|reverse\.sql|(?:database[-_ ]rollback|rollback[-_ ]database)|\b(?:drop|alter|truncate)\s+(?:table|database|schema)|\bpsql\b)/i;
 
 export function assertSafeRollbackArgs(args) {
   if (FORBIDDEN.test(args.join(' '))) {

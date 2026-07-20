@@ -1,0 +1,152 @@
+name: nongchang-production
+
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    container_name: nongchang-postgis
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - track_io_timing=on
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nongchang}
+      POSTGRES_USER: ${POSTGRES_USER:-nongchang_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      APP_DATABASE_USER: ${APP_DATABASE_USER:-nongchang_app}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?set APP_DATABASE_PASSWORD}
+      MIGRATION_DATABASE_USER: ${MIGRATION_DATABASE_USER:-nongchang_migrator}
+      MIGRATION_DATABASE_PASSWORD: ${MIGRATION_DATABASE_PASSWORD:?set MIGRATION_DATABASE_PASSWORD}
+      BACKUP_DATABASE_USER: ${BACKUP_DATABASE_USER:-nongchang_backup}
+      BACKUP_DATABASE_PASSWORD: ${BACKUP_DATABASE_PASSWORD:?set BACKUP_DATABASE_PASSWORD}
+    ports:
+      - "127.0.0.1:5544:5432"
+    volumes:
+      - nongchang_postgis_data:/var/lib/postgresql/data
+    configs:
+      - source: postgres_init_roles
+        target: /docker-entrypoint-initdb.d/10-nongchang-roles.sh
+        mode: 0550
+      - source: postgres_observability
+        target: /docker-entrypoint-initdb.d/20-observability.sql
+        mode: 0440
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 2g
+    cpus: "2.0"
+    logging: &bounded-logs
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks: [nongchang_data]
+
+  redis:
+    image: redis:7.4.5-alpine
+    container_name: nongchang-redis
+    restart: unless-stopped
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    command:
+      - sh
+      - -ec
+      - >-
+        exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+        --maxmemory 384mb --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:56380:6379"
+    volumes:
+      - nongchang_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    cpus: "0.5"
+    logging: *bounded-logs
+    networks: [nongchang_data]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.24.1-p0
+    container_name: nongchang-pgbouncer
+    restart: unless-stopped
+    env_file:
+      - ${DATA_STACK_ENV_FILE:-data-stack.env}
+    ports:
+      - "127.0.0.1:56432:6432"
+    volumes:
+      - ../pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ${PGBOUNCER_AUTH_FILE:?set PGBOUNCER_AUTH_FILE}:/etc/pgbouncer/userlist.txt:ro
+    command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U $${APP_DATABASE_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 256m
+    cpus: "0.5"
+    logging: *bounded-logs
+    networks: [nongchang_data]
+
+configs:
+  postgres_init_roles:
+    content: |
+      #!/bin/sh
+      set -eu
+      psql -v ON_ERROR_STOP=1 --username "$${POSTGRES_USER}" --dbname "$${POSTGRES_DB}" \
+        --set=db_name="$${POSTGRES_DB}" \
+        --set=app_user="$${APP_DATABASE_USER}" \
+        --set=app_password="$${APP_DATABASE_PASSWORD}" \
+        --set=migration_user="$${MIGRATION_DATABASE_USER}" \
+        --set=migration_password="$${MIGRATION_DATABASE_PASSWORD}" \
+        --set=backup_user="$${BACKUP_DATABASE_USER}" \
+        --set=backup_password="$${BACKUP_DATABASE_PASSWORD}" <<'SQL'
+      SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'app_user', :'app_password')
+      WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'app_user') \gexec
+      SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'migration_user', :'migration_password')
+      WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'migration_user') \gexec
+      SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'backup_user', :'backup_password')
+      WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'backup_user') \gexec
+      GRANT CONNECT ON DATABASE :"db_name" TO :"app_user", :"migration_user", :"backup_user";
+      GRANT USAGE ON SCHEMA public TO :"app_user", :"backup_user";
+      GRANT CREATE, USAGE ON SCHEMA public TO :"migration_user";
+      GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"app_user";
+      GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO :"app_user";
+      ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_user";
+      ALTER DEFAULT PRIVILEGES FOR ROLE :"migration_user" IN SCHEMA public
+        GRANT USAGE, SELECT ON SEQUENCES TO :"app_user";
+      GRANT pg_read_all_data TO :"backup_user";
+      SQL
+  postgres_observability:
+    content: |
+      CREATE EXTENSION IF NOT EXISTS postgis;
+      CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
+networks:
+  nongchang_data:
+    name: nongchang-production-data
+
+volumes:
+  nongchang_postgis_data:
+    name: nongchang-production-postgis
+  nongchang_redis_data:
+    name: nongchang-production-redis

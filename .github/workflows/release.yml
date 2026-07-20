@@ -1,4 +1,4 @@
-name: Immutable release
+name: Immutable Web release
 
 on:
   push:
@@ -11,12 +11,13 @@ permissions:
 jobs:
   build-once:
     runs-on: ubuntu-latest
+    environment: production-web
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        image: postgis/postgis:16-3.5
         env:
           POSTGRES_USER: nongchang
-          POSTGRES_PASSWORD: nongchang
+          POSTGRES_PASSWORD: ci-postgres-not-for-production
           POSTGRES_DB: nongchang
         ports: ['5544:5432']
         options: >-
@@ -25,7 +26,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       redis:
-        image: redis:7.4-alpine
+        image: redis:7.4.5-alpine
         ports: ['56379:6379']
         options: >-
           --health-cmd "redis-cli ping"
@@ -33,14 +34,19 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://nongchang:nongchang@127.0.0.1:5544/nongchang?schema=public
+      CI: true
+      DATABASE_URL: postgresql://nongchang:ci-postgres-not-for-production@127.0.0.1:5544/nongchang?schema=public
       REDIS_URL: redis://127.0.0.1:56379
       RUNTIME_STATE_DRIVER: redis
       JWT_SECRET: ci-jwt-secret-not-for-production-use-only
       JWT_REFRESH_SECRET: ci-jwt-refresh-secret-not-for-production-use
       APP_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
-      TARO_APP_API: https://api.ci.invalid/api
-      TARO_APP_WX_APPID: wx0000000000000000
+      VITE_PUBLIC_SALES_CONTACT: ${{ vars.VITE_PUBLIC_SALES_CONTACT }}
+      E2E_TENANT_CODE: ${{ vars.E2E_TENANT_CODE }}
+      E2E_USERNAME: ${{ secrets.E2E_USERNAME }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_BILLING_USERNAME: ${{ secrets.E2E_BILLING_USERNAME }}
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -48,14 +54,39 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
+      - name: Enable PostgreSQL observability extensions
+        env:
+          POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER_ID" psql -U nongchang -d nongchang -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements'"
+          docker restart "$POSTGRES_CONTAINER_ID"
+          until docker exec "$POSTGRES_CONTAINER_ID" pg_isready -U nongchang -d nongchang; do sleep 2; done
+          docker exec -i "$POSTGRES_CONTAINER_ID" psql -U nongchang -d nongchang -v ON_ERROR_STOP=1 < ops/postgres/enable-observability.sql
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @nongchang/backend exec prisma generate
       - run: pnpm --filter @nongchang/backend exec prisma migrate deploy
       - run: pnpm --filter @nongchang/backend prisma:seed
       - run: pnpm release:preflight
-      - run: pnpm verify:production
+      - run: pnpm verify:release:web
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:browser
+      - run: pnpm test:accessibility
+      - run: pnpm --filter @nongchang/backend db:query-plans
+      - run: pnpm backup:verify-restore -- --output-dir "$RUNNER_TEMP/nongchang-backup-drill"
       - run: pnpm audit:prod
-      - run: pnpm release:artifact -- --output-dir "$RUNNER_TEMP/nongchang-release"
+      - run: pnpm release:test
+      - run: pnpm release:artifact -- --target web --output-dir "$RUNNER_TEMP/nongchang-release"
+      - name: Verify immutable artifact archive
+        run: |
+          archive="$RUNNER_TEMP/nongchang-release/nongchang-${GITHUB_SHA}.tar.gz"
+          manifest="$RUNNER_TEMP/nongchang-release/nongchang-${GITHUB_SHA}.manifest.json"
+          release="$RUNNER_TEMP/nongchang-release-verify/${GITHUB_SHA}"
+          node scripts/release/verify-artifact.mjs \
+            --archive "$archive" \
+            --manifest "$manifest" \
+            --release-dir "$release" \
+            --expected-sha "$GITHUB_SHA" \
+            --expected-target web
       - uses: actions/upload-artifact@v4
         with:
           name: nongchang-${{ github.sha }}

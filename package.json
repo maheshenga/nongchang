@@ -19,14 +19,17 @@
     "test:accessibility": "pnpm test:browser:prepare && pnpm test:browser:run -- --grep @a11y",
     "verify:local": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm build:web && pnpm build:miniapp && pnpm audit:prod",
     "verify:production": "pnpm verify:local && pnpm test:e2e",
+    "verify:release:web": "pnpm build:shared && pnpm build:backend && pnpm typecheck:web && pnpm lint && pnpm test:unit && pnpm test:e2e && pnpm build:web && pnpm audit:prod",
     "backup:postgres": "node scripts/backup-postgres.mjs",
     "backup:restore": "node scripts/restore-postgres.mjs",
     "backup:verify-restore": "node scripts/verify-backup-restore.mjs",
-    "release:artifact": "node scripts/release/build-artifact.mjs --target web",
+    "release:artifact": "node scripts/release/build-artifact.mjs",
     "release:verify-artifact": "node scripts/release/verify-artifact.mjs",
+    "release:test": "node --test scripts/release/*.test.mjs",
     "release:preflight": "node scripts/release/migration-preflight.mjs",
     "release:server-preflight": "node scripts/release/server-preflight.mjs",
     "release:smoke": "node scripts/release/smoke.mjs",
+    "release:switch": "node scripts/release/switch-release.mjs",
     "release:rollback": "node scripts/release/rollback.mjs"
   },
   "engines": {
