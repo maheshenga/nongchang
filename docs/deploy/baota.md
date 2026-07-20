@@ -20,16 +20,14 @@ install -d -m 0750 "$ROOT"/{incoming,releases,shared,backups}
 install -d -m 0750 "$ROOT/shared/logs"
 ```
 
-Copy `ops/nginx/active-release.conf.example` to `$ROOT/shared/active-release.conf`, install `ops/nginx/farm.qingyouai.com.conf.template` as the site config, and install `ops/logrotate/nongchang` as `/etc/logrotate.d/nongchang`. The active release include is the single serving authority for both the immutable Web root and API port. Validate Nginx before reload.
-
 ## Protected configuration
 
 GitHub Environment `production-web` contains the public Vite variable `VITE_PUBLIC_SALES_CONTACT` plus test/backup secret references needed by the CI gates. It must not contain the Baota runtime environment.
 
-On the server, create these mode-0600 files from the artifact examples:
+After verifying and extracting the tooling bundle below, create these mode-0600 files from its exact examples:
 
-- `$ROOT/shared/production.env` from `ops/runtime/production.env.example`;
-- `$ROOT/shared/data-stack.env` from `ops/data-stack/data-stack.env.example`;
+- `$ROOT/shared/production.env` from `$TOOL_ROOT/ops/runtime/production.env.example`;
+- `$ROOT/shared/data-stack.env` from `$TOOL_ROOT/ops/data-stack/data-stack.env.example`;
 - `$ROOT/shared/pgbouncer-userlist.txt` with the application role's SCRAM verifier.
 
 `PUBLIC_SALES_CONTACT` and `PUBLIC_SUPPORT_CONTACT` must be real production contacts. Database, Redis, JWT, encryption, provider, and payment values must never be committed or placed on a command line. Use URL-encoded passwords in `DATABASE_URL` and `DIRECT_DATABASE_URL`.
@@ -58,9 +56,28 @@ test ! -e "$RELEASE"
 test ! -e "$TOOL_ROOT"
 install -d -m 0750 "$TOOL_ROOT"
 tar --extract --gzip --file "$TOOLING_ARCHIVE" --directory "$TOOL_ROOT" --no-same-owner --no-same-permissions
+
+BOOTSTRAP_OPS="$ROOT/shared/bootstrap-ops/$SHA"
+test ! -e "$BOOTSTRAP_OPS"
+install -d -m 0750 "$BOOTSTRAP_OPS"
+cp -a "$TOOL_ROOT/ops/." "$BOOTSTRAP_OPS/"
+
+test -f "$TOOL_ROOT/ops/pm2/ecosystem.config.cjs"
+test -f "$TOOL_ROOT/ops/data-stack/compose.production.yml"
+test -e "$ROOT/shared/active-release.conf" || \
+  install -m 0644 "$TOOL_ROOT/ops/nginx/active-release.conf.example" "$ROOT/shared/active-release.conf"
+install -m 0644 "$TOOL_ROOT/ops/nginx/farm.qingyouai.com.conf.template" \
+  /www/server/panel/vhost/nginx/farm.qingyouai.com.conf
+install -m 0644 "$TOOL_ROOT/ops/logrotate/nongchang" /etc/logrotate.d/nongchang
+test -e "$ROOT/shared/production.env" || \
+  install -m 0600 "$TOOL_ROOT/ops/runtime/production.env.example" "$ROOT/shared/production.env"
+test -e "$ROOT/shared/data-stack.env" || \
+  install -m 0600 "$TOOL_ROOT/ops/data-stack/data-stack.env.example" "$ROOT/shared/data-stack.env"
 ```
 
-Do not extract into `$RELEASE` manually. `server-preflight.mjs` owns verified extraction and requires that release directory not exist. Run preflight from the checksum-verified `$TOOL_ROOT`; after the first successful release, `$ROOT/current` contains the same tools. The server never clones, installs, or builds.
+The tooling archive contains the complete verified `ops/` tree; `BOOTSTRAP_OPS` is its immutable host copy for auditing and first-host recovery. The active release include is the single serving authority for both the immutable Web root and API port. Fill the restricted env files, install TLS through Baota, then validate the installed site config before reload.
+
+Do not extract into `$RELEASE` manually. `server-preflight.mjs` owns verified extraction and requires that release directory not exist. Run preflight from the checksum-verified `$TOOL_ROOT`; after the first successful release, `$ROOT/current` contains the same tools. The server never clones, installs, or builds, and no repository checkout or extra ops transfer is required.
 
 ## Data stack, backup, and forward-only migration
 
@@ -109,7 +126,7 @@ Only `prisma migrate deploy` is allowed. Reset/down migrations, reverse SQL, `DR
 
 ## Candidate switch and verification
 
-Supply the smoke identity through the environment, never through a long-lived command-line token. The switcher verifies the embedded Web manifest and Node 20, starts the inactive PM2 API, verifies candidate readiness and `deployedGitSha`, writes the active Nginx include and `current` symlink atomically, validates/reloads Nginx, runs public smoke, commits `deploy-state.json`, stops the old API, restarts the worker, and verifies worker health.
+Supply the smoke identity through the environment, never through a long-lived command-line token. The switcher verifies the embedded Web manifest and Node 20, starts the inactive PM2 API, verifies candidate readiness and `deployedGitSha`, stages and validates/reloads the combined Nginx include, runs public smoke, restarts the worker and verifies worker health, then updates the non-serving `current`/`previous` convenience links and commits deploy state; only after commit does it stop the old API.
 
 ```bash
 export NONGCHANG_SMOKE_ACCESS_TOKEN='<short-lived-read-only-token>'

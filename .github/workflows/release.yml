@@ -107,6 +107,7 @@ jobs:
           cp "$release/scripts/release/rollback.mjs" "$stage/scripts/release/"
           cp "$release/packages/backend/package.json" "$stage/packages/backend/package.json"
           cp -a "$release/node_modules" "$stage/node_modules"
+          cp -a "$release/ops" "$stage/ops"
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
             --pax-option=delete=atime,delete=ctime \
             --format=posix -cf "$tar_file" -C "$stage" .

@@ -136,6 +136,7 @@ test('tag release gates the immutable Web artifact without committed production 
   assert.match(tooling, /toolingArchiveSha256/);
   assert.match(tooling, /sourceManifestSha256/);
   assert.match(tooling, /scripts\/release\/(?:verify-artifact|server-preflight|switch-release)\.mjs/);
+  assert.match(tooling, /cp -a "\$release\/ops" "\$stage\/ops"/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.doesNotMatch(workflow, /BEGIN (?:RSA |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}/);
 });
@@ -151,4 +152,30 @@ test('Nginx serves Web and API from one active release include', async () => {
   assert.equal((nginx.match(/include \/www\/wwwroot\/farm\.qingyouai\.com\/shared\/active-release\.conf;/g) ?? []).length, 1);
   assert.match(nginx, /proxy_pass \$nongchang_api_origin;/);
   assert.doesNotMatch(nginx, /current\/web|active-api\.conf/);
+});
+
+test('Baota bootstrap uses tooling ops and documents the real transactional commit order', async () => {
+  const baota = await readFile(new URL('../../docs/deploy/baota.md', import.meta.url), 'utf8');
+  assert.match(baota, /cp -a "\$TOOL_ROOT\/ops\/\." "\$BOOTSTRAP_OPS\/"/);
+  for (const path of [
+    '$TOOL_ROOT/ops/nginx/active-release.conf.example',
+    '$TOOL_ROOT/ops/nginx/farm.qingyouai.com.conf.template',
+    '$TOOL_ROOT/ops/runtime/production.env.example',
+    '$TOOL_ROOT/ops/data-stack/data-stack.env.example',
+    '$TOOL_ROOT/ops/logrotate/nongchang',
+    '$TOOL_ROOT/ops/pm2/ecosystem.config.cjs',
+    '$TOOL_ROOT/ops/data-stack/compose.production.yml',
+  ]) assert.ok(baota.includes(path), `missing tooling bootstrap path: ${path}`);
+
+  const summary = baota.split('\n').find((line) => line.startsWith('Supply the smoke identity')) ?? '';
+  const order = [
+    'candidate readiness',
+    'public smoke',
+    'worker health',
+    'convenience links',
+    'deploy state',
+  ].map((value) => summary.indexOf(value));
+  assert.ok(order.every((index) => index >= 0), 'release summary is missing a transaction stage');
+  assert.deepEqual([...order].sort((left, right) => left - right), order);
+  assert.doesNotMatch(summary, /current.*traffic staging|state.*before.*worker/i);
 });
