@@ -1,5 +1,6 @@
 export const WEB_RELEASE_TARGET = 'web';
 export const ARTIFACT_MANIFEST_SCHEMA_VERSION = 2;
+export const ARTIFACT_PROVENANCE = Object.freeze({ platform: 'linux', arch: 'x64' });
 
 export const WEB_REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'backend/src/main.js',
@@ -45,6 +46,23 @@ export function assertReleaseSha(value) {
   }
 }
 
+export function releaseArchiveName(gitSha) {
+  assertReleaseSha(gitSha);
+  return `nongchang-${gitSha}.tar.gz`;
+}
+
+export function releaseManifestName(gitSha) {
+  assertReleaseSha(gitSha);
+  return `nongchang-${gitSha}.manifest.json`;
+}
+
+export function assertArtifactProvenance(provenance) {
+  if (provenance?.platform !== ARTIFACT_PROVENANCE.platform || provenance?.arch !== ARTIFACT_PROVENANCE.arch) {
+    throw new Error('artifact manifest requires Linux x64 provenance');
+  }
+  return provenance;
+}
+
 export function assertArtifactManifestContract(manifest, expectedGitSha, expectedTarget) {
   if (manifest?.schemaVersion !== ARTIFACT_MANIFEST_SCHEMA_VERSION) {
     throw new Error('artifact manifest schemaVersion must be 2');
@@ -58,6 +76,7 @@ export function assertArtifactManifestContract(manifest, expectedGitSha, expecte
   if (manifest.gitSha !== expectedGitSha) {
     throw new Error('artifact manifest does not match the expected Git SHA');
   }
+  assertArtifactProvenance(manifest.provenance);
   if (!manifest.files || typeof manifest.files !== 'object' || Array.isArray(manifest.files)) {
     throw new Error('artifact manifest files map is required');
   }

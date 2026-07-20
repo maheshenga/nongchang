@@ -7,6 +7,8 @@ import {
   assertArtifactManifestContract,
   assertWebArtifactPayload,
   assertWebReleaseTarget,
+  releaseArchiveName,
+  releaseManifestName,
 } from './artifact-contract.mjs';
 
 test('Web contract accepts only an explicit Web target', () => {
@@ -17,12 +19,20 @@ test('Web contract accepts only an explicit Web target', () => {
   assert.throws(() => assertWebReleaseTarget('miniapp'), /release target must be web/);
 });
 
+test('immutable archive and manifest names include the full expected Git SHA', () => {
+  const gitSha = 'c'.repeat(40);
+  assert.equal(releaseArchiveName(gitSha), `nongchang-${gitSha}.tar.gz`);
+  assert.equal(releaseManifestName(gitSha), `nongchang-${gitSha}.manifest.json`);
+  assert.throws(() => releaseArchiveName('abc123'), /40-character Git SHA/);
+});
+
 test('manifest requires schema 2, Web target, SHA, and files', () => {
   const gitSha = 'a'.repeat(40);
   const manifest = {
     schemaVersion: 2,
     target: 'web',
     gitSha,
+    provenance: { platform: 'linux', arch: 'x64' },
     files: { 'web/index.html': 'b'.repeat(64) },
   };
   assert.deepEqual(assertArtifactManifestContract(manifest, gitSha, 'web'), manifest);
@@ -41,6 +51,10 @@ test('manifest requires schema 2, Web target, SHA, and files', () => {
   assert.throws(
     () => assertArtifactManifestContract({ ...manifest, files: [] }, gitSha, 'web'),
     /files map is required/,
+  );
+  assert.throws(
+    () => assertArtifactManifestContract({ ...manifest, provenance: { platform: 'win32', arch: 'x64' } }, gitSha, 'web'),
+    /Linux x64 provenance/,
   );
   assert.throws(
     () => assertArtifactManifestContract({ ...manifest, files: { '../outside': 'b'.repeat(64) } }, gitSha, 'web'),

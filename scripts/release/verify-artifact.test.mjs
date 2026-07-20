@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { WEB_REQUIRED_ARTIFACT_ENTRIES } from './artifact-contract.mjs';
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
+
+function tar(args) {
+  return new Promise((resolveRun, reject) => {
+    const child = spawn('tar', args, { windowsHide: true });
+    child.once('error', reject);
+    child.once('close', (code) => code === 0 ? resolveRun() : reject(new Error(`tar failed with exit code ${code}`)));
+  });
+}
 
 async function loadVerifier() {
   return import('./verify-artifact.mjs');
@@ -24,20 +33,23 @@ async function writeRequiredWebPayload(release) {
   return files;
 }
 
-async function writeArtifact(root, gitSha) {
+async function writeArtifact(root, gitSha, mutatePayload) {
   const archive = join(root, `nongchang-${gitSha}.tar.gz`);
+  const payload = join(root, `payload-${gitSha}`);
   const release = join(root, gitSha);
   const manifestFile = join(root, `nongchang-${gitSha}.manifest.json`);
-  await mkdir(release, { recursive: true });
-  await writeFile(archive, 'immutable Web archive bytes');
-  const files = await writeRequiredWebPayload(release);
-  const embedded = { schemaVersion: 2, target: 'web', gitSha, files };
+  await mkdir(payload, { recursive: true });
+  const files = await writeRequiredWebPayload(payload);
+  const embedded = { schemaVersion: 2, target: 'web', gitSha, provenance: { platform: 'linux', arch: 'x64' }, files };
+  await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
   const external = {
     ...embedded,
+    files: { ...files },
     archive: `nongchang-${gitSha}.tar.gz`,
-    archiveSha256: sha256('immutable Web archive bytes'),
   };
-  await writeFile(join(release, 'artifact-manifest.json'), JSON.stringify(embedded));
+  if (mutatePayload) await mutatePayload({ payload, embedded, external });
+  await tar(['-czf', archive, '-C', payload, '.']);
+  external.archiveSha256 = sha256(await readFile(archive));
   await writeFile(manifestFile, JSON.stringify(external));
   return { archive, release, manifestFile, files };
 }
@@ -48,87 +60,88 @@ test('verifies the archive, matching external and embedded manifests, and the ex
     const gitSha = 'a'.repeat(40);
     const artifact = await writeArtifact(root, gitSha);
     const { verifyReleaseArtifact } = await loadVerifier();
-    await assert.doesNotReject(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }));
+    const options = { archive: artifact.archive, manifestFile: artifact.manifestFile, releaseDir: artifact.release, expectedGitSha: gitSha, expectedTarget: 'web' };
+    await assert.doesNotReject(() => verifyReleaseArtifact(options));
 
     await writeFile(artifact.archive, 'archive SHA drift');
-    await assert.rejects(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }), /archive SHA-256 mismatch/);
+    await assert.rejects(() => verifyReleaseArtifact(options), /archive SHA-256 mismatch/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test('rejects payload hash drift, embedded manifest drift, unexpected files, and escaping symlinks', async () => {
+test('rejects a nonempty unrelated release directory instead of trusting it over the archive', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
   try {
     const gitSha = 'b'.repeat(40);
     const artifact = await writeArtifact(root, gitSha);
+    await mkdir(artifact.release, { recursive: true });
+    await writeFile(join(artifact.release, 'forged-release.txt'), 'unrelated but trusted before extraction');
     const { verifyReleaseArtifact } = await loadVerifier();
-    await writeFile(join(artifact.release, 'backend', 'src', 'main.js'), 'tampered');
-    await assert.rejects(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }), /payload hash mismatch: backend\/src\/main\.js/);
-    await writeFile(join(artifact.release, 'backend', 'src', 'main.js'), 'web payload 0');
+    await assert.rejects(() => verifyReleaseArtifact({ archive: artifact.archive, manifestFile: artifact.manifestFile, releaseDir: artifact.release, expectedGitSha: gitSha, expectedTarget: 'web' }), /empty/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
-    const driftedEmbedded = { schemaVersion: 2, target: 'web', gitSha, files: { ...artifact.files, 'web/index.html': 'c'.repeat(64) } };
-    await writeFile(join(artifact.release, 'artifact-manifest.json'), JSON.stringify(driftedEmbedded));
-    await assert.rejects(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }), /embedded artifact manifest does not match/);
+test('rejects unsafe archive entries before extraction', async () => {
+  const { assertSafeArchiveEntry } = await loadVerifier();
+  assert.throws(() => assertSafeArchiveEntry('../outside'), /portable/);
+  assert.throws(() => assertSafeArchiveEntry('/etc/passwd'), /portable/);
+  assert.doesNotThrow(() => assertSafeArchiveEntry('./web/index.html'));
+});
 
-    await writeFile(join(artifact.release, 'artifact-manifest.json'), JSON.stringify({ schemaVersion: 2, target: 'web', gitSha, files: artifact.files }));
-    await writeFile(join(artifact.release, 'extra.txt'), 'unexpected');
-    await assert.rejects(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }), /payload file set mismatch/);
+test('accepts matching embedded file maps regardless of JSON property order', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
+  try {
+    const gitSha = 'f'.repeat(40);
+    const artifact = await writeArtifact(root, gitSha, async ({ payload }) => {
+      const embedded = JSON.parse(await readFile(join(payload, 'artifact-manifest.json'), 'utf8'));
+      embedded.files = Object.fromEntries(Object.entries(embedded.files).reverse());
+      await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
+    });
+    const { verifyReleaseArtifact } = await loadVerifier();
+    await assert.doesNotReject(() => verifyReleaseArtifact({ archive: artifact.archive, manifestFile: artifact.manifestFile, releaseDir: artifact.release, expectedGitSha: gitSha, expectedTarget: 'web' }));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
-    await rm(join(artifact.release, 'extra.txt'));
+test('rejects payload hash drift, embedded manifest drift, unexpected files, and escaping symlinks from the archive', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nongchang-verify-artifact-'));
+  try {
+    const gitSha = 'b'.repeat(40);
+    const artifact = await writeArtifact(root, gitSha, async ({ payload }) => {
+      await writeFile(join(payload, 'backend', 'src', 'main.js'), 'tampered');
+    });
+    const { verifyReleaseArtifact } = await loadVerifier();
+    await assert.rejects(() => verifyReleaseArtifact({ archive: artifact.archive, manifestFile: artifact.manifestFile, releaseDir: artifact.release, expectedGitSha: gitSha, expectedTarget: 'web' }), /payload hash mismatch: backend\/src\/main\.js/);
+
+    const manifestDriftSha = 'c'.repeat(40);
+    const manifestDrift = await writeArtifact(root, manifestDriftSha, async ({ payload }) => {
+      const embedded = JSON.parse(await readFile(join(payload, 'artifact-manifest.json'), 'utf8'));
+      embedded.files['web/index.html'] = 'c'.repeat(64);
+      await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
+    });
+    await assert.rejects(() => verifyReleaseArtifact({ archive: manifestDrift.archive, manifestFile: manifestDrift.manifestFile, releaseDir: manifestDrift.release, expectedGitSha: manifestDriftSha, expectedTarget: 'web' }), /embedded artifact manifest does not match/);
+
+    const extraFileSha = 'd'.repeat(40);
+    const extraFile = await writeArtifact(root, extraFileSha, async ({ payload }) => writeFile(join(payload, 'extra.txt'), 'unexpected'));
+    await assert.rejects(() => verifyReleaseArtifact({ archive: extraFile.archive, manifestFile: extraFile.manifestFile, releaseDir: extraFile.release, expectedGitSha: extraFileSha, expectedTarget: 'web' }), /payload file set mismatch/);
+
+    const symlinkSha = 'e'.repeat(40);
     const escapedTarget = join(root, 'outside-release.js');
-    const payloadLink = join(artifact.release, 'node_modules', 'outside.js');
     await writeFile(escapedTarget, 'outside');
-    await mkdir(dirname(payloadLink), { recursive: true });
-    await symlink(escapedTarget, payloadLink);
-    artifact.files['node_modules/outside.js'] = sha256(`symlink:${await readlink(payloadLink)}`);
-    const external = {
-      schemaVersion: 2,
-      target: 'web',
-      gitSha,
-      files: artifact.files,
-      archive: `nongchang-${gitSha}.tar.gz`,
-      archiveSha256: sha256('immutable Web archive bytes'),
-    };
-    await writeFile(artifact.manifestFile, JSON.stringify(external));
-    await writeFile(join(artifact.release, 'artifact-manifest.json'), JSON.stringify({ schemaVersion: 2, target: 'web', gitSha, files: artifact.files }));
-    await assert.rejects(() => verifyReleaseArtifact({
-      archive: artifact.archive,
-      manifestFile: artifact.manifestFile,
-      releaseDir: artifact.release,
-      expectedGitSha: gitSha,
-      expectedTarget: 'web',
-    }), /symlink target.*release/i);
+    const escapedSymlink = await writeArtifact(root, symlinkSha, async ({ payload, embedded, external }) => {
+      const payloadLink = join(payload, 'node_modules', 'outside.js');
+      await mkdir(dirname(payloadLink), { recursive: true });
+      await symlink(escapedTarget, payloadLink);
+      const hash = sha256(`symlink:${await readlink(payloadLink)}`);
+      embedded.files['node_modules/outside.js'] = hash;
+      external.files['node_modules/outside.js'] = hash;
+      await writeFile(join(payload, 'artifact-manifest.json'), JSON.stringify(embedded));
+    });
+    await assert.rejects(() => verifyReleaseArtifact({ archive: escapedSymlink.archive, manifestFile: escapedSymlink.manifestFile, releaseDir: escapedSymlink.release, expectedGitSha: symlinkSha, expectedTarget: 'web' }), /symlink target.*release/i);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

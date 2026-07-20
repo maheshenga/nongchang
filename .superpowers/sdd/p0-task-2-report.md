@@ -67,3 +67,53 @@ Result: all exited 0. Git emitted existing Windows CRLF normalization warnings o
 - No later Baota operations/configuration files were added to `WEB_REQUIRED_ARTIFACT_ENTRIES`; those remain Task 3 work.
 - Migration preflight remains forward-only: it performs consistency SQL and `prisma migrate status`, with no `migrate deploy`, `db push`, rollback, or schema-reversal action.
 - Live DNS resolution, TLS handshake, disk/memory probing, port probing, archive extraction, and server deployment were intentionally not run. They require the target environment and are outside this no-deploy task. The checked functions and local fixture tests cover the fail-closed behavior.
+
+## Review Fix Follow-up
+
+### RED Evidence
+
+Command:
+
+```powershell
+node --test scripts/release/artifact-contract.test.mjs scripts/release/build-artifact.test.mjs scripts/release/migration-preflight.test.mjs scripts/release/verify-artifact.test.mjs scripts/release/server-preflight.test.mjs
+```
+
+Result: exit code 1, 20/28 passed and 8 failed before the fixes. The failures proved the review findings: missing Linux/x64 provenance enforcement, missing migration URL helper, capacity still using the two-artifact estimate, server preflight not binding archive/manifest/releaseDir, and verification reading an empty unrelated directory instead of extracting the real tar.gz. The new real-tar fixture was intentionally rejected by the old verifier because no extracted manifest existed.
+
+### GREEN Evidence
+
+Focused follow-up command:
+
+```powershell
+node --test scripts/release/artifact-contract.test.mjs scripts/release/build-artifact.test.mjs scripts/release/migration-preflight.test.mjs scripts/release/verify-artifact.test.mjs scripts/release/server-preflight.test.mjs
+```
+
+Result: exit code 0, 30/30 passed. This includes real tar.gz extraction, rejection of a pre-populated unrelated SHA directory, archive payload/hash/embedded-manifest/file-set/symlink failures, order-insensitive file maps, candidate preflight artifact binding, A+AAAA resolution, measured release-byte capacity, immutable names, provenance, artifact-local Prisma/schema selection, and `DIRECT_DATABASE_URL` precedence.
+
+### Review Fix Changes
+
+- `verifyReleaseArtifact` now validates exact immutable archive/manifest names, validates the external archive digest and manifest provenance, requires an empty SHA-named release directory, lists and rejects unsafe tar entry paths before extraction, extracts that exact archive, validates extracted external/embedded manifest maps order-independently, validates the exact payload and symlink containment, and returns measured archive/release bytes.
+- `runServerPreflight` invokes that full verifier before DNS/TLS/port/capacity work. The CLI derives the SHA-named release directory from `--release-root`; programmatic callers may provide it directly.
+- Capacity now reserves `archiveBytes + releaseBytes + backupBytes`, in addition to 1 GiB available memory and 10 GiB free disk minima.
+- DNS resolves A and AAAA records; any address other than the configured target fails closed.
+- Artifact manifests require `{ platform: 'linux', arch: 'x64' }`, and builder/verifier share exact full-SHA archive/manifest naming helpers.
+- Migration preflight gained task-scoped tests for artifact-local Prisma/schema selection and direct connection precedence. It remains status-only and forward-only.
+
+### Follow-up Concerns
+
+- Tests use the host `tar` executable to create and inspect genuine `.tar.gz` fixtures, matching the builder's existing `tar` dependency. No production archive or server was accessed.
+- Live DNS/TLS/port/capacity probing and deployment remain intentionally out of scope and unexecuted.
+
+### Final Follow-up Verification
+
+```powershell
+node --test scripts/release/*.test.mjs
+node --check scripts/release/artifact-contract.mjs
+node --check scripts/release/build-artifact.mjs
+node --check scripts/release/verify-artifact.mjs
+node --check scripts/release/server-preflight.mjs
+node --check scripts/release/migration-preflight.mjs
+git diff --check
+```
+
+Result: all commands exited 0. The bounded release suite passed 37/37. The only output outside test results was the pre-existing Windows CRLF normalization warning from Git.

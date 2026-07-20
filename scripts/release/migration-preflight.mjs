@@ -33,9 +33,14 @@ export function resolveMigrationRuntime(root, platform = process.platform, pathE
   };
 }
 
-export async function migrationPreflight() {
-  const databaseUrl = process.env.DIRECT_DATABASE_URL || process.env.DATABASE_URL;
+export function resolveMigrationDatabaseUrl(env = process.env) {
+  const databaseUrl = env.DIRECT_DATABASE_URL || env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DIRECT_DATABASE_URL or DATABASE_URL is required');
+  return databaseUrl;
+}
+
+export async function migrationPreflight() {
+  const databaseUrl = resolveMigrationDatabaseUrl();
   const consistency = await runPostgresTool('psql', [
     '--tuples-only', '--no-align', '--set', 'ON_ERROR_STOP=1',
     '--command', `

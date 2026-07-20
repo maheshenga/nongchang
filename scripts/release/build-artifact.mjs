@@ -7,11 +7,14 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ARTIFACT_MANIFEST_SCHEMA_VERSION,
+  ARTIFACT_PROVENANCE,
   WEB_REQUIRED_ARTIFACT_ENTRIES,
   assertArtifactManifestContract,
   assertReleaseSha,
   assertWebArtifactPayload,
   assertWebReleaseTarget,
+  releaseArchiveName,
+  releaseManifestName,
 } from './artifact-contract.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -173,6 +176,7 @@ export function createPayloadManifest(gitSha, target, files) {
     schemaVersion: ARTIFACT_MANIFEST_SCHEMA_VERSION,
     target: assertWebReleaseTarget(target),
     gitSha,
+    provenance: ARTIFACT_PROVENANCE,
     files,
   };
   verifyArtifactManifest(manifest, gitSha, target, files);
@@ -299,7 +303,7 @@ export async function buildArtifact(options) {
     const payloadManifest = createPayloadManifest(gitSha, parsed.target, files);
     await writeFile(join(payload, 'artifact-manifest.json'), `${JSON.stringify(payloadManifest, null, 2)}\n`);
 
-    const archiveName = `nongchang-${gitSha}.tar.gz`;
+    const archiveName = releaseArchiveName(gitSha);
     const archivePath = join(parsed.outputDir, archiveName);
     await run('tar', ['-czf', archivePath, '-C', payload, '.']);
     const manifest = {
@@ -308,7 +312,7 @@ export async function buildArtifact(options) {
       archive: archiveName,
       archiveSha256: await sha256File(archivePath),
     };
-    const manifestPath = join(parsed.outputDir, `nongchang-${gitSha}.manifest.json`);
+    const manifestPath = join(parsed.outputDir, releaseManifestName(gitSha));
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     return { archivePath, manifestPath, manifest };
   } finally {

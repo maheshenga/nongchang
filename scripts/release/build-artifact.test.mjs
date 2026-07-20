@@ -74,6 +74,7 @@ test('Web artifact payload manifest records schema 2 and target metadata', () =>
     schemaVersion: 2,
     target: 'web',
     gitSha,
+    provenance: { platform: 'linux', arch: 'x64' },
     files,
   });
 });
@@ -135,6 +136,7 @@ test('artifact manifest verification rejects Git SHA or hash drift', () => {
     schemaVersion: 2,
     target: 'web',
     gitSha: 'a'.repeat(40),
+    provenance: { platform: 'linux', arch: 'x64' },
     files: { 'backend/app.js': 'a'.repeat(64) },
   };
   assert.throws(() => verifyArtifactManifest(manifest, 'b'.repeat(40), 'web', manifest.files), /Git SHA/i);
@@ -150,6 +152,7 @@ test('artifact manifest verification requires the expected Web target', () => {
     schemaVersion: 2,
     target: 'web',
     gitSha: 'a'.repeat(40),
+    provenance: { platform: 'linux', arch: 'x64' },
     files: { 'backend/app.js': 'b'.repeat(64) },
   };
   assert.doesNotThrow(() => verifyArtifactManifest(manifest, manifest.gitSha, 'web', manifest.files));
