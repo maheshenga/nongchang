@@ -164,3 +164,23 @@ git diff --check
 ```
 
 Result: all commands exited 0; the bounded release suite passed 40/40. Git emitted only the pre-existing Windows CRLF normalization warning.
+
+## Final Link Semantics Follow-up
+
+### RED Evidence
+
+```powershell
+node --test scripts/release/verify-artifact.test.mjs
+```
+
+Result: exit code 1, 6/7 passed. The valid builder-style `node_modules/.bin/prisma -> ../prisma/build/index.js` symlink was rejected as an invalid portable link target, proving that member-name validation had incorrectly been applied to link targets.
+
+### GREEN Evidence
+
+```powershell
+node --test scripts/release/verify-artifact.test.mjs
+```
+
+Result: exit code 0, 7/7 passed. Member names remain strict. Link targets reject absolute paths but may contain relative `..` segments when their POSIX-normalized destination remains inside the archive root: symlinks resolve relative to the link entry directory, and hard links resolve archive-root-relatively. Escaping symlink and hard-link regressions, including the outside-sentinel pre-extraction guarantee, remain covered.
+
+Final bounded verification repeated `node --test scripts/release/*.test.mjs` with 40/40 passed; all requested `node --check` commands and `git diff --check` exited 0.

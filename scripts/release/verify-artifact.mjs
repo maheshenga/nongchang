@@ -24,13 +24,13 @@ async function sha256File(path) {
   return hash.digest('hex');
 }
 
-function normalizeArchivePath(entry, label) {
+function normalizeArchivePath(entry, label, { allowParentSegments = false } = {}) {
   if (typeof entry !== 'string') throw new Error(`${label} must be a string`);
   const path = entry.replace(/^\.\//, '').replace(/\/$/, '');
   if (path === '') return '';
   const portablePath = !path.startsWith('/')
     && !path.includes('\\')
-    && path.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..' && !/^[a-zA-Z]:$/.test(segment));
+    && path.split('/').every((segment) => segment !== '' && segment !== '.' && (allowParentSegments || segment !== '..') && !/^[a-zA-Z]:$/.test(segment));
   if (!portablePath) throw new Error(`${label} must be portable: ${entry}`);
   return path;
 }
@@ -40,7 +40,8 @@ export function assertSafeArchiveEntry(entry) {
   const path = normalizeArchivePath(record.path, 'archive entry path');
   if (!path) return;
   if (!['SymbolicLink', 'Link'].includes(record.type)) return;
-  const linkpath = normalizeArchivePath(record.linkpath, 'archive link target');
+  const linkpath = normalizeArchivePath(record.linkpath, 'archive link target', { allowParentSegments: true });
+  if (!linkpath) throw new Error('archive link target must not be empty');
   const base = record.type === 'SymbolicLink' ? posix.dirname(path) : '.';
   const resolvedTarget = posix.normalize(posix.join(base, linkpath));
   if (resolvedTarget === '..' || resolvedTarget.startsWith('../') || posix.isAbsolute(resolvedTarget)) {

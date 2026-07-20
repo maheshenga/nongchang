@@ -118,6 +118,16 @@ test('rejects unsafe archive entries before extraction', async () => {
   const { assertSafeArchiveEntry } = await loadVerifier();
   assert.throws(() => assertSafeArchiveEntry('../outside'), /portable/);
   assert.throws(() => assertSafeArchiveEntry('/etc/passwd'), /portable/);
+  assert.doesNotThrow(() => assertSafeArchiveEntry({
+    path: 'node_modules/.bin/prisma',
+    type: 'SymbolicLink',
+    linkpath: '../prisma/build/index.js',
+  }));
+  assert.doesNotThrow(() => assertSafeArchiveEntry({
+    path: 'node_modules/prisma-cli',
+    type: 'Link',
+    linkpath: 'node_modules/prisma/build/index.js',
+  }));
   assert.throws(
     () => assertSafeArchiveEntry({ path: 'links/hard-link', type: 'Link', linkpath: '../outside' }),
     /archive link target/i,
