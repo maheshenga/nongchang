@@ -300,6 +300,11 @@ export async function executeBrowserRunPlan(
   const spawnProcess = dependencies.startProcess ?? startProcess;
   const waitUntilManagedUrl = dependencies.waitForManagedUrl ?? waitForManagedUrl;
   const termination = createTerminationController(signalSource);
+  let resultCode: number | undefined;
+  let executionError: unknown;
+  let executionFailed = false;
+  let cleanupError: unknown;
+  let cleanupFailed = false;
 
   try {
     if (!plan.manageServers) {
@@ -307,41 +312,52 @@ export async function executeBrowserRunPlan(
         checkUrlAvailable(`${plan.backendUrl}/api/health/ready`),
         checkUrlAvailable(plan.webUrl),
       ]);
-      if (termination.exitCode !== undefined) return termination.exitCode;
-      const playwright = spawnProcess(plan.playwright);
-      termination.track(playwright);
-      const code = await waitForProcessExit(playwright);
-      return termination.exitCode ?? code;
+      if (termination.exitCode === undefined) {
+        const playwright = spawnProcess(plan.playwright);
+        termination.track(playwright);
+        resultCode = await waitForProcessExit(playwright);
+      }
+    } else {
+      await Promise.all([
+        checkPortUnused(plan.backendPort),
+        checkPortUnused(plan.webPort),
+      ]);
+      if (termination.exitCode === undefined) {
+        const backend = spawnProcess(plan.backend);
+        termination.track(backend);
+        const web = spawnProcess(plan.web);
+        termination.track(web);
+
+        await Promise.all([
+          waitUntilManagedUrl(`${plan.backendUrl}/api/health/ready`, backend),
+          waitUntilManagedUrl(plan.webUrl, web),
+        ]);
+        if (termination.exitCode === undefined) {
+          const playwright = spawnProcess(plan.playwright);
+          termination.track(playwright);
+          resultCode = await waitForProcessExit(playwright);
+        }
+      }
     }
-
-    await Promise.all([
-      checkPortUnused(plan.backendPort),
-      checkPortUnused(plan.webPort),
-    ]);
-    if (termination.exitCode !== undefined) return termination.exitCode;
-
-    const backend = spawnProcess(plan.backend);
-    termination.track(backend);
-    const web = spawnProcess(plan.web);
-    termination.track(web);
-
-    await Promise.all([
-      waitUntilManagedUrl(`${plan.backendUrl}/api/health/ready`, backend),
-      waitUntilManagedUrl(plan.webUrl, web),
-    ]);
-    if (termination.exitCode !== undefined) return termination.exitCode;
-
-    const playwright = spawnProcess(plan.playwright);
-    termination.track(playwright);
-    const code = await waitForProcessExit(playwright);
-    return termination.exitCode ?? code;
   } catch (error) {
-    if (termination.exitCode !== undefined) return termination.exitCode;
-    throw error;
+    if (termination.exitCode === undefined) {
+      executionError = error;
+      executionFailed = true;
+    }
   } finally {
-    termination.dispose();
-    await termination.waitForShutdown();
+    try {
+      await termination.waitForShutdown();
+    } catch (error) {
+      cleanupError = error;
+      cleanupFailed = true;
+    } finally {
+      termination.dispose();
+    }
   }
+
+  if (executionFailed) throw executionError;
+  if (cleanupFailed) throw cleanupError;
+  return termination.exitCode ?? resultCode ?? 1;
 }
 
 async function run(): Promise<number> {

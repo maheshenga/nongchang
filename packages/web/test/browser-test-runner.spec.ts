@@ -7,6 +7,68 @@ import { describe, expect, it, vi } from 'vitest';
 import * as browserTestRunner from '../../../scripts/run-browser-tests';
 
 describe('browser test runner', () => {
+  it('preserves termination signals until managed teardown completes', async () => {
+    const signalSource = new EventEmitter();
+    let teardownStarted!: () => void;
+    const teardownStartedPromise = new Promise<void>((resolve) => {
+      teardownStarted = resolve;
+    });
+
+    const createControlledChild = () => {
+      const child = Object.assign(new EventEmitter(), {
+        exitCode: null as number | null,
+        signalCode: null as NodeJS.Signals | null,
+        kill: vi.fn(),
+      });
+      child.kill.mockImplementation(() => {
+        teardownStarted();
+        return true;
+      });
+      return child;
+    };
+
+    const backend = createControlledChild();
+    const web = createControlledChild();
+    const playwright = createControlledChild();
+    const children = [backend, web, playwright];
+    let nextChild = 0;
+    const startProcess = vi.fn(() => {
+      const child = children[nextChild++];
+      if (child === playwright) {
+        queueMicrotask(() => {
+          playwright.exitCode = 0;
+          playwright.emit('exit', 0, null);
+        });
+      }
+      return child;
+    });
+    const plan = browserTestRunner.buildBrowserRunPlan({
+      env: {},
+      nodeExecutable: 'node-test',
+      repoRoot: 'repo-root',
+      testArgs: [],
+    });
+
+    const execution = browserTestRunner.executeBrowserRunPlan(plan, {
+      signalSource: signalSource as never,
+      assertPortUnused: vi.fn().mockResolvedValue(undefined),
+      waitForManagedUrl: vi.fn().mockResolvedValue(undefined),
+      startProcess: startProcess as never,
+    });
+
+    await teardownStartedPromise;
+    signalSource.emit('SIGTERM');
+    for (const child of [backend, web]) {
+      child.signalCode = 'SIGTERM';
+      child.emit('exit', null, 'SIGTERM');
+    }
+
+    await expect(execution).resolves.toBe(143);
+    expect(children.every((child) => child.exitCode !== null || child.signalCode !== null)).toBe(true);
+    expect(signalSource.listenerCount('SIGINT')).toBe(0);
+    expect(signalSource.listenerCount('SIGTERM')).toBe(0);
+  });
+
   it('cleans a real tracked child when the runner receives SIGTERM', async () => {
     const signalSource = new EventEmitter();
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
