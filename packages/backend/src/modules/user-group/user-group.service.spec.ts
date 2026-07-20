@@ -164,7 +164,7 @@ describe('UserGroupService', () => {
       },
     } as any;
 
-    const result = await new UserGroupService(concurrentPrisma).ensureDefault('t1');
+    const result = await new UserGroupService(concurrentPrisma, sessions as any).ensureDefault('t1');
 
     expect(result.id).toBe('winner');
     expect(findFirst).toHaveBeenCalledTimes(2);

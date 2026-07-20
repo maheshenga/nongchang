@@ -180,10 +180,10 @@ Run:
 ```powershell
 pnpm.cmd --filter web exec vitest run vite.config.spec.ts test/browser-server-config.spec.ts
 pnpm.cmd --filter web lint
-pnpm.cmd exec playwright test --list
+pnpm.cmd test:browser:run -- --list
 ```
 
-Expected: 7 resolver tests pass, Web typecheck passes, and Playwright loads the root config and lists the browser tests without starting servers.
+Expected: 7 resolver tests pass, Web typecheck passes, and the browser runner lists the tests, starting and tearing down its managed servers when required.
 
 - [ ] **Step 8: Commit deterministic test servers**
 
@@ -218,7 +218,7 @@ Expected: Shared/backend builds, migrations, and idempotent demo seed complete.
 Run with `E2E_TENANT_CODE=DEMO`, `E2E_USERNAME=merchantA`, `E2E_PASSWORD` set to the demo-seed password, and `E2E_BILLING_USERNAME=agentA` only in the process environment:
 
 ```powershell
-pnpm.cmd exec playwright test e2e/web/auth-flow.spec.ts --reporter=line
+pnpm.cmd test:browser:run -- e2e/web/auth-flow.spec.ts --reporter=line
 ```
 
 Expected: 1 Chromium test passes and both Playwright-managed servers exit.

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser, UserGroupInput, UserGroupView, AssignUserGroupInput } from '@nongchang/shared';
 import { Role } from '@nongchang/shared';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -18,7 +18,7 @@ import {
 export class UserGroupService {
   constructor(
     private prisma: PrismaService,
-    @Optional() private sessions?: SessionValidationCacheService,
+    private readonly sessions: SessionValidationCacheService,
   ) {}
 
   async list(user: AuthUser): Promise<UserGroupView[]> {
@@ -118,7 +118,7 @@ export class UserGroupService {
       where: { id: dto.userId },
       data: { groupId: dto.groupId },
     });
-    await this.sessions?.invalidateUser(user.tenantId, dto.userId);
+    await this.sessions.invalidateUser(user.tenantId, dto.userId);
   }
 }
 

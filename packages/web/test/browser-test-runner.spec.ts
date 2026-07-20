@@ -7,6 +7,27 @@ import { describe, expect, it, vi } from 'vitest';
 import * as browserTestRunner from '../../../scripts/run-browser-tests';
 
 describe('browser test runner', () => {
+  it('formats nested execution and cleanup diagnostics deterministically', () => {
+    const error = new AggregateError(
+      [
+        new Error('backend readiness failed', { cause: new Error('backend connection refused') }),
+        new AggregateError(
+          [new Error('backend teardown failed'), new Error('web teardown failed')],
+          'managed teardown failed',
+        ),
+      ],
+      'Browser test execution and cleanup both failed',
+    );
+
+    const formatted = browserTestRunner.formatBrowserRunError(error);
+    expect(formatted).toContain('Browser test execution and cleanup both failed');
+    expect(formatted).toContain('backend readiness failed');
+    expect(formatted).toContain('backend connection refused');
+    expect(formatted).toContain('managed teardown failed');
+    expect(formatted).toContain('backend teardown failed');
+    expect(formatted).toContain('web teardown failed');
+  });
+
   it('reports execution and cleanup failures together', async () => {
     const readinessError = new Error('readiness error');
     const cleanupError = new Error('cleanup error');
@@ -116,6 +137,48 @@ describe('browser test runner', () => {
 
     await expect(execution).resolves.toBe(143);
     expect(children.every((child) => child.exitCode !== null || child.signalCode !== null)).toBe(true);
+    expect(signalSource.listenerCount('SIGINT')).toBe(0);
+    expect(signalSource.listenerCount('SIGTERM')).toBe(0);
+  });
+
+  it('preserves SIGTERM exit code when tracked child teardown fails', async () => {
+    const signalSource = new EventEmitter();
+    const cleanupError = new Error('tracked child teardown failed');
+    const child = Object.assign(new EventEmitter(), {
+      exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
+      kill: vi.fn(),
+    });
+    child.kill.mockImplementation(() => {
+      child.signalCode = 'SIGTERM';
+      child.emit('exit', null, 'SIGTERM');
+      throw cleanupError;
+    });
+    const plan = browserTestRunner.buildBrowserRunPlan({
+      env: { E2E_REUSE_SERVERS: 'true' },
+      nodeExecutable: 'node-test',
+      repoRoot: 'repo-root',
+      testArgs: [],
+    });
+    const execution = browserTestRunner.executeBrowserRunPlan(plan, {
+      signalSource: signalSource as never,
+      assertUrlAvailable: vi.fn().mockResolvedValue(undefined),
+      startProcess: vi.fn(() => {
+        queueMicrotask(() => signalSource.emit('SIGTERM'));
+        return child;
+      }) as never,
+    });
+
+    let thrown: unknown;
+    try {
+      await execution;
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toMatchObject({ exitCode: 143 });
+    expect(browserTestRunner.formatBrowserRunError(thrown)).toContain(cleanupError.message);
     expect(signalSource.listenerCount('SIGINT')).toBe(0);
     expect(signalSource.listenerCount('SIGTERM')).toBe(0);
   });

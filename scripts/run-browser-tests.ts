@@ -46,6 +46,47 @@ export interface BrowserRunPlan {
   manageServers: boolean;
 }
 
+export class BrowserRunExitError extends Error {
+  constructor(
+    message: string,
+    readonly exitCode: number,
+    cause: unknown,
+  ) {
+    super(message, { cause });
+    this.name = 'BrowserRunExitError';
+  }
+}
+
+export function formatBrowserRunError(error: unknown): string {
+  const lines: string[] = [];
+  const seen = new Set<object>();
+
+  const visit = (current: unknown, depth: number): void => {
+    const indentation = '  '.repeat(depth);
+    if (typeof current === 'object' && current !== null) {
+      if (seen.has(current)) {
+        lines.push(`${indentation}[Circular error cause]`);
+        return;
+      }
+      seen.add(current);
+    }
+
+    if (current instanceof Error) {
+      lines.push(`${indentation}${current.message || current.name}`);
+      if (current instanceof AggregateError) {
+        for (const child of current.errors) visit(child, depth + 1);
+      }
+      if (current.cause !== undefined) visit(current.cause, depth + 1);
+      return;
+    }
+
+    lines.push(`${indentation}${String(current)}`);
+  };
+
+  visit(error, 0);
+  return lines.join('\n');
+}
+
 export function normalizeTestArgs(args: string[]): string[] {
   return args[0] === '--' ? args.slice(1) : args;
 }
@@ -355,14 +396,27 @@ export async function executeBrowserRunPlan(
     }
   }
 
+  let failure: unknown;
   if (executionFailed && cleanupFailed) {
-    throw new AggregateError(
+    failure = new AggregateError(
       [executionError, cleanupError],
       'Browser test execution and cleanup both failed',
     );
+  } else if (executionFailed) {
+    failure = executionError;
+  } else if (cleanupFailed) {
+    failure = cleanupError;
   }
-  if (executionFailed) throw executionError;
-  if (cleanupFailed) throw cleanupError;
+  if (failure !== undefined) {
+    if (termination.exitCode !== undefined) {
+      throw new BrowserRunExitError(
+        'Browser test runner failed while handling a termination signal',
+        termination.exitCode,
+        failure,
+      );
+    }
+    throw failure;
+  }
   return termination.exitCode ?? resultCode ?? 1;
 }
 
@@ -387,7 +441,7 @@ if (isMain) {
       process.exitCode = code;
     })
     .catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : error);
-      process.exitCode = 1;
+      console.error(formatBrowserRunError(error));
+      process.exitCode = error instanceof BrowserRunExitError ? error.exitCode : 1;
     });
 }
