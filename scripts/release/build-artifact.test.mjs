@@ -46,6 +46,15 @@ test('backend declares the Prisma CLI as a production dependency for artifact de
   assert.equal(backendPackage.devDependencies?.prisma, undefined);
 });
 
+test('backend declares the structured tar reader as a production dependency for artifact verification', async () => {
+  const backendPackage = JSON.parse(await readFile(
+    new URL('../../packages/backend/package.json', import.meta.url),
+    'utf8',
+  ));
+  assert.equal(backendPackage.dependencies.tar, '7.5.20');
+  assert.equal(backendPackage.devDependencies?.tar, undefined);
+});
+
 test('Web artifact build commands do not build the miniapp', () => {
   assert.deepEqual(releaseBuildCommands('web'), ['build:shared', 'build:backend', 'build:web']);
 });

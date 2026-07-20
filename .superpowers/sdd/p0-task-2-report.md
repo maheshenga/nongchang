@@ -117,3 +117,50 @@ git diff --check
 ```
 
 Result: all commands exited 0. The bounded release suite passed 37/37. The only output outside test results was the pre-existing Windows CRLF normalization warning from Git.
+
+## Second Review Follow-up
+
+### RED Evidence
+
+Command:
+
+```powershell
+node --test scripts/release/build-artifact.test.mjs scripts/release/verify-artifact.test.mjs
+```
+
+Result: exit code 1, 20/23 passed. The expected failures showed that the verifier still used CLI tar parsing/extraction, ignored a pre-extraction callback, and had no backend production dependency for a structured archive reader. The raw malicious tar.gz fixture contained an escaping symlink followed by a write under that link; the old CLI reached the linked member before failing.
+
+### GREEN Evidence
+
+Focused command:
+
+```powershell
+node --test scripts/release/build-artifact.test.mjs scripts/release/verify-artifact.test.mjs
+```
+
+Result: exit code 0, 23/23 passed. The regression creates a genuine gzip-compressed tar archive with an escaping link and a subsequent member under it. Verification rejects from structured metadata inspection before release-directory creation or extraction; the outside sentinel remains `unchanged`.
+
+### Second Review Fixes
+
+- Added maintained `tar` `7.5.20` to `@nongchang/backend` production dependencies and updated `pnpm-lock.yaml`. The release artifact's backend production deployment now carries the parser required by release scripts.
+- Replaced human-readable CLI listing/extraction in `verify-artifact.mjs` with structured `tar.t` inspection and `tar.x` extraction. Before any release-directory write/extraction, every member path and symbolic/hard link target is checked as a portable release-relative path.
+- Added archive inventory accounting with a 4 KiB per-entry filesystem-overhead reserve. `runServerPreflight` supplies a verifier pre-extraction callback that checks memory/disk capacity using `archiveBytes + estimatedReleaseBytes + backupBytes`; after extraction it rechecks against the measured release bytes.
+- Added regression coverage for hard-link traversal, structured-tar production dependency, the pre-extraction callback, and the outside-sentinel malicious archive.
+
+### Second Review Concerns
+
+- The bounded tests create only temporary local fixture archives and never access a production artifact, DNS endpoint, TLS endpoint, or server.
+
+### Final Second Review Verification
+
+```powershell
+node --test scripts/release/*.test.mjs
+node --check scripts/release/artifact-contract.mjs
+node --check scripts/release/build-artifact.mjs
+node --check scripts/release/verify-artifact.mjs
+node --check scripts/release/server-preflight.mjs
+node --check scripts/release/migration-preflight.mjs
+git diff --check
+```
+
+Result: all commands exited 0; the bounded release suite passed 40/40. Git emitted only the pre-existing Windows CRLF normalization warning.

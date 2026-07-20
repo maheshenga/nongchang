@@ -129,20 +129,40 @@ function isPortAvailable(port) {
   });
 }
 
-export async function assertCandidateArtifact({ archive, manifestFile, releaseDir, releaseRoot, expectedSha, expectedTarget }) {
+export async function assertCandidateArtifact({ archive, manifestFile, releaseDir, releaseRoot, expectedSha, expectedTarget, onBeforeExtract }) {
   const targetReleaseDir = releaseDir ?? resolve(releaseRoot, 'releases', expectedSha);
-  return verifyReleaseArtifact({ archive, manifestFile, releaseDir: targetReleaseDir, expectedGitSha: expectedSha, expectedTarget });
+  return verifyReleaseArtifact({
+    archive,
+    manifestFile,
+    releaseDir: targetReleaseDir,
+    expectedGitSha: expectedSha,
+    expectedTarget,
+    onBeforeExtract,
+  });
 }
 
 export async function runServerPreflight(options) {
-  const artifact = await assertCandidateArtifact(options);
+  const capacityPath = options.releaseRoot ?? options.releaseDir;
+  const artifact = await assertCandidateArtifact({
+    ...options,
+    onBeforeExtract: async ({ archiveBytes, estimatedReleaseBytes }) => {
+      const filesystem = await statfs(capacityPath);
+      assertCapacity({
+        freeDiskBytes: Number(filesystem.bavail) * Number(filesystem.bsize),
+        availableMemoryBytes: freemem(),
+        artifactBytes: archiveBytes,
+        releaseBytes: estimatedReleaseBytes,
+        backupBytes: options.backupBytes,
+      });
+    },
+  });
   const addresses = await resolveDnsAddresses(options.hostname);
   assertDnsTarget(addresses, options.targetIp);
   const peer = await readCertificate(options.targetIp, options.hostname);
   assertCertificateNames(certificateNames(peer), options.hostname);
   assertCertificateValidity(peer);
   assertCandidatePortAvailability({ port: options.candidatePort, available: await isPortAvailable(options.candidatePort) });
-  const filesystem = await statfs(options.releaseRoot ?? options.releaseDir);
+  const filesystem = await statfs(capacityPath);
   const freeDiskBytes = Number(filesystem.bavail) * Number(filesystem.bsize);
   const availableMemoryBytes = freemem();
   assertCapacity({ freeDiskBytes, availableMemoryBytes, artifactBytes: artifact.archiveBytes, releaseBytes: artifact.releaseBytes, backupBytes: options.backupBytes });

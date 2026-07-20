@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, readlink, rm } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   assertArtifactManifestContract,
@@ -12,19 +12,9 @@ import {
   releaseManifestName,
 } from './artifact-contract.mjs';
 
-function runTar(args) {
-  return new Promise((resolveRun, reject) => {
-    const child = spawn('tar', args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-    child.once('error', reject);
-    child.once('close', (code) => code === 0 ? resolveRun(stdout) : reject(new Error(`tar failed with exit code ${code}${stderr ? `: ${stderr.trim()}` : ''}`)));
-  });
-}
+const backendRequire = createRequire(new URL('../../packages/backend/package.json', import.meta.url));
+const tar = backendRequire('tar');
+const ARCHIVE_ENTRY_OVERHEAD_BYTES = 4096;
 
 async function sha256File(path) {
   const hash = createHash('sha256');
@@ -34,19 +24,52 @@ async function sha256File(path) {
   return hash.digest('hex');
 }
 
-export function assertSafeArchiveEntry(entry) {
+function normalizeArchivePath(entry, label) {
+  if (typeof entry !== 'string') throw new Error(`${label} must be a string`);
   const path = entry.replace(/^\.\//, '').replace(/\/$/, '');
-  if (path === '') return;
+  if (path === '') return '';
   const portablePath = !path.startsWith('/')
     && !path.includes('\\')
     && path.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..' && !/^[a-zA-Z]:$/.test(segment));
-  if (!portablePath) throw new Error(`archive entry path must be portable: ${entry}`);
+  if (!portablePath) throw new Error(`${label} must be portable: ${entry}`);
+  return path;
 }
 
-async function assertSafeArchiveEntries(archive) {
-  const entries = (await runTar(['-tzf', archive])).split(/\r?\n/).filter(Boolean);
+export function assertSafeArchiveEntry(entry) {
+  const record = typeof entry === 'string' ? { path: entry, type: 'File' } : entry;
+  const path = normalizeArchivePath(record.path, 'archive entry path');
+  if (!path) return;
+  if (!['SymbolicLink', 'Link'].includes(record.type)) return;
+  const linkpath = normalizeArchivePath(record.linkpath, 'archive link target');
+  const base = record.type === 'SymbolicLink' ? posix.dirname(path) : '.';
+  const resolvedTarget = posix.normalize(posix.join(base, linkpath));
+  if (resolvedTarget === '..' || resolvedTarget.startsWith('../') || posix.isAbsolute(resolvedTarget)) {
+    throw new Error(`archive link target must stay within the immutable release: ${record.linkpath}`);
+  }
+}
+
+export async function inspectReleaseArchive(archive) {
+  const entries = [];
+  let validationError;
+  await tar.t({
+    file: archive,
+    onReadEntry(entry) {
+      const record = { path: entry.path, type: entry.type, linkpath: entry.linkpath, size: Number(entry.size) };
+      try {
+        assertSafeArchiveEntry(record);
+        if (!Number.isSafeInteger(record.size) || record.size < 0) throw new Error(`archive entry size is invalid: ${record.path}`);
+        entries.push(record);
+      } catch (error) {
+        validationError ??= error;
+      }
+    },
+    strict: true,
+  });
+  if (validationError) throw validationError;
   if (!entries.length) throw new Error('release archive contains no entries');
-  for (const entry of entries) assertSafeArchiveEntry(entry);
+  const estimatedReleaseBytes = entries.reduce((total, entry) => total + entry.size + ARCHIVE_ENTRY_OVERHEAD_BYTES, 0);
+  if (!Number.isSafeInteger(estimatedReleaseBytes)) throw new Error('archive inventory size exceeds safe integer range');
+  return { entries, estimatedReleaseBytes };
 }
 
 async function prepareEmptyReleaseDir(releaseDir) {
@@ -99,7 +122,7 @@ function assertEqualFileMaps(embeddedFiles, externalFiles) {
   }
 }
 
-export async function verifyReleaseArtifact({ archive, manifestFile, releaseDir, expectedGitSha, expectedTarget }) {
+export async function verifyReleaseArtifact({ archive, manifestFile, releaseDir, expectedGitSha, expectedTarget, onBeforeExtract }) {
   for (const [label, path] of Object.entries({ archive, manifestFile, releaseDir })) {
     if (!path || !isAbsolute(path)) throw new Error(`${label} must be an absolute path`);
   }
@@ -118,10 +141,12 @@ export async function verifyReleaseArtifact({ archive, manifestFile, releaseDir,
   const archiveSha256 = await sha256File(archive);
   if (archiveSha256 !== external.archiveSha256) throw new Error('artifact archive SHA-256 mismatch');
 
-  await prepareEmptyReleaseDir(releaseDir);
+  const archiveBytes = (await lstat(archive)).size;
+  const inventory = await inspectReleaseArchive(archive);
   try {
-    await assertSafeArchiveEntries(archive);
-    await runTar(['-xzf', archive, '-C', releaseDir]);
+    await prepareEmptyReleaseDir(releaseDir);
+    if (onBeforeExtract) await onBeforeExtract({ archiveBytes, ...inventory });
+    await tar.x({ file: archive, cwd: releaseDir, strict: true, preserveOwner: false, noChmod: true });
     const embedded = await readAndAssertArtifactManifest(releaseDir, expectedGitSha, expectedTarget);
     assertEqualFileMaps(embedded.files, external.files);
 
@@ -140,8 +165,9 @@ export async function verifyReleaseArtifact({ archive, manifestFile, releaseDir,
       gitSha: expectedGitSha,
       target: expectedTarget,
       filesVerified: expectedPaths.length,
-      archiveBytes: (await lstat(archive)).size,
+      archiveBytes,
       releaseBytes: await measureReleaseBytes(releaseDir),
+      estimatedReleaseBytes: inventory.estimatedReleaseBytes,
     };
   } catch (error) {
     await rm(releaseDir, { recursive: true, force: true });
