@@ -107,9 +107,9 @@
 
 - [ ] **Step 1: Inspect the final diff for scope**
 
-  Run: `git diff origin/main...HEAD -- .github/workflows/release.yml scripts/release/artifact-contract.test.mjs docs/superpowers/specs/2026-07-21-release-test-fixture-design.md`
+  Run: `git diff origin/main...HEAD -- .github/workflows/release.yml scripts/release/artifact-contract.test.mjs docs/superpowers/specs/2026-07-21-release-test-fixture-design.md docs/superpowers/plans/2026-07-21-release-test-fixture-isolation.md`
 
-  Expected: only workflow fixture values, their regression coverage, and the approved design document differ from `main`.
+  Expected: only workflow fixture values, their regression coverage, and the approved design and implementation documents differ from `main`.
 
 - [ ] **Step 2: Push the branch and open a PR**
 
