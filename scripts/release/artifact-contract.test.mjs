@@ -50,6 +50,8 @@ test('manifest requires schema 2, Web target, SHA, and files', () => {
 
 test('Web payload requires runtime inputs and rejects miniapp output', () => {
   assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('scripts/release/artifact-contract.mjs'));
+  assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('scripts/release/verify-artifact.mjs'));
+  assert.ok(WEB_REQUIRED_ARTIFACT_ENTRIES.includes('scripts/release/server-preflight.mjs'));
   assert.doesNotThrow(() => assertWebArtifactPayload(WEB_REQUIRED_ARTIFACT_ENTRIES));
   assert.throws(
     () => assertWebArtifactPayload(WEB_REQUIRED_ARTIFACT_ENTRIES.filter((path) => path !== 'web/index.html')),

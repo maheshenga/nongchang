@@ -23,7 +23,9 @@
     "backup:restore": "node scripts/restore-postgres.mjs",
     "backup:verify-restore": "node scripts/verify-backup-restore.mjs",
     "release:artifact": "node scripts/release/build-artifact.mjs --target web",
+    "release:verify-artifact": "node scripts/release/verify-artifact.mjs",
     "release:preflight": "node scripts/release/migration-preflight.mjs",
+    "release:server-preflight": "node scripts/release/server-preflight.mjs",
     "release:smoke": "node scripts/release/smoke.mjs",
     "release:rollback": "node scripts/release/rollback.mjs"
   },

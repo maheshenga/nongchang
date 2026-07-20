@@ -14,6 +14,8 @@ export const WEB_REQUIRED_ARTIFACT_ENTRIES = Object.freeze([
   'node_modules/.bin/prisma',
   'ops/pgbouncer/pgbouncer.ini',
   'scripts/release/artifact-contract.mjs',
+  'scripts/release/verify-artifact.mjs',
+  'scripts/release/server-preflight.mjs',
   'scripts/lib/backup-format.mjs',
   'scripts/backup-postgres.mjs',
   'package.json',

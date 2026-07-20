@@ -84,6 +84,8 @@ export function requiredArtifactInputMappings(target) {
     { target: 'node_modules/.bin/prisma', source: `${BACKEND_DEPLOYMENT_ROOT}/.bin/prisma`, producer: 'backend-deployment' },
     { target: 'ops/pgbouncer/pgbouncer.ini', source: 'ops/pgbouncer/pgbouncer.ini', producer: 'release-input' },
     { target: 'scripts/release/artifact-contract.mjs', source: 'scripts/release/artifact-contract.mjs', producer: 'release-input' },
+    { target: 'scripts/release/verify-artifact.mjs', source: 'scripts/release/verify-artifact.mjs', producer: 'release-input' },
+    { target: 'scripts/release/server-preflight.mjs', source: 'scripts/release/server-preflight.mjs', producer: 'release-input' },
     { target: 'scripts/lib/backup-format.mjs', source: 'scripts/lib/backup-format.mjs', producer: 'release-input' },
     { target: 'scripts/backup-postgres.mjs', source: 'scripts/backup-postgres.mjs', producer: 'release-input' },
     { target: 'package.json', source: 'package.json', producer: 'release-input' },
